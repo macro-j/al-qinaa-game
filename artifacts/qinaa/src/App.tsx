@@ -358,7 +358,7 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
       extraField={
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
-          <div dir="ltr" className="flex justify-center gap-3">
+          <div dir="ltr" className="flex justify-center gap-3" style={{ direction: "ltr", flexDirection: "row" }}>
             {digits.map((d, i) => (
               <input
                 key={i}
@@ -492,10 +492,14 @@ function LobbyScreen({
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
             </button>
           </div>
-          <div className="flex items-center justify-center gap-3" dir="ltr">
+          <div
+            dir="ltr"
+            className="flex items-center justify-center gap-3"
+            style={{ direction: "ltr", flexDirection: "row" }}
+          >
             {lobby.code.split("").map((digit, i) => (
               <div key={i} className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-black border"
-                style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace" }}>
+                style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace", direction: "ltr" }}>
                 {digit}
               </div>
             ))}
@@ -611,7 +615,7 @@ function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) 
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
           <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
-            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F" }}>
+            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "isolate" }}>
             #{role.code}
           </span>
         </div>
@@ -699,7 +703,7 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
             <span className="font-bold text-white text-base">لوحة تحكم الراوي</span>
           </div>
           <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
-            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F" }}>
+            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "isolate" }}>
             #{game.code}
           </span>
         </div>
