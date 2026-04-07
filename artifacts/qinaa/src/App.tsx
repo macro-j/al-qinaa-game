@@ -451,7 +451,7 @@ function LobbyScreen({
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
             </button>
           </div>
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-3" dir="ltr">
             {lobby.code.split("").map((digit, i) => (
               <div key={i} className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-black border"
                 style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace" }}>
@@ -569,7 +569,7 @@ function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) 
 
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+          <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
             style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F" }}>
             #{role.code}
           </span>
@@ -657,7 +657,7 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
             <Mic size={16} color="#D32F2F" />
             <span className="font-bold text-white text-base">لوحة تحكم الراوي</span>
           </div>
-          <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+          <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
             style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F" }}>
             #{game.code}
           </span>
