@@ -332,8 +332,14 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
             value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
             onKeyDown={(e) => e.key === "Enter" && handle()}
             placeholder="0000" maxLength={4} inputMode="numeric" dir="ltr"
-            className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold text-center outline-none tracking-widest"
-            style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333" }}
+            className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold outline-none tracking-widest"
+            style={{
+              backgroundColor: "#1A1A1A",
+              border: "1px solid #333333",
+              direction: "ltr",
+              unicodeBidi: "bidi-override",
+              textAlign: "center",
+            }}
           />
         </div>
       }
