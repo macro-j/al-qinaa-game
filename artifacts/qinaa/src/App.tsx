@@ -329,15 +329,14 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
           <input
+            type="tel"
             value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
             onKeyDown={(e) => e.key === "Enter" && handle()}
-            placeholder="0000" maxLength={4} inputMode="numeric" dir="ltr"
+            placeholder="0000" maxLength={4}
             className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold outline-none tracking-widest"
             style={{
               backgroundColor: "#1A1A1A",
               border: "1px solid #333333",
-              direction: "ltr",
-              unicodeBidi: "bidi-override",
               textAlign: "center",
             }}
           />
