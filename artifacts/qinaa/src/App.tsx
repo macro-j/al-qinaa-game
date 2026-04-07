@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
+import QRCode from "react-qr-code";
 import {
   VenetianMask,
   Plus,
@@ -11,7 +12,6 @@ import {
   Volume2,
   VolumeX,
   ArrowRight,
-  QrCode,
   Users,
   Shuffle,
   Eye,
@@ -311,14 +311,18 @@ function CreateNameScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: 
 
 // ─── Join Room Screen ─────────────────────────────────────────────────────────
 
-function JoinRoomScreen({ onBack, onSubmit }: {
+function JoinRoomScreen({ onBack, onSubmit, initialCode = "" }: {
   onBack: () => void;
   onSubmit: (name: string, code: string, onError: (msg: string) => void) => void;
+  initialCode?: string;
 }) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Sync if initialCode changes (e.g. QR scan brings a pre-filled code)
+  useEffect(() => { setCode(initialCode); }, [initialCode]);
 
   const handle = () => {
     if (!name.trim()) { setError("أدخل اسمك"); return; }
@@ -488,11 +492,16 @@ function LobbyScreen({
           >
             {lobby.code.split("").reverse().join("")}
           </div>
-          <div className="w-full aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 max-h-40"
-            style={{ borderColor: "#333333" }}>
-            <QrCode size={40} color="#333333" />
-            <span className="text-xs" style={{ color: "#555555" }}>QR للانضمام</span>
-          </div>
+          {(() => {
+            const joinUrl = `${window.location.origin}${window.location.pathname}?code=${lobby.code.split("").reverse().join("")}`;
+            return (
+              <div className="w-full rounded-xl flex flex-col items-center gap-2 p-3"
+                style={{ backgroundColor: "#FFFFFF", border: "2px solid #333333" }}>
+                <QRCode value={joinUrl} size={140} bgColor="#FFFFFF" fgColor="#000000" style={{ width: "100%", maxWidth: 180, height: "auto" }} />
+                <span className="text-xs font-semibold" style={{ color: "#555555", direction: "rtl" }}>امسح لانضمام مباشر</span>
+              </div>
+            );
+          })()}
           <div className="flex items-center justify-center gap-2 py-2 rounded-lg" style={{ backgroundColor: "#0D0D0D" }}>
             <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#4CAF50" }} />
             <span className="text-xs" style={{ color: "#9E9E9E" }}>في انتظار اللاعبين...</span>
@@ -943,6 +952,7 @@ export default function App() {
   const [playerRole, setPlayerRole] = useState<MyRole | null>(null);
   const [isConnected, setIsConnected] = useState(true);
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
+  const [initialJoinCode, setInitialJoinCode] = useState("");
 
   // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
@@ -979,8 +989,23 @@ export default function App() {
 
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
+    // Check URL for ?code= param (from QR scan) — takes priority when no session
+    const urlParams  = new URLSearchParams(window.location.search);
+    const codeFromUrl = urlParams.get("code");
+    if (codeFromUrl) {
+      window.history.replaceState({}, "", window.location.pathname); // clean URL immediately
+    }
+
     const session = loadSession();
-    if (!session) { setScreen("menu"); return; }
+    if (!session) {
+      if (codeFromUrl) {
+        setInitialJoinCode(codeFromUrl);
+        setScreen("join");
+      } else {
+        setScreen("menu");
+      }
+      return;
+    }
 
     const uid = getOrCreateUserId();
     const socket = getSocket();
@@ -1151,6 +1176,7 @@ export default function App() {
       { name, code, userId: uid },
       (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => {
         if ("error" in res) { onError(res.error); return; }
+        setInitialJoinCode("");
         const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: res.players };
         setLobby(newLobby);
         saveSession({ code: res.code, isHost: false, myName: name });
@@ -1183,7 +1209,11 @@ export default function App() {
   }
 
   if (screen === "join") {
-    return <JoinRoomScreen onBack={() => setScreen("menu")} onSubmit={handleJoinRoom} />;
+    return <JoinRoomScreen
+      initialCode={initialJoinCode}
+      onBack={() => { setInitialJoinCode(""); setScreen("menu"); }}
+      onSubmit={handleJoinRoom}
+    />;
   }
 
   return <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} />;
