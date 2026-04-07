@@ -19,7 +19,7 @@ function MainMenu() {
             className="text-sm text-center"
             style={{ color: "#9E9E9E", fontFamily: "sans-serif" }}
           >
-            نظام إدارة الجلسة والراوي الرقمي
+            المدينة تنام.. والقاتل يصحو
           </p>
         </div>
 
