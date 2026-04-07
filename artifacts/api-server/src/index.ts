@@ -104,6 +104,55 @@ io.on("connection", (socket) => {
     },
   );
 
+  // Host starts the game — server distributes roles securely
+  socket.on("startGame", ({ code }: { code: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return; // only host can start
+    if (room.players.length < 2) return;
+
+    const roleDefs = [
+      { label: "قناع الولد", sublabel: "الجلاد",    color: "#D32F2F" },
+      { label: "قناع الأكة", sublabel: "الكاتم",    color: "#B71C1C" },
+      { label: "قناع الشايب", sublabel: "الكاشف",   color: "#FF8F00" },
+      { label: "قناع البنت", sublabel: "الدرع",     color: "#1565C0" },
+    ];
+
+    // Shuffle all players and assign roles
+    const shuffled = [...room.players].sort(() => Math.random() - 0.5);
+    const assigned = shuffled.map((p, i) => {
+      const def =
+        i < roleDefs.length
+          ? roleDefs[i]
+          : { label: "قناع الشعب", sublabel: "المواطن", color: "#555555" };
+      return {
+        socketId: p.socketId,
+        name: p.name,
+        roleLabel: `${def.label} (${def.sublabel})`,
+        roleColor: def.color,
+      };
+    });
+
+    // Each non-host player receives ONLY their own role (security)
+    for (const ap of assigned) {
+      if (ap.socketId === room.hostId) continue;
+      io.to(ap.socketId).emit("gameStarted", {
+        isHost: false,
+        code,
+        myRole: { label: ap.roleLabel, color: ap.roleColor },
+      });
+    }
+
+    // Host receives the full assignment list for the narrator dashboard
+    io.to(room.hostId).emit("gameStarted", {
+      isHost: true,
+      code,
+      players: assigned,
+    });
+
+    logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
+  });
+
   // Clean up on disconnect
   socket.on("disconnect", () => {
     for (const code of Object.keys(rooms)) {

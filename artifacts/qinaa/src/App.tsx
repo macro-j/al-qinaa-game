@@ -23,11 +23,13 @@ import {
   Mic,
   Loader2,
   AlertCircle,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Screen = "menu" | "create-name" | "join" | "lobby" | "dashboard";
+type Screen = "menu" | "create-name" | "join" | "lobby" | "player-screen" | "dashboard";
 
 interface SocketPlayer {
   socketId: string;
@@ -42,7 +44,15 @@ interface AssignedPlayer extends SocketPlayer {
 interface LobbyState {
   code: string;
   isHost: boolean;
+  myName: string;
   players: SocketPlayer[];
+}
+
+interface MyRole {
+  label: string;
+  color: string;
+  code: string;
+  myName: string;
 }
 
 interface GameState {
@@ -50,49 +60,28 @@ interface GameState {
   players: AssignedPlayer[];
 }
 
+type GameStartedPayload =
+  | { isHost: true;  code: string; players: AssignedPlayer[] }
+  | { isHost: false; code: string; myRole: { label: string; color: string } };
+
 type PhaseKey = "night" | "mafia" | "investigator" | "protector" | "day";
 
 // ─── Socket Singleton ─────────────────────────────────────────────────────────
 
 let _socket: Socket | null = null;
-
 function getSocket(): Socket {
-  if (!_socket) {
-    _socket = io({ path: "/socket.io/", autoConnect: true });
-  }
+  if (!_socket) _socket = io({ path: "/socket.io/", autoConnect: true });
   return _socket;
 }
 
-// ─── Role Definitions ─────────────────────────────────────────────────────────
+// ─── Phase Actions ────────────────────────────────────────────────────────────
 
-const ROLE_DEFS = [
-  { label: "قناع الولد (الجلاد)",    color: "#D32F2F" },
-  { label: "قناع الأكة (الكاتم)",    color: "#B71C1C" },
-  { label: "قناع الشايب (الكاشف)",   color: "#FF8F00" },
-  { label: "قناع البنت (الدرع)",     color: "#1565C0" },
-  { label: "قناع الشعب (المواطن)",   color: "#424242" },
-];
-
-function distributeRoles(players: SocketPlayer[]): AssignedPlayer[] {
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
-  return shuffled.map((p, i) => {
-    const def = i < 4 ? ROLE_DEFS[i] : ROLE_DEFS[4];
-    return { ...p, roleLabel: def.label, roleColor: def.color };
-  });
-}
-
-const PHASE_ACTIONS: {
-  key: PhaseKey;
-  label: string;
-  sub: string;
-  icon: React.ReactNode;
-  accent: string;
-}[] = [
-  { key: "night",        label: "بدء الليل",           sub: "أطفئ الأنوار",   icon: <Moon size={20} strokeWidth={1.8} />,   accent: "#1A1A4A" },
-  { key: "mafia",        label: "استيقاظ المافيا",     sub: "الولد والأكة",   icon: <Skull size={20} strokeWidth={1.8} />,  accent: "#4A0000" },
-  { key: "investigator", label: "استيقاظ الشايب",      sub: "الكاشف يحقق",   icon: <Search size={20} strokeWidth={1.8} />, accent: "#4A3000" },
-  { key: "protector",    label: "استيقاظ البنت",       sub: "الدرع تحمي",    icon: <Shield size={20} strokeWidth={1.8} />, accent: "#003366" },
-  { key: "day",          label: "بدء النهار",           sub: "المداولة تبدأ", icon: <Sun size={20} strokeWidth={1.8} />,    accent: "#3A2000" },
+const PHASE_ACTIONS: { key: PhaseKey; label: string; sub: string; icon: React.ReactNode; accent: string }[] = [
+  { key: "night",        label: "بدء الليل",         sub: "أطفئ الأنوار",   icon: <Moon   size={20} strokeWidth={1.8} />, accent: "#1A1A4A" },
+  { key: "mafia",        label: "استيقاظ المافيا",   sub: "الولد والأكة",   icon: <Skull  size={20} strokeWidth={1.8} />, accent: "#4A0000" },
+  { key: "investigator", label: "استيقاظ الشايب",    sub: "الكاشف يحقق",   icon: <Search size={20} strokeWidth={1.8} />, accent: "#4A3000" },
+  { key: "protector",    label: "استيقاظ البنت",     sub: "الدرع تحمي",    icon: <Shield size={20} strokeWidth={1.8} />, accent: "#003366" },
+  { key: "day",          label: "بدء النهار",         sub: "المداولة تبدأ", icon: <Sun    size={20} strokeWidth={1.8} />, accent: "#3A2000" },
 ];
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
@@ -100,175 +89,50 @@ const PHASE_ACTIONS: {
 const BASE_BUTTON =
   "flex flex-row-reverse items-center gap-4 w-full px-6 py-4 rounded-xl border font-bold text-white text-lg transition-all duration-200 hover:brightness-125 active:scale-95";
 
-// ─── Main Menu ────────────────────────────────────────────────────────────────
+const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000", direction: "rtl" };
 
-function MainMenu({
-  onCreateRoom,
-  onJoinRoom,
-}: {
-  onCreateRoom: () => void;
-  onJoinRoom: () => void;
-}) {
+function TopBar({ onBack, label }: { onBack: () => void; label?: string }) {
   return (
-    <div
-      className="min-h-screen w-full flex flex-col items-center justify-center px-6"
-      style={{ backgroundColor: "#000000", direction: "rtl" }}
-    >
-      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
-        <div className="flex flex-col items-center gap-3">
-          <VenetianMask size={80} color="#D32F2F" strokeWidth={1.5} />
-          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>
-            قناع
-          </h1>
-          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>
-            المدينة تنام.. والقاتل يصحو
-          </p>
-        </div>
-        <div className="flex flex-col gap-5 w-full">
-          <button onClick={onCreateRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <Plus size={22} color="#D32F2F" strokeWidth={2.5} />
-            <span>إنشاء غرفة</span>
-          </button>
-          <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <LogIn size={22} color="#D32F2F" strokeWidth={2.5} />
-            <span>دخول لعبة</span>
-          </button>
-          <button className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <Settings size={22} color="#D32F2F" strokeWidth={2.5} />
-            <span>إعدادات</span>
-          </button>
-        </div>
+    <div className="flex items-center justify-between">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70" style={{ color: "#9E9E9E" }}>
+        <ArrowRight size={16} /><span>رجوع</span>
+      </button>
+      <div className="flex items-center gap-2">
+        <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
+        <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
+          {label ?? "قناع"}
+        </span>
       </div>
     </div>
   );
 }
 
-// ─── Name Input Screen (Create Room) ─────────────────────────────────────────
-
-function CreateNameScreen({
-  onBack,
-  onSubmit,
-}: {
-  onBack: () => void;
-  onSubmit: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handle = () => {
-    const trimmed = name.trim();
-    if (!trimmed) { setError("أدخل اسمك أولاً"); return; }
-    setLoading(true);
-    setError("");
-    onSubmit(trimmed);
-  };
-
-  return (
-    <NameInputLayout
-      title="أنت الراوي"
-      subtitle="أدخل اسمك لإنشاء الغرفة"
-      buttonLabel="إنشاء الغرفة"
-      onBack={onBack}
-      onSubmit={handle}
-      name={name}
-      setName={setName}
-      loading={loading}
-      error={error}
-    />
-  );
+function Footer() {
+  return <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>;
 }
 
-// ─── Join Room Screen ─────────────────────────────────────────────────────────
+// ─── Main Menu ────────────────────────────────────────────────────────────────
 
-function JoinRoomScreen({
-  onBack,
-  onSubmit,
-}: {
-  onBack: () => void;
-  onSubmit: (name: string, code: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handle = () => {
-    if (!name.trim()) { setError("أدخل اسمك"); return; }
-    if (code.trim().length !== 4) { setError("كود الغرفة يجب أن يكون 4 أرقام"); return; }
-    setLoading(true);
-    setError("");
-    onSubmit(name.trim(), code.trim());
-  };
-
+function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6"
-      style={{ backgroundColor: "#000000", direction: "rtl" }}>
-      <div className="flex flex-col gap-6 w-full max-w-sm">
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1 text-sm hover:opacity-70 transition-opacity" style={{ color: "#9E9E9E" }}>
-            <ArrowRight size={16} /><span>رجوع</span>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
+        <div className="flex flex-col items-center gap-3">
+          <VenetianMask size={80} color="#D32F2F" strokeWidth={1.5} />
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</h1>
+          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
+        </div>
+        <div className="flex flex-col gap-5 w-full">
+          <button onClick={onCreateRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <Plus size={22} color="#D32F2F" strokeWidth={2.5} /><span>إنشاء غرفة</span>
           </button>
-          <div className="flex items-center gap-2">
-            <VenetianMask size={18} color="#D32F2F" strokeWidth={1.5} />
-            <span className="font-black" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</span>
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-2xl font-black text-white">دخول لعبة</h2>
-          <p className="text-sm mt-1" style={{ color: "#9E9E9E" }}>أدخل اسمك وكود الغرفة</p>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>اسمك في اللعبة</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handle()}
-              placeholder="مثال: أحمد"
-              maxLength={20}
-              className="w-full px-4 py-3 rounded-xl text-white text-base outline-none focus:ring-2 placeholder-neutral-600"
-              style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", direction: "rtl",
-                       // @ts-ignore
-                       ["--tw-ring-color"]: "#D32F2F" }}
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              onKeyDown={(e) => e.key === "Enter" && handle()}
-              placeholder="0000"
-              maxLength={4}
-              inputMode="numeric"
-              className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold text-center outline-none tracking-widest"
-              style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333" }}
-            />
-          </div>
-
-          {error && (
-            <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: "#3A0000" }}>
-              <AlertCircle size={14} color="#FF6B6B" />
-              <span className="text-xs" style={{ color: "#FF6B6B" }}>{error}</span>
-            </div>
-          )}
-
-          <button
-            onClick={handle}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-xl font-bold text-white text-lg transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#D32F2F", opacity: loading ? 0.7 : 1 }}
-          >
-            {loading && <Loader2 size={18} className="animate-spin" />}
-            <span>{loading ? "جاري الاتصال..." : "دخول الغرفة"}</span>
+          <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
+          </button>
+          <button className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <Settings size={22} color="#D32F2F" strokeWidth={2.5} /><span>إعدادات</span>
           </button>
         </div>
-
-        <p className="text-center text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
       </div>
     </div>
   );
@@ -277,68 +141,103 @@ function JoinRoomScreen({
 // ─── Shared Name Input Layout ─────────────────────────────────────────────────
 
 function NameInputLayout({
-  title, subtitle, buttonLabel, onBack, onSubmit,
+  title, subtitle, buttonLabel,
+  onBack, onSubmit,
   name, setName, loading, error,
+  extraField,
 }: {
   title: string; subtitle: string; buttonLabel: string;
   onBack: () => void; onSubmit: () => void;
   name: string; setName: (v: string) => void;
   loading: boolean; error: string;
+  extraField?: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6"
-      style={{ backgroundColor: "#000000", direction: "rtl" }}>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col gap-6 w-full max-w-sm">
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1 text-sm hover:opacity-70 transition-opacity" style={{ color: "#9E9E9E" }}>
-            <ArrowRight size={16} /><span>رجوع</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <VenetianMask size={18} color="#D32F2F" strokeWidth={1.5} />
-            <span className="font-black" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</span>
-          </div>
-        </div>
-
+        <TopBar onBack={onBack} />
         <div>
           <h2 className="text-2xl font-black text-white">{title}</h2>
           <p className="text-sm mt-1" style={{ color: "#9E9E9E" }}>{subtitle}</p>
         </div>
-
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>اسمك في اللعبة</label>
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={name} onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSubmit()}
-              placeholder="مثال: أحمد"
-              maxLength={20}
+              placeholder="مثال: أحمد" maxLength={20}
               className="w-full px-4 py-3 rounded-xl text-white text-base outline-none placeholder-neutral-600"
               style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", direction: "rtl" }}
             />
           </div>
-
+          {extraField}
           {error && (
             <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: "#3A0000" }}>
               <AlertCircle size={14} color="#FF6B6B" />
               <span className="text-xs" style={{ color: "#FF6B6B" }}>{error}</span>
             </div>
           )}
-
-          <button
-            onClick={onSubmit}
-            disabled={loading}
+          <button onClick={onSubmit} disabled={loading}
             className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-xl font-bold text-white text-lg transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#D32F2F", opacity: loading ? 0.7 : 1 }}
-          >
+            style={{ backgroundColor: "#D32F2F", opacity: loading ? 0.7 : 1 }}>
             {loading && <Loader2 size={18} className="animate-spin" />}
             <span>{loading ? "جاري الاتصال..." : buttonLabel}</span>
           </button>
         </div>
-
-        <p className="text-center text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+        <Footer />
       </div>
     </div>
+  );
+}
+
+// ─── Create Room Screen ───────────────────────────────────────────────────────
+
+function CreateNameScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const handle = () => {
+    if (!name.trim()) { setError("أدخل اسمك أولاً"); return; }
+    setLoading(true); setError("");
+    onSubmit(name.trim());
+  };
+  return (
+    <NameInputLayout title="أنت الراوي" subtitle="أدخل اسمك لإنشاء الغرفة" buttonLabel="إنشاء الغرفة"
+      onBack={onBack} onSubmit={handle} name={name} setName={setName} loading={loading} error={error} />
+  );
+}
+
+// ─── Join Room Screen ─────────────────────────────────────────────────────────
+
+function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (name: string, code: string) => void }) {
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const handle = () => {
+    if (!name.trim()) { setError("أدخل اسمك"); return; }
+    if (code.trim().length !== 4) { setError("كود الغرفة يجب أن يكون 4 أرقام"); return; }
+    setLoading(true); setError("");
+    onSubmit(name.trim(), code.trim());
+  };
+  return (
+    <NameInputLayout
+      title="دخول لعبة" subtitle="أدخل اسمك وكود الغرفة" buttonLabel="دخول الغرفة"
+      onBack={onBack} onSubmit={handle} name={name} setName={setName} loading={loading} error={error}
+      extraField={
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
+          <input
+            value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            onKeyDown={(e) => e.key === "Enter" && handle()}
+            placeholder="0000" maxLength={4} inputMode="numeric"
+            className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold text-center outline-none tracking-widest"
+            style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333" }}
+          />
+        </div>
+      }
+    />
   );
 }
 
@@ -347,43 +246,48 @@ function NameInputLayout({
 function LobbyScreen({
   lobby,
   onBack,
-  onStartGame,
+  onGameStarted,
 }: {
   lobby: LobbyState;
   onBack: () => void;
-  onStartGame: () => void;
+  onGameStarted: (payload: GameStartedPayload) => void;
 }) {
   const [players, setPlayers] = useState<SocketPlayer[]>(lobby.players);
   const [copied, setCopied] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [closed, setClosed] = useState(false);
+  const [starting, setStarting] = useState(false);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const canStart = lobby.isHost && players.length >= 5;
 
-  // Real-time updates
+  // ── Real-time socket events ───────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
-
-    const onPlayersUpdated = ({ players: updated }: { players: SocketPlayer[] }) => {
-      setPlayers(updated);
-    };
+    const onPlayersUpdated = ({ players: updated }: { players: SocketPlayer[] }) => setPlayers(updated);
     const onRoomClosed = () => setClosed(true);
+    const onGameStartedEvt = (payload: GameStartedPayload) => onGameStarted(payload);
 
     socket.on("playersUpdated", onPlayersUpdated);
     socket.on("roomClosed", onRoomClosed);
-
+    socket.on("gameStarted", onGameStartedEvt);
     return () => {
       socket.off("playersUpdated", onPlayersUpdated);
       socket.off("roomClosed", onRoomClosed);
+      socket.off("gameStarted", onGameStartedEvt);
     };
-  }, []);
+  }, [onGameStarted]);
+
+  const handleStartGame = useCallback(() => {
+    if (!canStart || starting) return;
+    setStarting(true);
+    getSocket().emit("startGame", { code: lobby.code });
+  }, [canStart, starting, lobby.code]);
 
   const copyCode = useCallback(async () => {
     try { await navigator.clipboard.writeText(lobby.code); } catch {}
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
   }, [lobby.code]);
 
   const toggleAudio = useCallback(async () => {
@@ -403,48 +307,40 @@ function LobbyScreen({
     audioCtxRef.current?.close().catch(() => {});
   }, []);
 
+  // ── Closed screen ─────────────────────────────────────────────────────────
   if (closed) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4"
-        style={{ backgroundColor: "#000000", direction: "rtl" }}>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
         <AlertCircle size={48} color="#D32F2F" />
         <p className="text-white font-bold text-lg">تم إغلاق الغرفة</p>
         <p className="text-sm" style={{ color: "#9E9E9E" }}>غادر المضيف أو انتهت الجلسة</p>
-        <button onClick={onBack} className="mt-4 px-6 py-3 rounded-xl font-bold text-white"
-          style={{ backgroundColor: "#D32F2F" }}>العودة للقائمة الرئيسية</button>
+        <button onClick={onBack} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
+          العودة للقائمة الرئيسية
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ backgroundColor: "#000000", direction: "rtl" }}>
+    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70"
-            style={{ color: "#9E9E9E" }}>
-            <ArrowRight size={16} /><span>رجوع</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
-            <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</span>
-          </div>
-        </div>
+        <TopBar onBack={onBack} />
 
         {/* Role badge */}
         <div className="flex items-center justify-center">
           <span className="text-xs px-3 py-1 rounded-full font-semibold"
-            style={{ backgroundColor: lobby.isHost ? "#3A0000" : "#001A3A",
-                     color: lobby.isHost ? "#FF6B6B" : "#64B5F6",
-                     border: `1px solid ${lobby.isHost ? "#D32F2F" : "#1565C0"}` }}>
+            style={{
+              backgroundColor: lobby.isHost ? "#3A0000" : "#001A3A",
+              color:           lobby.isHost ? "#FF6B6B" : "#64B5F6",
+              border: `1px solid ${lobby.isHost ? "#D32F2F" : "#1565C0"}`,
+            }}>
             {lobby.isHost ? "أنت الراوي (المضيف)" : "أنت لاعب"}
           </span>
         </div>
 
         {/* Room Code Card */}
-        <div className="rounded-xl border p-5 flex flex-col gap-4"
-          style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+        <div className="rounded-xl border p-5 flex flex-col gap-4" style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9E9E9E" }}>كود الغرفة</span>
             <button onClick={copyCode} className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
@@ -453,7 +349,6 @@ function LobbyScreen({
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
             </button>
           </div>
-
           <div className="flex items-center justify-center gap-3">
             {lobby.code.split("").map((digit, i) => (
               <div key={i} className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-black border"
@@ -462,13 +357,11 @@ function LobbyScreen({
               </div>
             ))}
           </div>
-
           <div className="w-full aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 max-h-40"
             style={{ borderColor: "#333333" }}>
             <QrCode size={40} color="#333333" />
             <span className="text-xs" style={{ color: "#555555" }}>QR للانضمام</span>
           </div>
-
           <div className="flex items-center justify-center gap-2 py-2 rounded-lg" style={{ backgroundColor: "#0D0D0D" }}>
             <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#4CAF50" }} />
             <span className="text-xs" style={{ color: "#9E9E9E" }}>في انتظار اللاعبين...</span>
@@ -476,67 +369,53 @@ function LobbyScreen({
         </div>
 
         {/* Real-Time Player List */}
-        <div className="rounded-xl border p-4 flex flex-col gap-3"
-          style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
+        <div className="rounded-xl border p-4 flex flex-col gap-3" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users size={16} color="#D32F2F" />
               <span className="font-bold text-sm text-white">اللاعبون</span>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-              style={{ backgroundColor: players.length >= 5 ? "#1B5E20" : "#4A0000",
-                       color: players.length >= 5 ? "#4CAF50" : "#D32F2F" }}>
+              style={{ backgroundColor: players.length >= 5 ? "#1B5E20" : "#4A0000", color: players.length >= 5 ? "#4CAF50" : "#D32F2F" }}>
               {players.length} / 5+
             </span>
           </div>
-
           <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
             {players.map((player, idx) => (
-              <div key={player.socketId}
-                className="flex flex-row-reverse items-center gap-3 px-3 py-2.5 rounded-lg"
-                style={{ backgroundColor: "#0D0D0D" }}>
+              <div key={player.socketId} className="flex flex-row-reverse items-center gap-3 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#0D0D0D" }}>
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  style={{ backgroundColor: "#D32F2F", color: "#fff" }}>
-                  {idx + 1}
-                </div>
-                <div className="flex-1 min-w-0">
+                  style={{ backgroundColor: "#D32F2F", color: "#fff" }}>{idx + 1}</div>
+                <div className="flex-1 min-w-0 flex flex-row-reverse items-center gap-2">
                   <span className="text-white text-sm font-medium">{player.name}</span>
                   {player.socketId === getSocket().id && (
-                    <span className="text-xs mr-2" style={{ color: "#555555" }}>(أنت)</span>
+                    <span className="text-xs" style={{ color: "#555555" }}>(أنت)</span>
                   )}
                 </div>
                 {idx === 0 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "#3A0000", color: "#FF6B6B" }}>
-                    مضيف
-                  </span>
+                  <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: "#3A0000", color: "#FF6B6B" }}>مضيف</span>
                 )}
               </div>
             ))}
           </div>
-
-          {players.length === 0 && (
-            <p className="text-center text-xs py-2" style={{ color: "#555555" }}>لا يوجد لاعبون بعد</p>
-          )}
+          {players.length === 0 && <p className="text-center text-xs py-2" style={{ color: "#555555" }}>لا يوجد لاعبون بعد</p>}
         </div>
 
-        {/* Start Game Button (host only) */}
+        {/* Start Button — HOST ONLY */}
         {lobby.isHost && (
           <>
-            <button
-              onClick={onStartGame}
-              disabled={!canStart}
+            <button onClick={handleStartGame} disabled={!canStart || starting}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-6 py-4 rounded-xl border font-bold text-lg transition-all duration-200 active:scale-95"
               style={{
                 backgroundColor: canStart ? "#D32F2F" : "#1A1A1A",
-                borderColor: canStart ? "#D32F2F" : "#333333",
-                color: canStart ? "#ffffff" : "#555555",
+                borderColor:     canStart ? "#D32F2F" : "#333333",
+                color:           canStart ? "#ffffff" : "#555555",
                 cursor: canStart ? "pointer" : "not-allowed",
                 opacity: canStart ? 1 : 0.6,
               }}>
-              <Shuffle size={22} strokeWidth={2.5} />
-              <span>ابدأ توزيع الأقنعة</span>
+              {starting ? <Loader2 size={22} className="animate-spin" /> : <Shuffle size={22} strokeWidth={2.5} />}
+              <span>{starting ? "جاري التوزيع..." : "ابدأ توزيع الأقنعة"}</span>
             </button>
-            {!canStart && (
+            {!canStart && !starting && (
               <p className="text-center text-xs -mt-2" style={{ color: "#555555" }}>
                 يلزم {Math.max(0, 5 - players.length)} لاعب{5 - players.length > 1 ? "ين" : ""} إضافي{5 - players.length > 1 ? "ين" : ""} للبدء
               </p>
@@ -544,12 +423,12 @@ function LobbyScreen({
           </>
         )}
 
-        {/* Player waiting message */}
+        {/* Player waiting message — NON-HOST ONLY */}
         {!lobby.isHost && (
           <div className="flex items-center justify-center gap-2 py-3 rounded-xl"
             style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333" }}>
             <Loader2 size={16} color="#9E9E9E" className="animate-spin" />
-            <span className="text-sm" style={{ color: "#9E9E9E" }}>في انتظار الراوي لبدء اللعبة...</span>
+            <span className="text-sm" style={{ color: "#9E9E9E" }}>في انتظار بدء اللعبة...</span>
           </div>
         )}
 
@@ -558,14 +437,109 @@ function LobbyScreen({
           className="flex flex-row-reverse items-center gap-3 w-full px-4 py-3 rounded-xl border text-sm font-medium transition-all duration-200 hover:brightness-125"
           style={{
             backgroundColor: audioEnabled ? "#0D1F0D" : "#1A1A1A",
-            borderColor: audioEnabled ? "#4CAF50" : "#333333",
-            color: audioEnabled ? "#4CAF50" : "#9E9E9E",
+            borderColor:     audioEnabled ? "#4CAF50" : "#333333",
+            color:           audioEnabled ? "#4CAF50" : "#9E9E9E",
           }}>
           {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
           <span>{audioEnabled ? "الراوي الصوتي مفعّل — الشاشة ستبقى مضاءة" : "تفعيل الراوي الصوتي"}</span>
         </button>
 
-        <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+        <Footer />
+      </div>
+    </div>
+  );
+}
+
+// ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
+
+function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
+  const [revealed, setRevealed] = useState(false);
+
+  // Hold-to-reveal handlers — reveal while pressing/holding, hide on release
+  const reveal   = useCallback(() => setRevealed(true),  []);
+  const conceal  = useCallback(() => setRevealed(false), []);
+
+  return (
+    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+      <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-6">
+
+        <TopBar onBack={onBack} />
+
+        {/* Player name + room code */}
+        <div className="flex items-center justify-between px-1">
+          <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F" }}>
+            #{role.code}
+          </span>
+        </div>
+
+        {/* Tap-and-hold reveal card */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          <div
+            onPointerDown={reveal}
+            onPointerUp={conceal}
+            onPointerLeave={conceal}
+            onPointerCancel={conceal}
+            className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none transition-all duration-300"
+            style={{
+              backgroundColor: revealed ? "#0A0000" : "#111111",
+              borderColor:     revealed ? role.color : "#2A2A2A",
+              boxShadow:       revealed ? `0 0 40px ${role.color}33` : "none",
+              cursor: "pointer",
+              touchAction: "none",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+            }}
+          >
+            {revealed ? (
+              <>
+                <VenetianMask size={64} color={role.color} strokeWidth={1.2} />
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
+                  <span
+                    className="text-3xl font-black text-center leading-tight"
+                    style={{ color: role.color, fontFamily: "serif", direction: "rtl" }}
+                  >
+                    {role.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
+                  <Unlock size={14} />
+                  <span className="text-xs">أنت ترى قناعك</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="relative">
+                  <VenetianMask size={64} color="#2A2A2A" strokeWidth={1.2} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Lock size={22} color="#555555" />
+                  </div>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xl font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
+                  <span className="text-sm text-center" style={{ color: "#333333" }}>
+                    اضغط وامسك للكشف عن قناعك
+                  </span>
+                </div>
+                <div className="flex items-center gap-2" style={{ color: "#333333" }}>
+                  <Lock size={14} />
+                  <span className="text-xs">مخفي عن الجميع</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Instruction hint */}
+          <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
+            {revealed
+              ? "ارفع إصبعك لإخفاء القناع مجدداً"
+              : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
+          </p>
+        </div>
+
+        <Footer />
       </div>
     </div>
   );
@@ -578,18 +552,10 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ backgroundColor: "#000000", direction: "rtl" }}>
+    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
 
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70" style={{ color: "#9E9E9E" }}>
-            <ArrowRight size={16} /><span>رجوع</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
-            <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</span>
-          </div>
-        </div>
+        <TopBar onBack={onBack} />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -602,32 +568,31 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
           </span>
         </div>
 
-        {/* Player Roster */}
+        {/* Roster with eye toggle */}
         <div className="rounded-xl border flex flex-col overflow-hidden" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#2A2A2A" }}>
             <div className="flex items-center gap-2">
-              <Users size={15} color="#D32F2F" />
+              <Users size={15} color="#D32F2F} " />
               <span className="font-bold text-sm text-white">قائمة اللاعبين</span>
             </div>
             <button onClick={() => setRolesVisible((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200"
-              style={{ backgroundColor: rolesVisible ? "#3A0000" : "#222222",
-                       color: rolesVisible ? "#FF6B6B" : "#9E9E9E",
-                       border: `1px solid ${rolesVisible ? "#D32F2F" : "#333333"}` }}>
+              style={{
+                backgroundColor: rolesVisible ? "#3A0000" : "#222222",
+                color:           rolesVisible ? "#FF6B6B" : "#9E9E9E",
+                border: `1px solid ${rolesVisible ? "#D32F2F" : "#333333"}`,
+              }}>
               {rolesVisible ? <Eye size={13} /> : <EyeOff size={13} />}
               <span>{rolesVisible ? "إخفاء الأدوار" : "إظهار الأدوار"}</span>
             </button>
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col max-h-64 overflow-y-auto">
             {game.players.map((player, idx) => (
-              <div key={player.socketId}
-                className="flex flex-row-reverse items-center gap-3 px-4 py-3"
+              <div key={player.socketId} className="flex flex-row-reverse items-center gap-3 px-4 py-3"
                 style={{ borderBottom: idx < game.players.length - 1 ? "1px solid #1E1E1E" : "none" }}>
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  style={{ backgroundColor: "#2A2A2A", color: "#9E9E9E" }}>
-                  {idx + 1}
-                </div>
+                  style={{ backgroundColor: "#2A2A2A", color: "#9E9E9E" }}>{idx + 1}</div>
                 <div className="flex-1 min-w-0">
                   <span className="text-white text-sm font-semibold">{player.name}</span>
                   <div className="flex flex-row-reverse items-center gap-1.5 mt-0.5">
@@ -641,9 +606,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
                     )}
                   </div>
                 </div>
-                {rolesVisible && (
-                  <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: player.roleColor }} />
-                )}
+                {rolesVisible && <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: player.roleColor }} />}
               </div>
             ))}
           </div>
@@ -651,15 +614,12 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
 
         {/* Phase Controls */}
         <div className="flex flex-col gap-3">
-          <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>
-            التحكم في مراحل اللعبة
-          </span>
+          <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التحكم في مراحل اللعبة</span>
           <div className="grid grid-cols-1 gap-2">
             {PHASE_ACTIONS.map((phase) => {
               const isActive = activePhase === phase.key;
               return (
-                <button key={phase.key}
-                  onClick={() => setActivePhase(isActive ? null : phase.key)}
+                <button key={phase.key} onClick={() => setActivePhase(isActive ? null : phase.key)}
                   className="flex flex-row-reverse items-center gap-4 w-full px-4 py-3.5 rounded-xl border transition-all duration-200 active:scale-95"
                   style={{ backgroundColor: isActive ? phase.accent : "#1A1A1A", borderColor: isActive ? "#D32F2F" : "#2A2A2A" }}>
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors duration-200"
@@ -667,9 +627,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
                     {phase.icon}
                   </div>
                   <div className="flex flex-col items-end flex-1 min-w-0">
-                    <span className="text-sm font-bold leading-tight" style={{ color: isActive ? "#ffffff" : "#CCCCCC" }}>
-                      {phase.label}
-                    </span>
+                    <span className="text-sm font-bold leading-tight" style={{ color: isActive ? "#ffffff" : "#CCCCCC" }}>{phase.label}</span>
                     <span className="text-xs mt-0.5" style={{ color: isActive ? "#FF8A80" : "#555555" }}>{phase.sub}</span>
                   </div>
                   {isActive && <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />}
@@ -689,7 +647,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
           </div>
         )}
 
-        <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+        <Footer />
       </div>
     </div>
   );
@@ -701,19 +659,32 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [lobby, setLobby] = useState<LobbyState | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
+  const [playerRole, setPlayerRole] = useState<MyRole | null>(null);
   const [socketError, setSocketError] = useState("");
 
+  // ── Shared game-started handler ─────────────────────────────────────────
+  const handleGameStarted = useCallback((payload: GameStartedPayload) => {
+    if (payload.isHost) {
+      setGame({ code: payload.code, players: payload.players });
+      setScreen("dashboard");
+    } else {
+      setPlayerRole({
+        label:    payload.myRole.label,
+        color:    payload.myRole.color,
+        code:     payload.code,
+        myName:   lobby?.myName ?? "",
+      });
+      setScreen("player-screen");
+    }
+  }, [lobby]);
+
+  // ── Socket room actions ─────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
     const socket = getSocket();
     setSocketError("");
-
     socket.emit("createRoom", { name }, (res: { code: string; players: SocketPlayer[] } | { error: string }) => {
-      if ("error" in res) {
-        setSocketError(res.error);
-        setScreen("create-name");
-        return;
-      }
-      setLobby({ code: res.code, isHost: true, players: res.players });
+      if ("error" in res) { setSocketError(res.error); setScreen("create-name"); return; }
+      setLobby({ code: res.code, isHost: true, myName: name, players: res.players });
       setScreen("lobby");
     });
   }, []);
@@ -721,68 +692,37 @@ export default function App() {
   const handleJoinRoom = useCallback((name: string, code: string) => {
     const socket = getSocket();
     setSocketError("");
-
     socket.emit("joinRoom", { name, code }, (res: { code: string; players: SocketPlayer[] } | { error: string }) => {
-      if ("error" in res) {
-        setSocketError(res.error);
-        setScreen("join");
-        return;
-      }
-      setLobby({ code: res.code, isHost: false, players: res.players });
+      if ("error" in res) { setSocketError(res.error); setScreen("join"); return; }
+      setLobby({ code: res.code, isHost: false, myName: name, players: res.players });
       setScreen("lobby");
     });
   }, []);
 
-  const handleStartGame = useCallback(() => {
-    if (!lobby) return;
-    const assigned = distributeRoles(lobby.players);
-    setGame({ code: lobby.code, players: assigned });
-    setScreen("dashboard");
-  }, [lobby]);
-
   const handleBack = useCallback(() => {
-    setScreen("menu");
-    setLobby(null);
-    setGame(null);
-    setSocketError("");
+    setScreen("menu"); setLobby(null); setGame(null); setPlayerRole(null); setSocketError("");
   }, []);
 
+  // ── Screen Rendering ────────────────────────────────────────────────────
   if (screen === "dashboard" && game) {
     return <HostDashboard game={game} onBack={() => setScreen("lobby")} />;
   }
 
+  if (screen === "player-screen" && playerRole) {
+    return <PlayerScreen role={playerRole} onBack={() => setScreen("lobby")} />;
+  }
+
   if (screen === "lobby" && lobby) {
-    return (
-      <LobbyScreen
-        lobby={lobby}
-        onBack={handleBack}
-        onStartGame={handleStartGame}
-      />
-    );
+    return <LobbyScreen lobby={lobby} onBack={handleBack} onGameStarted={handleGameStarted} />;
   }
 
   if (screen === "create-name") {
-    return (
-      <CreateNameScreen
-        onBack={() => setScreen("menu")}
-        onSubmit={handleCreateName}
-      />
-    );
+    return <CreateNameScreen onBack={() => setScreen("menu")} onSubmit={handleCreateName} />;
   }
 
   if (screen === "join") {
-    return (
-      <JoinRoomScreen
-        onBack={() => setScreen("menu")}
-        onSubmit={handleJoinRoom}
-      />
-    );
+    return <JoinRoomScreen onBack={() => setScreen("menu")} onSubmit={handleJoinRoom} />;
   }
 
-  return (
-    <MainMenu
-      onCreateRoom={() => setScreen("create-name")}
-      onJoinRoom={() => setScreen("join")}
-    />
-  );
+  return <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} />;
 }
