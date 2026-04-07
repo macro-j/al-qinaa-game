@@ -312,47 +312,16 @@ function CreateNameScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: 
 
 function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (name: string, code: string) => void }) {
   const [name, setName] = useState("");
-  const [digits, setDigits] = useState<string[]>(["", "", "", ""]);
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
-
-  // Explicit LTR assembly: index 0 is always the leftmost box
-  const finalCode = digits[0] + digits[1] + digits[2] + digits[3];
 
   const handle = () => {
     if (!name.trim()) { setError("أدخل اسمك"); return; }
-    if (finalCode.length !== 4 || finalCode.includes("undefined")) {
-      setError("أدخل كود الغرفة كاملاً"); return;
-    }
-    console.log("Attempting to join with code:", finalCode);
+    if (code.trim().length !== 4) { setError("أدخل كود الغرفة كاملاً"); return; }
+    console.log("Attempting to join with code:", code.trim());
     setLoading(true); setError("");
-    onSubmit(name.trim(), finalCode);
-  };
-
-  const handleDigitChange = (idx: number, val: string) => {
-    const digit = val.replace(/\D/g, "").slice(-1);
-    const next = [...digits];
-    next[idx] = digit;
-    setDigits(next);
-    if (digit && idx < 3) inputRefs.current[idx + 1]?.focus();
-  };
-
-  const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
-      inputRefs.current[idx - 1]?.focus();
-    }
-    if (e.key === "Enter") handle();
-  };
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4).split("");
-    const next = ["", "", "", ""];
-    pasted.forEach((d, i) => { next[i] = d; });
-    setDigits(next);
-    const focusIdx = Math.min(pasted.length, 3);
-    inputRefs.current[focusIdx]?.focus();
+    onSubmit(name.trim(), code.trim());
   };
 
   return (
@@ -362,29 +331,28 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
       extraField={
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
-          <div dir="ltr" className="flex flex-row justify-center gap-3" style={{ direction: "ltr", flexDirection: "row" }}>
-            {digits.map((d, i) => (
-              <input
-                key={i}
-                ref={(el) => { inputRefs.current[i] = el; }}
-                type="text"
-                inputMode="numeric"
-                maxLength={1}
-                value={d}
-                onChange={(e) => handleDigitChange(i, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(i, e)}
-                onPaste={i === 0 ? handlePaste : undefined}
-                onFocus={(e) => e.target.select()}
-                className="w-14 h-16 rounded-xl text-3xl font-black font-mono outline-none text-center border-2"
-                style={{
-                  backgroundColor: "#1A1A1A",
-                  borderColor: d ? "#D32F2F" : "#333333",
-                  color: "#FFFFFF",
-                  caretColor: "#D32F2F",
-                }}
-              />
-            ))}
-          </div>
+          <input
+            dir="ltr"
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            onKeyDown={(e) => e.key === "Enter" && handle()}
+            placeholder="0000"
+            className="w-full rounded-xl font-black font-mono outline-none border-2"
+            style={{
+              backgroundColor: "#1A1A1A",
+              borderColor: code.length > 0 ? "#D32F2F" : "#333333",
+              color: "#FFFFFF",
+              caretColor: "#D32F2F",
+              direction: "ltr",
+              letterSpacing: "1em",
+              textAlign: "center",
+              fontSize: "2rem",
+              padding: "0.75rem 1.5rem",
+            }}
+          />
         </div>
       }
     />
@@ -496,13 +464,21 @@ function LobbyScreen({
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
             </button>
           </div>
-          <div className="flex items-center justify-center gap-3">
-            {lobby.code.split("").reverse().map((digit, i) => (
-              <div key={i} className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-black border"
-                style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace" }}>
-                {digit}
-              </div>
-            ))}
+          <div
+            dir="ltr"
+            className="w-full rounded-xl border-2 font-black font-mono flex items-center justify-center"
+            style={{
+              backgroundColor: "#0D0D0D",
+              borderColor: "#D32F2F",
+              color: "#D32F2F",
+              direction: "ltr",
+              letterSpacing: "1em",
+              textAlign: "center",
+              fontSize: "2rem",
+              padding: "1rem 1.5rem",
+            }}
+          >
+            {lobby.code}
           </div>
           <div className="w-full aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 max-h-40"
             style={{ borderColor: "#333333" }}>
