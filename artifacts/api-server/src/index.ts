@@ -259,18 +259,19 @@ io.on("connection", (socket) => {
 
     // ── Night Phase Narration Sequence ──────────────────────────────────────
     const nightScript = [
-      { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه." },
-      { delay:  10000, text: "أصحاب قناع الولد والأكة.. يفتحون عيونهم." },
-      { delay:  30000, text: "قناع الشايب يفتح عيونه.. ويحقق." },
-      { delay:  45000, text: "قناع البنت تفتح عيونها.. وتحمي." },
-      { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار." },
+      { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",         phase: "night_sleep"        },
+      { delay:  10000, text: "أصحاب قناع الولد والأكة.. يفتحون عيونهم.", phase: "night_mafia"        },
+      { delay:  30000, text: "قناع الشايب يفتح عيونه.. ويحقق.",          phase: "night_investigator" },
+      { delay:  45000, text: "قناع البنت تفتح عيونها.. وتحمي.",           phase: "night_protector"    },
+      { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",              phase: "day_discussion"     },
     ];
 
-    room.nightPhaseTimers = nightScript.map(({ delay, text }) =>
+    room.nightPhaseTimers = nightScript.map(({ delay, text, phase }) =>
       setTimeout(() => {
         if (!rooms[code]) return; // room was destroyed before this fires
-        io.to(code).emit("playAudio", text);
-        logger.info({ code, text }, "Night phase narration broadcast");
+        io.to(code).emit("playAudio",   text);
+        io.to(code).emit("phaseUpdate", phase);
+        logger.info({ code, text, phase }, "Night phase broadcast");
       }, delay),
     );
   });

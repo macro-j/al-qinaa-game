@@ -50,10 +50,11 @@ interface LobbyState {
 }
 
 interface MyRole {
-  label: string;
-  color: string;
-  code: string;
-  myName: string;
+  label:   string;
+  color:   string;
+  code:    string;
+  myName:  string;
+  players: string[]; // other players' names (self excluded), for night action targeting
 }
 
 interface GameState {
@@ -583,13 +584,40 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, narrationUnlocked, onUnlockNarration, onLeave }: {
+function PlayerScreen({ role, gamePhase, narrationUnlocked, onUnlockNarration, onLeave }: {
   role: MyRole;
+  gamePhase: string;
   narrationUnlocked: boolean;
   onUnlockNarration: () => void;
   onLeave: () => void;
 }) {
-  const [revealed, setRevealed] = useState(false);
+  const [revealed, setRevealed]       = useState(false);
+  const [selectedTarget, setSelected] = useState<string | null>(null);
+
+  const isMafia       = role.label.includes("الولد") || role.label.includes("الأكة");
+  const isInvestigator = role.label.includes("الشايب");
+  const isProtector   = role.label.includes("البنت");
+
+  const isMyTurn =
+    (gamePhase === "night_mafia"        && isMafia)       ||
+    (gamePhase === "night_investigator" && isInvestigator) ||
+    (gamePhase === "night_protector"    && isProtector);
+
+  const isNightPhase = gamePhase.startsWith("night_");
+
+  const actionLabel = isMafia
+    ? "اختر هدفك الليلي"
+    : isInvestigator
+      ? "اختر من تحقق معه"
+      : "اختر من تحمي";
+
+  const handleSelectTarget = (name: string) => {
+    setSelected(name);
+    console.log(`[قناع] ${role.myName} (${role.label}) selected target: ${name} during phase: ${gamePhase}`);
+  };
+
+  // Reset target selection when phase changes
+  useEffect(() => { setSelected(null); }, [gamePhase]);
 
   const reveal  = useCallback(() => setRevealed(true),  []);
   const conceal = useCallback(() => setRevealed(false), []);
@@ -662,6 +690,58 @@ function PlayerScreen({ role, narrationUnlocked, onUnlockNarration, onLeave }: {
             {revealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
           </p>
         </div>
+
+        {/* ── Night Action Panel ── */}
+        {isNightPhase && (
+          <div className="w-full rounded-2xl overflow-hidden"
+            style={{ border: `1px solid ${isMyTurn ? "#D32F2F" : "#1E1E1E"}`, backgroundColor: isMyTurn ? "#0D0000" : "#0A0A0A" }}>
+
+            {isMyTurn ? (
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>دورك الآن</span>
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#D32F2F" }} />
+                </div>
+                <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>{actionLabel}</p>
+                <div className="flex flex-col gap-2">
+                  {role.players.length === 0 ? (
+                    <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا يوجد لاعبون آخرون</p>
+                  ) : (
+                    role.players.map((name) => (
+                      <div key={name}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                        style={{ backgroundColor: selectedTarget === name ? "#2A0000" : "#141414", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#222222"}` }}>
+                        <button
+                          onClick={() => handleSelectTarget(name)}
+                          className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
+                          style={{ backgroundColor: selectedTarget === name ? "#D32F2F" : "#1A1A1A", color: selectedTarget === name ? "#ffffff" : "#888888", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#333333"}` }}>
+                          {selectedTarget === name ? "تم الاختيار" : "اختر"}
+                        </button>
+                        <span className="text-sm font-semibold" style={{ color: selectedTarget === name ? "#ffffff" : "#AAAAAA" }}>{name}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {selectedTarget && (
+                  <p className="text-xs text-center mt-1" style={{ color: "#888888" }}>اخترت: <span style={{ color: "#D32F2F", fontWeight: "bold" }}>{selectedTarget}</span></p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3 py-6 px-4">
+                <Lock size={28} color="#2A2A2A" />
+                <p className="text-sm font-semibold text-center" style={{ color: "#333333" }}>المدينة نائمة... انتظر دورك</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {gamePhase === "day_discussion" && (
+          <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
+            style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
+            <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع المدينة</p>
+          </div>
+        )}
 
         {!narrationUnlocked ? (
           <button
@@ -862,6 +942,7 @@ export default function App() {
   const [game, setGame]             = useState<GameState | null>(null);
   const [playerRole, setPlayerRole] = useState<MyRole | null>(null);
   const [isConnected, setIsConnected] = useState(true);
+  const [gamePhase, setGamePhase]   = useState<string>("lobby");
 
   // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
@@ -933,7 +1014,7 @@ export default function App() {
             setScreen("dashboard");
           } else {
             setLobby({ code: res.code, isHost: false, myName: session.myName, players: [] });
-            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName, players: [] });
             setScreen("player-screen");
           }
         },
@@ -980,7 +1061,7 @@ export default function App() {
             setGame({ code: res.code, players: res.players, myName: current.myName });
             setScreen("dashboard");
           } else {
-            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName, players: [] });
             setScreen("player-screen");
           }
         },
@@ -995,30 +1076,40 @@ export default function App() {
       }
     };
 
-    socket.on("connect",    onConnect);
-    socket.on("disconnect", onDisconnect);
-    socket.on("reconnect",  onReconnect);
-    socket.on("playAudio",  onPlayAudio);
+    const onPhaseUpdate = (phase: string) => setGamePhase(phase);
+
+    socket.on("connect",     onConnect);
+    socket.on("disconnect",  onDisconnect);
+    socket.on("reconnect",   onReconnect);
+    socket.on("playAudio",   onPlayAudio);
+    socket.on("phaseUpdate", onPhaseUpdate);
     return () => {
-      socket.off("connect",    onConnect);
-      socket.off("disconnect", onDisconnect);
-      socket.off("reconnect",  onReconnect);
-      socket.off("playAudio",  onPlayAudio);
+      socket.off("connect",     onConnect);
+      socket.off("disconnect",  onDisconnect);
+      socket.off("reconnect",   onReconnect);
+      socket.off("playAudio",   onPlayAudio);
+      socket.off("phaseUpdate", onPhaseUpdate);
     };
   }, [speakText]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
     resetNarration();
+    setGamePhase("lobby");
     if (payload.isHost) {
       setGame({ code: payload.code, players: payload.players, myName: lobbyRef.current?.myName ?? "" });
       setScreen("dashboard");
     } else {
+      const myName  = lobbyRef.current?.myName ?? "";
+      const players = (lobbyRef.current?.players ?? [])
+        .map((p) => p.name)
+        .filter((n) => n !== myName);
       setPlayerRole({
         label:  payload.myRole.label,
         color:  payload.myRole.color,
         code:   payload.code,
-        myName: lobbyRef.current?.myName ?? "",
+        myName,
+        players,
       });
       setScreen("player-screen");
     }
@@ -1027,6 +1118,7 @@ export default function App() {
   // ── Explicit leave — emits to server + clears localStorage ──────────────
   const handleLeaveRoom = useCallback(() => {
     resetNarration();
+    setGamePhase("lobby");
     const current = lobbyRef.current;
     const uid     = getOrCreateUserId();
     if (current) {
@@ -1079,7 +1171,7 @@ export default function App() {
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} narrationUnlocked={narrationUnlocked} onUnlockNarration={onUnlockNarration} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} narrationUnlocked={narrationUnlocked} onUnlockNarration={onUnlockNarration} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
