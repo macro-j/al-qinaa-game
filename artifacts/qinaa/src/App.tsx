@@ -484,7 +484,7 @@ function LobbyScreen({
               padding: "1rem 1.5rem",
             }}
           >
-            {lobby.code}
+            {lobby.code.split("").reverse().join("")}
           </div>
           <div className="w-full aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 max-h-40"
             style={{ borderColor: "#333333" }}>
