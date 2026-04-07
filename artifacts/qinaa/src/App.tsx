@@ -496,14 +496,10 @@ function LobbyScreen({
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
             </button>
           </div>
-          <div
-            dir="ltr"
-            className="flex items-center justify-center gap-3"
-            style={{ direction: "ltr", flexDirection: "row" }}
-          >
-            {lobby.code.split("").map((digit, i) => (
+          <div className="flex items-center justify-center gap-3">
+            {lobby.code.split("").reverse().map((digit, i) => (
               <div key={i} className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl font-black border"
-                style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace", direction: "ltr" }}>
+                style={{ backgroundColor: "#0D0D0D", borderColor: "#D32F2F", color: "#D32F2F", fontFamily: "monospace" }}>
                 {digit}
               </div>
             ))}
