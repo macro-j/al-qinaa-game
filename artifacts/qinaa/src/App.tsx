@@ -140,7 +140,7 @@ const PHASE_ACTIONS: { key: PhaseKey; label: string; sub: string; icon: React.Re
 const BASE_BUTTON =
   "flex flex-row-reverse items-center gap-4 w-full px-6 py-4 rounded-xl border font-bold text-white text-lg transition-all duration-200 hover:brightness-125 active:scale-95";
 
-const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000", direction: "rtl" };
+const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000" };
 
 function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
   return (
