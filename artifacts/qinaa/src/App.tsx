@@ -70,7 +70,17 @@ type PhaseKey = "night" | "mafia" | "investigator" | "protector" | "day";
 
 let _socket: Socket | null = null;
 function getSocket(): Socket {
-  if (!_socket) _socket = io({ path: "/socket.io/", autoConnect: true });
+  if (!_socket) {
+    _socket = io({
+      path: "/socket.io/",
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1_000,
+      reconnectionDelayMax: 8_000,
+      timeout: 20_000,
+    });
+  }
   return _socket;
 }
 
@@ -109,6 +119,21 @@ function TopBar({ onBack, label }: { onBack: () => void; label?: string }) {
 
 function Footer() {
   return <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>;
+}
+
+// ─── Connection Banner ────────────────────────────────────────────────────────
+
+function ConnectionBanner({ connected }: { connected: boolean }) {
+  if (connected) return null;
+  return (
+    <div
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-2 text-xs font-semibold"
+      style={{ backgroundColor: "#1A0000", borderBottom: "1px solid #D32F2F", color: "#FF6B6B" }}
+    >
+      <Loader2 size={13} className="animate-spin flex-shrink-0" />
+      <span>جاري إعادة الاتصال بالخادم...</span>
+    </div>
+  );
 }
 
 // ─── Main Menu ────────────────────────────────────────────────────────────────
@@ -661,6 +686,78 @@ export default function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const [playerRole, setPlayerRole] = useState<MyRole | null>(null);
   const [socketError, setSocketError] = useState("");
+  const [isConnected, setIsConnected] = useState(true);
+
+  // Always-fresh ref so socket callbacks can read latest lobby without stale closure
+  const lobbyRef = useRef<LobbyState | null>(null);
+  lobbyRef.current = lobby;
+
+  // ── Connection tracking + auto-reconnect ────────────────────────────────
+  useEffect(() => {
+    const socket = getSocket();
+
+    const onConnect = () => {
+      setIsConnected(true);
+    };
+
+    const onDisconnect = () => {
+      setIsConnected(false);
+    };
+
+    const onReconnect = () => {
+      setIsConnected(true);
+      const current = lobbyRef.current;
+      if (!current) return; // not in a room — nothing to re-join
+
+      socket.emit(
+        "reconnectRoom",
+        { code: current.code, name: current.myName },
+        (res:
+          | { code: string; players: SocketPlayer[]; started: false }
+          | { code: string; started: true; isHost: true;  players: { socketId: string; name: string; online: boolean; roleLabel: string; roleColor: string }[] }
+          | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
+          | { error: string }
+        ) => {
+          if ("error" in res) {
+            // Room expired — go back to menu
+            setLobby(null); setGame(null); setPlayerRole(null);
+            setScreen("menu");
+            return;
+          }
+
+          if (!res.started) {
+            // Still in lobby — refresh player list
+            setLobby((prev) => prev ? { ...prev, players: res.players } : prev);
+            setScreen("lobby");
+            return;
+          }
+
+          // Game already started — restore correct screen
+          if (res.isHost) {
+            setGame({ code: res.code, players: res.players });
+            setScreen("dashboard");
+          } else {
+            setPlayerRole({
+              label:  res.myRole.label,
+              color:  res.myRole.color,
+              code:   res.code,
+              myName: current.myName,
+            });
+            setScreen("player-screen");
+          }
+        },
+      );
+    };
+
+    socket.on("connect",    onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("reconnect",  onReconnect);
+    return () => {
+      socket.off("connect",    onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("reconnect",  onReconnect);
+    };
+  }, []);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
@@ -669,14 +766,14 @@ export default function App() {
       setScreen("dashboard");
     } else {
       setPlayerRole({
-        label:    payload.myRole.label,
-        color:    payload.myRole.color,
-        code:     payload.code,
-        myName:   lobby?.myName ?? "",
+        label:  payload.myRole.label,
+        color:  payload.myRole.color,
+        code:   payload.code,
+        myName: lobbyRef.current?.myName ?? "",
       });
       setScreen("player-screen");
     }
-  }, [lobby]);
+  }, []);
 
   // ── Socket room actions ─────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
@@ -692,11 +789,15 @@ export default function App() {
   const handleJoinRoom = useCallback((name: string, code: string) => {
     const socket = getSocket();
     setSocketError("");
-    socket.emit("joinRoom", { name, code }, (res: { code: string; players: SocketPlayer[] } | { error: string }) => {
-      if ("error" in res) { setSocketError(res.error); setScreen("join"); return; }
-      setLobby({ code: res.code, isHost: false, myName: name, players: res.players });
-      setScreen("lobby");
-    });
+    socket.emit(
+      "joinRoom",
+      { name, code },
+      (res: { code: string; players: SocketPlayer[]; started: boolean } | { error: string }) => {
+        if ("error" in res) { setSocketError(res.error); setScreen("join"); return; }
+        setLobby({ code: res.code, isHost: false, myName: name, players: res.players });
+        setScreen("lobby");
+      },
+    );
   }, []);
 
   const handleBack = useCallback(() => {
@@ -704,16 +805,18 @@ export default function App() {
   }, []);
 
   // ── Screen Rendering ────────────────────────────────────────────────────
+  const banner = <ConnectionBanner connected={isConnected} />;
+
   if (screen === "dashboard" && game) {
-    return <HostDashboard game={game} onBack={() => setScreen("lobby")} />;
+    return <>{banner}<HostDashboard game={game} onBack={() => setScreen("lobby")} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <PlayerScreen role={playerRole} onBack={() => setScreen("lobby")} />;
+    return <>{banner}<PlayerScreen role={playerRole} onBack={() => setScreen("lobby")} /></>;
   }
 
   if (screen === "lobby" && lobby) {
-    return <LobbyScreen lobby={lobby} onBack={handleBack} onGameStarted={handleGameStarted} />;
+    return <>{banner}<LobbyScreen lobby={lobby} onBack={handleBack} onGameStarted={handleGameStarted} /></>;
   }
 
   if (screen === "create-name") {
