@@ -317,13 +317,17 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
   const [error, setError] = useState("");
   const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
 
-  const code = digits.join("");
+  // Explicit LTR assembly: index 0 is always the leftmost box
+  const finalCode = digits[0] + digits[1] + digits[2] + digits[3];
 
   const handle = () => {
     if (!name.trim()) { setError("أدخل اسمك"); return; }
-    if (code.length !== 4) { setError("أدخل كود الغرفة كاملاً"); return; }
+    if (finalCode.length !== 4 || finalCode.includes("undefined")) {
+      setError("أدخل كود الغرفة كاملاً"); return;
+    }
+    console.log("Attempting to join with code:", finalCode);
     setLoading(true); setError("");
-    onSubmit(name.trim(), code);
+    onSubmit(name.trim(), finalCode);
   };
 
   const handleDigitChange = (idx: number, val: string) => {
@@ -358,7 +362,7 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
       extraField={
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
-          <div dir="ltr" className="flex justify-center gap-3" style={{ direction: "ltr", flexDirection: "row" }}>
+          <div dir="ltr" className="flex flex-row justify-center gap-3" style={{ direction: "ltr", flexDirection: "row" }}>
             {digits.map((d, i) => (
               <input
                 key={i}
