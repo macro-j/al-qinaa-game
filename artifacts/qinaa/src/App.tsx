@@ -312,15 +312,45 @@ function CreateNameScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: 
 
 function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (name: string, code: string) => void }) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [digits, setDigits] = useState<string[]>(["", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+
+  const code = digits.join("");
+
   const handle = () => {
     if (!name.trim()) { setError("أدخل اسمك"); return; }
-    if (code.trim().length !== 4) { setError("كود الغرفة يجب أن يكون 4 أرقام"); return; }
+    if (code.length !== 4) { setError("أدخل كود الغرفة كاملاً"); return; }
     setLoading(true); setError("");
-    onSubmit(name.trim(), code.trim());
+    onSubmit(name.trim(), code);
   };
+
+  const handleDigitChange = (idx: number, val: string) => {
+    const digit = val.replace(/\D/g, "").slice(-1);
+    const next = [...digits];
+    next[idx] = digit;
+    setDigits(next);
+    if (digit && idx < 3) inputRefs.current[idx + 1]?.focus();
+  };
+
+  const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+      inputRefs.current[idx - 1]?.focus();
+    }
+    if (e.key === "Enter") handle();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4).split("");
+    const next = ["", "", "", ""];
+    pasted.forEach((d, i) => { next[i] = d; });
+    setDigits(next);
+    const focusIdx = Math.min(pasted.length, 3);
+    inputRefs.current[focusIdx]?.focus();
+  };
+
   return (
     <NameInputLayout
       title="دخول لعبة" subtitle="أدخل اسمك وكود الغرفة" buttonLabel="دخول الغرفة"
@@ -328,18 +358,29 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
       extraField={
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold tracking-wider" style={{ color: "#9E9E9E" }}>كود الغرفة</label>
-          <input
-            type="tel"
-            value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            onKeyDown={(e) => e.key === "Enter" && handle()}
-            placeholder="0000" maxLength={4}
-            className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold outline-none tracking-widest"
-            style={{
-              backgroundColor: "#1A1A1A",
-              border: "1px solid #333333",
-              textAlign: "center",
-            }}
-          />
+          <div dir="ltr" className="flex justify-center gap-3">
+            {digits.map((d, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={d}
+                onChange={(e) => handleDigitChange(i, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(i, e)}
+                onPaste={i === 0 ? handlePaste : undefined}
+                onFocus={(e) => e.target.select()}
+                className="w-14 h-16 rounded-xl text-3xl font-black font-mono outline-none text-center border-2"
+                style={{
+                  backgroundColor: "#1A1A1A",
+                  borderColor: d ? "#D32F2F" : "#333333",
+                  color: "#FFFFFF",
+                  caretColor: "#D32F2F",
+                }}
+              />
+            ))}
+          </div>
         </div>
       }
     />
