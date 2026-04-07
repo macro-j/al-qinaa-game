@@ -57,8 +57,9 @@ interface MyRole {
 }
 
 interface GameState {
-  code: string;
+  code:    string;
   players: AssignedPlayer[];
+  myName:  string; // host's own display name — used to find their role card
 }
 
 type GameStartedPayload =
@@ -330,7 +331,7 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
           <input
             value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
             onKeyDown={(e) => e.key === "Enter" && handle()}
-            placeholder="0000" maxLength={4} inputMode="numeric"
+            placeholder="0000" maxLength={4} inputMode="numeric" dir="ltr"
             className="w-full px-4 py-3 rounded-xl text-white text-2xl font-mono font-bold text-center outline-none tracking-widest"
             style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333" }}
           />
@@ -636,6 +637,9 @@ function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) 
 function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void }) {
   const [rolesVisible, setRolesVisible] = useState(false);
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
+  const [myRoleRevealed, setMyRoleRevealed] = useState(false);
+
+  const myEntry = game.players.find((p) => p.name === game.myName);
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
@@ -653,6 +657,59 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
             #{game.code}
           </span>
         </div>
+
+        {/* ── My Role Card (host's personal role, hidden by default) ── */}
+        {myEntry && (
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>
+              بطاقة قناعي
+            </span>
+            <div
+              onPointerDown={() => setMyRoleRevealed(true)}
+              onPointerUp={() => setMyRoleRevealed(false)}
+              onPointerLeave={() => setMyRoleRevealed(false)}
+              onPointerCancel={() => setMyRoleRevealed(false)}
+              className="w-full rounded-xl border-2 flex items-center gap-4 px-4 py-4 select-none transition-all duration-300"
+              style={{
+                backgroundColor: myRoleRevealed ? "#0A0000" : "#111111",
+                borderColor:     myRoleRevealed ? myEntry.roleColor : "#2A2A2A",
+                boxShadow:       myRoleRevealed ? `0 0 24px ${myEntry.roleColor}33` : "none",
+                cursor: "pointer",
+                touchAction: "none",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+              }}
+            >
+              {myRoleRevealed ? (
+                <>
+                  <VenetianMask size={36} color={myEntry.roleColor} strokeWidth={1.3} className="flex-shrink-0" />
+                  <div className="flex flex-col items-end flex-1 min-w-0">
+                    <span className="text-xs" style={{ color: "#666666" }}>قناعك</span>
+                    <span className="text-lg font-black leading-tight text-right"
+                      style={{ color: myEntry.roleColor, fontFamily: "serif" }}>
+                      {myEntry.roleLabel}
+                    </span>
+                  </div>
+                  <Unlock size={16} color="#555555" className="flex-shrink-0" />
+                </>
+              ) : (
+                <>
+                  <div className="relative flex-shrink-0">
+                    <VenetianMask size={36} color="#2A2A2A" strokeWidth={1.3} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Lock size={14} color="#555555" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end flex-1 min-w-0">
+                    <span className="text-sm font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
+                    <span className="text-xs" style={{ color: "#333333" }}>اضغط وامسك للكشف</span>
+                  </div>
+                  <Lock size={16} color="#333333" className="flex-shrink-0" />
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Roster with eye toggle */}
         <div className="rounded-xl border flex flex-col overflow-hidden" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
@@ -786,7 +843,7 @@ export default function App() {
 
           if (res.isHost) {
             setLobby({ code: res.code, isHost: true, myName: session.myName, players: [] });
-            setGame({ code: res.code, players: res.players });
+            setGame({ code: res.code, players: res.players, myName: session.myName });
             setScreen("dashboard");
           } else {
             setLobby({ code: res.code, isHost: false, myName: session.myName, players: [] });
@@ -834,7 +891,7 @@ export default function App() {
             return;
           }
           if (res.isHost) {
-            setGame({ code: res.code, players: res.players });
+            setGame({ code: res.code, players: res.players, myName: current.myName });
             setScreen("dashboard");
           } else {
             setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName });
@@ -857,7 +914,7 @@ export default function App() {
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
     if (payload.isHost) {
-      setGame({ code: payload.code, players: payload.players });
+      setGame({ code: payload.code, players: payload.players, myName: lobbyRef.current?.myName ?? "" });
       setScreen("dashboard");
     } else {
       setPlayerRole({
