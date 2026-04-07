@@ -1,0 +1,42 @@
+"Act as an expert Full-Stack developer. We are moving past the UI bugs to build the core unique feature of our game 'قناع': The Synchronized Automated Voice Narrator.
+
+Task 1: The Server-Side Maestro (Backend index.js)
+
+When the server receives the startGame event from the host, it must distribute roles as previously defined, then emit a gameStarted event with the roles.
+
+IMMEDIATELY after emitting gameStarted, the server must begin the 'Night Phase Sequence' using setTimeout to broadcast signals to the room.
+
+Implement this exact sequence of broadcasts (io.to(roomCode).emit('playAudio', text)):
+
+Step 1 (Time 0): playAudio -> 'المدينة تنام.. الكل يغمض عيونه.'
+
+Step 2 (After 10 seconds): playAudio -> 'أصحاب قناع الولد والأكة.. يفتحون عيونهم.'
+
+Step 3 (After 20 seconds from step 2): playAudio -> 'قناع الشايب يفتح عيونه.. ويحقق.'
+
+Step 4 (After 15 seconds from step 3): playAudio -> 'قناع البنت تفتح عيونها.. وتحمي.'
+
+Step 5 (After 15 seconds from step 4): playAudio -> 'المدينة تصحى.. ويبدأ النهار.'
+
+Task 2: The Client-Side Speaker (Frontend App.jsx or Player Screen)
+
+In the useEffect that listens to socket events, add a listener for the playAudio event.
+
+When playAudio is received, use the native browser window.speechSynthesis API to speak the received text.
+
+CRITICAL: Configure the SpeechSynthesisUtterance to use Arabic!
+
+JavaScript
+const speak = (text) => {
+  if ('speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ar-SA'; // Strict Arabic
+    utterance.rate = 0.8; // Slightly slow for a dramatic narrator effect
+    utterance.pitch = 0.7; // Deeper voice
+    window.speechSynthesis.speak(utterance);
+  }
+};
+Ensure the Player Screen UI simply displays their hidden role ('اضغط لكشف قناعك') while these events are happening in the background.
+
+Task 3: Browser Autoplay Policy Warning
+Since browsers block audio if the user hasn't interacted with the screen, ensure the transition from the 'Lobby' to the 'Player Screen' counts as an interaction, or add a 'Start Game' / 'Ready' button for standard players before the audio begins."

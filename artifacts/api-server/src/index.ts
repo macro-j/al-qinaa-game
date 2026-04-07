@@ -26,13 +26,14 @@ interface AssignedRole {
 }
 
 interface Room {
-  code:        string;
-  hostId:      string;    // current socket.id of host (kept up-to-date on rejoin)
-  hostUserId:  string;    // stable userId of host
-  hostName:    string;    // display name of host
-  players:     Player[];
-  started:     boolean;
-  roles:       Record<string, AssignedRole>; // player name → role
+  code:              string;
+  hostId:            string;    // current socket.id of host (kept up-to-date on rejoin)
+  hostUserId:        string;    // stable userId of host
+  hostName:          string;    // display name of host
+  players:           Player[];
+  started:           boolean;
+  roles:             Record<string, AssignedRole>; // player name → role
+  nightPhaseTimers?: ReturnType<typeof setTimeout>[];
 }
 
 const rooms: Record<string, Room> = {};
@@ -255,6 +256,23 @@ io.on("connection", (socket) => {
     });
 
     logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
+
+    // ── Night Phase Narration Sequence ──────────────────────────────────────
+    const nightScript = [
+      { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه." },
+      { delay:  10000, text: "أصحاب قناع الولد والأكة.. يفتحون عيونهم." },
+      { delay:  30000, text: "قناع الشايب يفتح عيونه.. ويحقق." },
+      { delay:  45000, text: "قناع البنت تفتح عيونها.. وتحمي." },
+      { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار." },
+    ];
+
+    room.nightPhaseTimers = nightScript.map(({ delay, text }) =>
+      setTimeout(() => {
+        if (!rooms[code]) return; // room was destroyed before this fires
+        io.to(code).emit("playAudio", text);
+        logger.info({ code, text }, "Night phase narration broadcast");
+      }, delay),
+    );
   });
 
   // ── Disconnect (graceful grace period) ─────────────────────────────────────
@@ -277,6 +295,7 @@ io.on("connection", (socket) => {
 
         const wasHost = room.hostUserId === player.userId;
         if (wasHost || room.players.length === 0) {
+          room.nightPhaseTimers?.forEach(clearTimeout);
           delete rooms[code];
           io.to(code).emit("roomClosed");
           logger.info({ code, reason: wasHost ? "host timed out" : "empty" }, "Room dissolved");

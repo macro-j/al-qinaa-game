@@ -583,7 +583,12 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) {
+function PlayerScreen({ role, narrationUnlocked, onUnlockNarration, onLeave }: {
+  role: MyRole;
+  narrationUnlocked: boolean;
+  onUnlockNarration: () => void;
+  onLeave: () => void;
+}) {
   const [revealed, setRevealed] = useState(false);
 
   const reveal  = useCallback(() => setRevealed(true),  []);
@@ -657,6 +662,25 @@ function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) 
             {revealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
           </p>
         </div>
+
+        {!narrationUnlocked ? (
+          <button
+            onClick={onUnlockNarration}
+            className="w-full py-4 rounded-2xl flex flex-col items-center gap-1 transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F" }}
+          >
+            <span className="text-sm font-bold" style={{ color: "#D32F2F" }}>اضغط لتفعيل صوت الراوي</span>
+            <span className="text-xs" style={{ color: "#7A2020" }}>يتطلب إذن الصوت من المتصفح</span>
+          </button>
+        ) : (
+          <div
+            className="w-full py-3 rounded-2xl flex items-center justify-center gap-2"
+            style={{ backgroundColor: "#0A1A0A", border: "1px solid #2E7D32" }}
+          >
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#4CAF50" }} />
+            <span className="text-xs font-semibold" style={{ color: "#4CAF50" }}>الراوي نشط — استمع للتعليمات</span>
+          </div>
+        )}
 
         <LeaveButton onLeave={onLeave} />
         <Footer />
@@ -843,6 +867,35 @@ export default function App() {
   const lobbyRef = useRef<LobbyState | null>(null);
   lobbyRef.current = lobby;
 
+  // ── Narration state ──────────────────────────────────────────────────────
+  const narrationQueueRef    = useRef<string[]>([]);
+  const narrationUnlockedRef = useRef(false);
+  const [narrationUnlocked, setNarrationUnlocked] = useState(false);
+
+  const speakText = useCallback((text: string) => {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang  = "ar-SA";
+    u.rate  = 0.8;
+    u.pitch = 0.7;
+    window.speechSynthesis.speak(u);
+  }, []);
+
+  const onUnlockNarration = useCallback(() => {
+    narrationUnlockedRef.current = true;
+    setNarrationUnlocked(true);
+    const queue = narrationQueueRef.current.splice(0);
+    queue.forEach(speakText);
+  }, [speakText]);
+
+  const resetNarration = useCallback(() => {
+    narrationUnlockedRef.current = false;
+    narrationQueueRef.current    = [];
+    setNarrationUnlocked(false);
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
+
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
     const session = loadSession();
@@ -934,18 +987,29 @@ export default function App() {
       );
     };
 
+    const onPlayAudio = (text: string) => {
+      if (narrationUnlockedRef.current) {
+        speakText(text);
+      } else {
+        narrationQueueRef.current.push(text);
+      }
+    };
+
     socket.on("connect",    onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("reconnect",  onReconnect);
+    socket.on("playAudio",  onPlayAudio);
     return () => {
       socket.off("connect",    onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("reconnect",  onReconnect);
+      socket.off("playAudio",  onPlayAudio);
     };
-  }, []);
+  }, [speakText]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
+    resetNarration();
     if (payload.isHost) {
       setGame({ code: payload.code, players: payload.players, myName: lobbyRef.current?.myName ?? "" });
       setScreen("dashboard");
@@ -958,10 +1022,11 @@ export default function App() {
       });
       setScreen("player-screen");
     }
-  }, []);
+  }, [resetNarration]);
 
   // ── Explicit leave — emits to server + clears localStorage ──────────────
   const handleLeaveRoom = useCallback(() => {
+    resetNarration();
     const current = lobbyRef.current;
     const uid     = getOrCreateUserId();
     if (current) {
@@ -970,7 +1035,7 @@ export default function App() {
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
     setScreen("menu");
-  }, []);
+  }, [resetNarration]);
 
   // ── Create room ──────────────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
@@ -1014,7 +1079,7 @@ export default function App() {
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} narrationUnlocked={narrationUnlocked} onUnlockNarration={onUnlockNarration} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
