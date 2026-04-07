@@ -310,7 +310,10 @@ function CreateNameScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: 
 
 // ─── Join Room Screen ─────────────────────────────────────────────────────────
 
-function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (name: string, code: string) => void }) {
+function JoinRoomScreen({ onBack, onSubmit }: {
+  onBack: () => void;
+  onSubmit: (name: string, code: string, onError: (msg: string) => void) => void;
+}) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -321,7 +324,10 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
     if (code.trim().length !== 4) { setError("أدخل كود الغرفة كاملاً"); return; }
     console.log("Attempting to join with code:", code.trim());
     setLoading(true); setError("");
-    onSubmit(name.trim(), code.trim());
+    onSubmit(name.trim(), code.trim(), (msg: string) => {
+      setLoading(false);
+      setError(msg);
+    });
   };
 
   return (
@@ -979,14 +985,14 @@ export default function App() {
   }, []);
 
   // ── Join room ────────────────────────────────────────────────────────────
-  const handleJoinRoom = useCallback((name: string, code: string) => {
+  const handleJoinRoom = useCallback((name: string, code: string, onError: (msg: string) => void) => {
     const uid    = getOrCreateUserId();
     const socket = getSocket();
     socket.emit(
       "joinRoom",
       { name, code, userId: uid },
       (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => {
-        if ("error" in res) { setScreen("join"); return; }
+        if ("error" in res) { onError(res.error); return; }
         const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: res.players };
         setLobby(newLobby);
         saveSession({ code: res.code, isHost: false, myName: name });
