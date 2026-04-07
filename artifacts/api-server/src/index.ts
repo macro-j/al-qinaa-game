@@ -10,12 +10,13 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 
 // ─── Room State ───────────────────────────────────────────────────────────────
 
-const OFFLINE_GRACE_MS = 2 * 60 * 1000; // 2 minutes before a player is truly removed
+const OFFLINE_GRACE_MS = 3 * 60 * 1000; // 3-minute grace before permanent removal
 
 interface Player {
-  socketId: string;
-  name:     string;
-  online:   boolean;
+  userId:    string;   // stable across page refreshes (from client localStorage)
+  socketId:  string;   // volatile — changes every connection
+  name:      string;
+  online:    boolean;
   offlineTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -25,12 +26,13 @@ interface AssignedRole {
 }
 
 interface Room {
-  code:      string;
-  hostId:    string;   // current socket.id of the host
-  hostName:  string;   // name of the host (survives reconnect)
-  players:   Player[];
-  started:   boolean;
-  roles:     Record<string, AssignedRole>; // player name → role
+  code:        string;
+  hostId:      string;    // current socket.id of host (kept up-to-date on rejoin)
+  hostUserId:  string;    // stable userId of host
+  hostName:    string;    // display name of host
+  players:     Player[];
+  started:     boolean;
+  roles:       Record<string, AssignedRole>; // player name → role
 }
 
 const rooms: Record<string, Room> = {};
@@ -39,19 +41,17 @@ function generateRoomCode(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-/** Return only online players — used for lobby display. */
 function onlinePlayers(room: Room) {
   return room.players
     .filter((p) => p.online)
     .map((p) => ({ socketId: p.socketId, name: p.name }));
 }
 
-/** Full list including offline — used for the host dashboard. */
 function allPlayers(room: Room) {
   return room.players.map((p) => ({
-    socketId: p.socketId,
-    name:     p.name,
-    online:   p.online,
+    socketId:  p.socketId,
+    name:      p.name,
+    online:    p.online,
     roleLabel: room.roles[p.name]?.label ?? "",
     roleColor: room.roles[p.name]?.color ?? "#555555",
   }));
@@ -63,7 +63,6 @@ const httpServer = createServer(app);
 
 const io = new SocketServer(httpServer, {
   cors: { origin: "*", methods: ["GET", "POST"] },
-  // Generous ping/pong so mobile browsers on WiFi don't disconnect
   pingTimeout:  60_000,
   pingInterval: 25_000,
 });
@@ -75,7 +74,7 @@ io.on("connection", (socket) => {
   socket.on(
     "createRoom",
     (
-      { name }: { name: string },
+      { name, userId }: { name: string; userId: string },
       callback: (res: { code: string; players: { socketId: string; name: string }[] } | { error: string }) => void,
     ) => {
       let code: string;
@@ -84,9 +83,13 @@ io.on("connection", (socket) => {
       if (rooms[code]) { callback({ error: "تعذر إنشاء غرفة جديدة، حاول مجدداً" }); return; }
 
       const room: Room = {
-        code, hostId: socket.id, hostName: name,
-        players: [{ socketId: socket.id, name, online: true }],
-        started: false, roles: {},
+        code,
+        hostId:     socket.id,
+        hostUserId: userId,
+        hostName:   name,
+        players:    [{ userId, socketId: socket.id, name, online: true }],
+        started:    false,
+        roles:      {},
       };
       rooms[code] = room;
       socket.join(code);
@@ -100,22 +103,31 @@ io.on("connection", (socket) => {
   socket.on(
     "joinRoom",
     (
-      { code, name }: { code: string; name: string },
+      { code, name, userId }: { code: string; name: string; userId: string },
       callback: (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => void,
     ) => {
       const room = rooms[code];
       if (!room) { callback({ error: "الغرفة غير موجودة، تحقق من الكود" }); return; }
 
-      // Don't allow duplicate names (except if this is a reconnect — handled by reconnectRoom)
-      const existing = room.players.find((p) => p.name === name);
-      if (existing && existing.online) {
-        callback({ error: "يوجد لاعب بهذا الاسم بالفعل" }); return;
+      // Check for an existing slot by userId (returning player without page persistence)
+      const byUid = room.players.find((p) => p.userId === userId);
+      if (byUid) {
+        // Treat as rejoin — update socketId
+        if (byUid.offlineTimer) { clearTimeout(byUid.offlineTimer); byUid.offlineTimer = undefined; }
+        byUid.socketId = socket.id;
+        byUid.online   = true;
+        socket.join(code);
+        io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
+        logger.info({ code, name }, "Player re-entered room via joinRoom");
+        callback({ code, players: onlinePlayers(room), started: room.started });
+        return;
       }
 
-      if (!existing) {
-        room.players.push({ socketId: socket.id, name, online: true });
-      }
+      // Check for duplicate display name from a different user
+      const byName = room.players.find((p) => p.name === name && p.online);
+      if (byName) { callback({ error: "يوجد لاعب بهذا الاسم بالفعل" }); return; }
 
+      room.players.push({ userId, socketId: socket.id, name, online: true });
       socket.join(code);
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 
@@ -124,11 +136,11 @@ io.on("connection", (socket) => {
     },
   );
 
-  // ── Reconnect Room ─────────────────────────────────────────────────────────
+  // ── Rejoin Room (page refresh / reconnect) ─────────────────────────────────
   socket.on(
-    "reconnectRoom",
+    "rejoinRoom",
     (
-      { code, name }: { code: string; name: string },
+      { code, userId, name }: { code: string; userId: string; name: string },
       callback: (res:
         | { code: string; players: { socketId: string; name: string }[]; started: false }
         | { code: string; started: true; isHost: true;  players: ReturnType<typeof allPlayers> }
@@ -139,57 +151,83 @@ io.on("connection", (socket) => {
       const room = rooms[code];
       if (!room) { callback({ error: "انتهت صلاحية الغرفة" }); return; }
 
-      // Find the player entry by name
-      const player = room.players.find((p) => p.name === name);
-      if (!player) { callback({ error: "لم يُعثر على لاعب بهذا الاسم في الغرفة" }); return; }
+      // Find by stable userId first, fall back to name
+      const player = room.players.find((p) => p.userId === userId) ??
+                     room.players.find((p) => p.name === name);
+      if (!player) { callback({ error: "لم يُعثر على اللاعب في الغرفة" }); return; }
 
       // Cancel pending removal timer
-      if (player.offlineTimer) {
-        clearTimeout(player.offlineTimer);
-        player.offlineTimer = undefined;
-      }
+      if (player.offlineTimer) { clearTimeout(player.offlineTimer); player.offlineTimer = undefined; }
 
-      // Rehydrate with new socket ID
+      // Rehydrate with new socket and userId
       player.socketId = socket.id;
+      player.userId   = userId;
       player.online   = true;
 
-      // If this player was the host, update the room's hostId
-      if (room.hostName === name) room.hostId = socket.id;
+      // Keep host metadata current
+      if (room.hostUserId === userId || room.hostName === name) {
+        room.hostId      = socket.id;
+        room.hostUserId  = userId;
+      }
 
       socket.join(code);
-
-      // Notify everyone else the player is back
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
-      logger.info({ code, name }, "Player reconnected to room");
+      logger.info({ code, name }, "Player rejoined room (page refresh / reconnect)");
 
-      // Return correct state depending on game phase
       if (!room.started) {
         callback({ code, players: onlinePlayers(room), started: false });
         return;
       }
 
-      const isHost = room.hostName === name;
+      const isHost = room.hostUserId === userId || room.hostName === name;
       if (isHost) {
         callback({ code, started: true, isHost: true, players: allPlayers(room) });
       } else {
-        const myRole = room.roles[name] ?? { label: "قناع الشعب (المواطن)", color: "#555555" };
+        const myRole = room.roles[player.name] ?? { label: "قناع الشعب (المواطن)", color: "#555555" };
         callback({ code, started: true, isHost: false, myRole });
       }
     },
   );
 
+  // ── Leave Room (intentional, clean exit) ───────────────────────────────────
+  socket.on("leaveRoom", ({ code, userId }: { code: string; userId: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+
+    const player = room.players.find((p) => p.userId === userId);
+    if (!player) return;
+
+    // Cancel any grace timer
+    if (player.offlineTimer) { clearTimeout(player.offlineTimer); player.offlineTimer = undefined; }
+
+    const wasHost = room.hostUserId === userId;
+    room.players   = room.players.filter((p) => p.userId !== userId);
+    delete room.roles[player.name];
+
+    socket.leave(code);
+
+    if (wasHost || room.players.length === 0) {
+      delete rooms[code];
+      io.to(code).emit("roomClosed");
+      logger.info({ code, reason: wasHost ? "host left" : "empty" }, "Room dissolved on clean leave");
+    } else {
+      io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
+      logger.info({ code, name: player.name }, "Player left room cleanly");
+    }
+  });
+
   // ── Start Game ─────────────────────────────────────────────────────────────
   socket.on("startGame", ({ code }: { code: string }) => {
     const room = rooms[code];
     if (!room) return;
-    if (room.hostId !== socket.id) return;
+    if (room.hostId !== socket.id) return; // hostId is kept current on every rejoin
     if (room.players.filter((p) => p.online).length < 2) return;
 
     const roleDefs = [
-      { label: "قناع الولد", sublabel: "الجلاد",  color: "#D32F2F" },
-      { label: "قناع الأكة", sublabel: "الكاتم",  color: "#B71C1C" },
-      { label: "قناع الشايب", sublabel: "الكاشف", color: "#FF8F00" },
-      { label: "قناع البنت", sublabel: "الدرع",   color: "#1565C0" },
+      { label: "قناع الولد",  sublabel: "الجلاد",  color: "#D32F2F" },
+      { label: "قناع الأكة",  sublabel: "الكاتم",  color: "#B71C1C" },
+      { label: "قناع الشايب", sublabel: "الكاشف",  color: "#FF8F00" },
+      { label: "قناع البنت",  sublabel: "الدرع",   color: "#1565C0" },
     ];
 
     const shuffled = [...room.players].sort(() => Math.random() - 0.5);
@@ -205,7 +243,6 @@ io.on("connection", (socket) => {
 
     room.started = true;
 
-    // Each non-host player gets only their own role
     for (const ap of assigned) {
       if (ap.name === room.hostName) continue;
       io.to(ap.socketId).emit("gameStarted", {
@@ -213,7 +250,6 @@ io.on("connection", (socket) => {
       });
     }
 
-    // Host gets the full list
     io.to(room.hostId).emit("gameStarted", {
       isHost: true, code, players: assigned,
     });
@@ -221,42 +257,36 @@ io.on("connection", (socket) => {
     logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
   });
 
-  // ── Disconnect (graceful — room survives for OFFLINE_GRACE_MS) ─────────────
+  // ── Disconnect (graceful grace period) ─────────────────────────────────────
   socket.on("disconnect", (reason) => {
     logger.info({ socketId: socket.id, reason }, "Client disconnected");
 
     for (const code of Object.keys(rooms)) {
-      const room = rooms[code];
+      const room   = rooms[code];
       const player = room.players.find((p) => p.socketId === socket.id);
       if (!player) continue;
 
       player.online = false;
-
-      // Tell everyone this player went offline
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 
-      // Schedule actual removal after grace period
       player.offlineTimer = setTimeout(() => {
-        // If they reconnected in the meantime, online will be true — skip
-        if (player.online) return;
+        if (player.online) return; // rejoined in time
 
-        room.players = room.players.filter((p) => p.name !== player.name);
+        room.players = room.players.filter((p) => p.userId !== player.userId);
         delete room.roles[player.name];
 
-        const wasHost = room.hostName === player.name;
-
+        const wasHost = room.hostUserId === player.userId;
         if (wasHost || room.players.length === 0) {
-          // Dissolve the room entirely
           delete rooms[code];
           io.to(code).emit("roomClosed");
-          logger.info({ code, reason: wasHost ? "host timed out" : "empty room" }, "Room dissolved");
+          logger.info({ code, reason: wasHost ? "host timed out" : "empty" }, "Room dissolved");
         } else {
           io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
           logger.info({ code, name: player.name }, "Player removed after grace period");
         }
       }, OFFLINE_GRACE_MS);
 
-      logger.info({ code, name: player.name }, "Player marked offline — grace timer started");
+      logger.info({ code, name: player.name }, "Player marked offline — 3-min grace started");
       break;
     }
   });

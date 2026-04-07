@@ -4,6 +4,7 @@ import {
   VenetianMask,
   Plus,
   LogIn,
+  LogOut,
   Settings,
   Copy,
   Check,
@@ -29,7 +30,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Screen = "menu" | "create-name" | "join" | "lobby" | "player-screen" | "dashboard";
+type Screen = "menu" | "create-name" | "join" | "lobby" | "player-screen" | "dashboard" | "rejoining";
 
 interface SocketPlayer {
   socketId: string;
@@ -66,6 +67,45 @@ type GameStartedPayload =
 
 type PhaseKey = "night" | "mafia" | "investigator" | "protector" | "day";
 
+// ─── localStorage Persistence ─────────────────────────────────────────────────
+
+const STORAGE_UID     = "qinaa_uid";
+const STORAGE_SESSION = "qinaa_session";
+
+interface StoredSession {
+  code:   string;
+  isHost: boolean;
+  myName: string;
+}
+
+function getOrCreateUserId(): string {
+  let id = localStorage.getItem(STORAGE_UID);
+  if (!id) {
+    id = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(STORAGE_UID, id);
+  }
+  return id;
+}
+
+function saveSession(s: StoredSession) {
+  localStorage.setItem(STORAGE_SESSION, JSON.stringify(s));
+}
+
+function loadSession(): StoredSession | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_SESSION);
+    return raw ? (JSON.parse(raw) as StoredSession) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  localStorage.removeItem(STORAGE_SESSION);
+}
+
 // ─── Socket Singleton ─────────────────────────────────────────────────────────
 
 let _socket: Socket | null = null;
@@ -101,12 +141,14 @@ const BASE_BUTTON =
 
 const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000", direction: "rtl" };
 
-function TopBar({ onBack, label }: { onBack: () => void; label?: string }) {
+function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70" style={{ color: "#9E9E9E" }}>
-        <ArrowRight size={16} /><span>رجوع</span>
-      </button>
+      {onBack ? (
+        <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70" style={{ color: "#9E9E9E" }}>
+          <ArrowRight size={16} /><span>رجوع</span>
+        </button>
+      ) : <div />}
       <div className="flex items-center gap-2">
         <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
         <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
@@ -121,6 +163,19 @@ function Footer() {
   return <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>;
 }
 
+function LeaveButton({ onLeave, label = "خروج من الغرفة" }: { onLeave: () => void; label?: string }) {
+  return (
+    <button
+      onClick={onLeave}
+      className="flex flex-row-reverse items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border text-sm font-semibold transition-all duration-200 active:scale-95"
+      style={{ backgroundColor: "#0D0000", borderColor: "#4A0000", color: "#9E4444" }}
+    >
+      <LogOut size={16} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 // ─── Connection Banner ────────────────────────────────────────────────────────
 
 function ConnectionBanner({ connected }: { connected: boolean }) {
@@ -132,6 +187,25 @@ function ConnectionBanner({ connected }: { connected: boolean }) {
     >
       <Loader2 size={13} className="animate-spin flex-shrink-0" />
       <span>جاري إعادة الاتصال بالخادم...</span>
+    </div>
+  );
+}
+
+// ─── Rejoining Screen ─────────────────────────────────────────────────────────
+
+function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
+      <VenetianMask size={70} color="#D32F2F" strokeWidth={1.3} />
+      <div className="flex flex-col items-center gap-2">
+        <Loader2 size={28} color="#D32F2F" className="animate-spin" />
+        <p className="text-white font-bold text-lg">جاري استئناف الجلسة...</p>
+        <p className="text-xs" style={{ color: "#555555" }}>نحاول إعادتك إلى الغرفة</p>
+      </div>
+      <button onClick={onGiveUp} className="text-xs underline" style={{ color: "#555555" }}>
+        بدء من جديد
+      </button>
+      <p className="text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
     </div>
   );
 }
@@ -270,11 +344,11 @@ function JoinRoomScreen({ onBack, onSubmit }: { onBack: () => void; onSubmit: (n
 
 function LobbyScreen({
   lobby,
-  onBack,
+  onLeave,
   onGameStarted,
 }: {
   lobby: LobbyState;
-  onBack: () => void;
+  onLeave: () => void;
   onGameStarted: (payload: GameStartedPayload) => void;
 }) {
   const [players, setPlayers] = useState<SocketPlayer[]>(lobby.players);
@@ -287,7 +361,6 @@ function LobbyScreen({
 
   const canStart = lobby.isHost && players.length >= 5;
 
-  // ── Real-time socket events ───────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
     const onPlayersUpdated = ({ players: updated }: { players: SocketPlayer[] }) => setPlayers(updated);
@@ -332,14 +405,13 @@ function LobbyScreen({
     audioCtxRef.current?.close().catch(() => {});
   }, []);
 
-  // ── Closed screen ─────────────────────────────────────────────────────────
   if (closed) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
         <AlertCircle size={48} color="#D32F2F" />
         <p className="text-white font-bold text-lg">تم إغلاق الغرفة</p>
         <p className="text-sm" style={{ color: "#9E9E9E" }}>غادر المضيف أو انتهت الجلسة</p>
-        <button onClick={onBack} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
+        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
           العودة للقائمة الرئيسية
         </button>
       </div>
@@ -350,9 +422,8 @@ function LobbyScreen({
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
 
-        <TopBar onBack={onBack} />
+        <TopBar />
 
-        {/* Role badge */}
         <div className="flex items-center justify-center">
           <span className="text-xs px-3 py-1 rounded-full font-semibold"
             style={{
@@ -412,11 +483,11 @@ function LobbyScreen({
                   style={{ backgroundColor: "#D32F2F", color: "#fff" }}>{idx + 1}</div>
                 <div className="flex-1 min-w-0 flex flex-row-reverse items-center gap-2">
                   <span className="text-white text-sm font-medium">{player.name}</span>
-                  {player.socketId === getSocket().id && (
+                  {player.name === lobby.myName && (
                     <span className="text-xs" style={{ color: "#555555" }}>(أنت)</span>
                   )}
                 </div>
-                {idx === 0 && (
+                {player.name === lobby.myName && lobby.isHost && (
                   <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: "#3A0000", color: "#FF6B6B" }}>مضيف</span>
                 )}
               </div>
@@ -442,7 +513,7 @@ function LobbyScreen({
             </button>
             {!canStart && !starting && (
               <p className="text-center text-xs -mt-2" style={{ color: "#555555" }}>
-                يلزم {Math.max(0, 5 - players.length)} لاعب{5 - players.length > 1 ? "ين" : ""} إضافي{5 - players.length > 1 ? "ين" : ""} للبدء
+                يلزم {Math.max(0, 5 - players.length)} لاعب إضافي للبدء
               </p>
             )}
           </>
@@ -469,6 +540,7 @@ function LobbyScreen({
           <span>{audioEnabled ? "الراوي الصوتي مفعّل — الشاشة ستبقى مضاءة" : "تفعيل الراوي الصوتي"}</span>
         </button>
 
+        <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
     </div>
@@ -477,20 +549,18 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
+function PlayerScreen({ role, onLeave }: { role: MyRole; onLeave: () => void }) {
   const [revealed, setRevealed] = useState(false);
 
-  // Hold-to-reveal handlers — reveal while pressing/holding, hide on release
-  const reveal   = useCallback(() => setRevealed(true),  []);
-  const conceal  = useCallback(() => setRevealed(false), []);
+  const reveal  = useCallback(() => setRevealed(true),  []);
+  const conceal = useCallback(() => setRevealed(false), []);
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-6">
 
-        <TopBar onBack={onBack} />
+        <TopBar />
 
-        {/* Player name + room code */}
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
           <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
@@ -499,7 +569,6 @@ function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
           </span>
         </div>
 
-        {/* Tap-and-hold reveal card */}
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
           <div
             onPointerDown={reveal}
@@ -522,16 +591,13 @@ function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
                 <VenetianMask size={64} color={role.color} strokeWidth={1.2} />
                 <div className="flex flex-col items-center gap-2">
                   <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
-                  <span
-                    className="text-3xl font-black text-center leading-tight"
-                    style={{ color: role.color, fontFamily: "serif", direction: "rtl" }}
-                  >
+                  <span className="text-3xl font-black text-center leading-tight"
+                    style={{ color: role.color, fontFamily: "serif", direction: "rtl" }}>
                     {role.label}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
-                  <Unlock size={14} />
-                  <span className="text-xs">أنت ترى قناعك</span>
+                  <Unlock size={14} /><span className="text-xs">أنت ترى قناعك</span>
                 </div>
               </>
             ) : (
@@ -544,26 +610,21 @@ function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <span className="text-xl font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
-                  <span className="text-sm text-center" style={{ color: "#333333" }}>
-                    اضغط وامسك للكشف عن قناعك
-                  </span>
+                  <span className="text-sm text-center" style={{ color: "#333333" }}>اضغط وامسك للكشف عن قناعك</span>
                 </div>
                 <div className="flex items-center gap-2" style={{ color: "#333333" }}>
-                  <Lock size={14} />
-                  <span className="text-xs">مخفي عن الجميع</span>
+                  <Lock size={14} /><span className="text-xs">مخفي عن الجميع</span>
                 </div>
               </>
             )}
           </div>
 
-          {/* Instruction hint */}
           <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
-            {revealed
-              ? "ارفع إصبعك لإخفاء القناع مجدداً"
-              : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
+            {revealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
           </p>
         </div>
 
+        <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
     </div>
@@ -572,7 +633,7 @@ function PlayerScreen({ role, onBack }: { role: MyRole; onBack: () => void }) {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }) {
+function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void }) {
   const [rolesVisible, setRolesVisible] = useState(false);
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
 
@@ -580,7 +641,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
 
-        <TopBar onBack={onBack} />
+        <TopBar />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -597,7 +658,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
         <div className="rounded-xl border flex flex-col overflow-hidden" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
           <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#2A2A2A" }}>
             <div className="flex items-center gap-2">
-              <Users size={15} color="#D32F2F} " />
+              <Users size={15} color="#D32F2F" />
               <span className="font-bold text-sm text-white">قائمة اللاعبين</span>
             </div>
             <button onClick={() => setRolesVisible((v) => !v)}
@@ -672,6 +733,7 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
           </div>
         )}
 
+        <LeaveButton onLeave={onLeave} label="إنهاء الجلسة والخروج" />
         <Footer />
       </div>
     </div>
@@ -681,68 +743,101 @@ function HostDashboard({ game, onBack }: { game: GameState; onBack: () => void }
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("menu");
-  const [lobby, setLobby] = useState<LobbyState | null>(null);
-  const [game, setGame] = useState<GameState | null>(null);
+  const [screen, setScreen]         = useState<Screen>("rejoining");
+  const [lobby, setLobby]           = useState<LobbyState | null>(null);
+  const [game, setGame]             = useState<GameState | null>(null);
   const [playerRole, setPlayerRole] = useState<MyRole | null>(null);
-  const [socketError, setSocketError] = useState("");
   const [isConnected, setIsConnected] = useState(true);
 
-  // Always-fresh ref so socket callbacks can read latest lobby without stale closure
+  // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
   lobbyRef.current = lobby;
 
-  // ── Connection tracking + auto-reconnect ────────────────────────────────
+  // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
+    const session = loadSession();
+    if (!session) { setScreen("menu"); return; }
+
+    const uid = getOrCreateUserId();
     const socket = getSocket();
 
-    const onConnect = () => {
-      setIsConnected(true);
-    };
-
-    const onDisconnect = () => {
-      setIsConnected(false);
-    };
-
-    const onReconnect = () => {
-      setIsConnected(true);
-      const current = lobbyRef.current;
-      if (!current) return; // not in a room — nothing to re-join
-
+    // Wait until socket is connected before emitting
+    const doRejoin = () => {
       socket.emit(
-        "reconnectRoom",
-        { code: current.code, name: current.myName },
+        "rejoinRoom",
+        { code: session.code, userId: uid, name: session.myName },
         (res:
-          | { code: string; players: SocketPlayer[]; started: false }
-          | { code: string; started: true; isHost: true;  players: { socketId: string; name: string; online: boolean; roleLabel: string; roleColor: string }[] }
+          | { code: string; players: { socketId: string; name: string }[]; started: false }
+          | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
           | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
           | { error: string }
         ) => {
           if ("error" in res) {
-            // Room expired — go back to menu
-            setLobby(null); setGame(null); setPlayerRole(null);
+            clearSession();
             setScreen("menu");
             return;
           }
 
           if (!res.started) {
-            // Still in lobby — refresh player list
-            setLobby((prev) => prev ? { ...prev, players: res.players } : prev);
+            setLobby({ code: res.code, isHost: session.isHost, myName: session.myName, players: res.players });
             setScreen("lobby");
             return;
           }
 
-          // Game already started — restore correct screen
+          if (res.isHost) {
+            setLobby({ code: res.code, isHost: true, myName: session.myName, players: [] });
+            setGame({ code: res.code, players: res.players });
+            setScreen("dashboard");
+          } else {
+            setLobby({ code: res.code, isHost: false, myName: session.myName, players: [] });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName });
+            setScreen("player-screen");
+          }
+        },
+      );
+    };
+
+    if (socket.connected) {
+      doRejoin();
+    } else {
+      socket.once("connect", doRejoin);
+    }
+
+    return () => { socket.off("connect", doRejoin); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Connection tracking + socket-level auto-reconnect ────────────────────
+  useEffect(() => {
+    const socket = getSocket();
+    const uid    = getOrCreateUserId();
+
+    const onConnect    = () => setIsConnected(true);
+    const onDisconnect = () => setIsConnected(false);
+
+    const onReconnect = () => {
+      setIsConnected(true);
+      const current = lobbyRef.current;
+      if (!current) return;
+
+      socket.emit(
+        "rejoinRoom",
+        { code: current.code, userId: uid, name: current.myName },
+        (res:
+          | { code: string; players: { socketId: string; name: string }[]; started: false }
+          | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
+          | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
+          | { error: string }
+        ) => {
+          if ("error" in res) { clearSession(); setLobby(null); setGame(null); setPlayerRole(null); setScreen("menu"); return; }
+          if (!res.started) {
+            setLobby((prev) => prev ? { ...prev, players: res.players } : prev);
+            return;
+          }
           if (res.isHost) {
             setGame({ code: res.code, players: res.players });
             setScreen("dashboard");
           } else {
-            setPlayerRole({
-              label:  res.myRole.label,
-              color:  res.myRole.color,
-              code:   res.code,
-              myName: current.myName,
-            });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName });
             setScreen("player-screen");
           }
         },
@@ -775,48 +870,65 @@ export default function App() {
     }
   }, []);
 
-  // ── Socket room actions ─────────────────────────────────────────────────
+  // ── Explicit leave — emits to server + clears localStorage ──────────────
+  const handleLeaveRoom = useCallback(() => {
+    const current = lobbyRef.current;
+    const uid     = getOrCreateUserId();
+    if (current) {
+      getSocket().emit("leaveRoom", { code: current.code, userId: uid });
+    }
+    clearSession();
+    setLobby(null); setGame(null); setPlayerRole(null);
+    setScreen("menu");
+  }, []);
+
+  // ── Create room ──────────────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
+    const uid    = getOrCreateUserId();
     const socket = getSocket();
-    setSocketError("");
-    socket.emit("createRoom", { name }, (res: { code: string; players: SocketPlayer[] } | { error: string }) => {
-      if ("error" in res) { setSocketError(res.error); setScreen("create-name"); return; }
-      setLobby({ code: res.code, isHost: true, myName: name, players: res.players });
+    socket.emit("createRoom", { name, userId: uid }, (res: { code: string; players: { socketId: string; name: string }[] } | { error: string }) => {
+      if ("error" in res) { setScreen("create-name"); return; }
+      const newLobby: LobbyState = { code: res.code, isHost: true, myName: name, players: res.players };
+      setLobby(newLobby);
+      saveSession({ code: res.code, isHost: true, myName: name });
       setScreen("lobby");
     });
   }, []);
 
+  // ── Join room ────────────────────────────────────────────────────────────
   const handleJoinRoom = useCallback((name: string, code: string) => {
+    const uid    = getOrCreateUserId();
     const socket = getSocket();
-    setSocketError("");
     socket.emit(
       "joinRoom",
-      { name, code },
-      (res: { code: string; players: SocketPlayer[]; started: boolean } | { error: string }) => {
-        if ("error" in res) { setSocketError(res.error); setScreen("join"); return; }
-        setLobby({ code: res.code, isHost: false, myName: name, players: res.players });
+      { name, code, userId: uid },
+      (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => {
+        if ("error" in res) { setScreen("join"); return; }
+        const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: res.players };
+        setLobby(newLobby);
+        saveSession({ code: res.code, isHost: false, myName: name });
         setScreen("lobby");
       },
     );
   }, []);
 
-  const handleBack = useCallback(() => {
-    setScreen("menu"); setLobby(null); setGame(null); setPlayerRole(null); setSocketError("");
-  }, []);
-
-  // ── Screen Rendering ────────────────────────────────────────────────────
+  // ── Screen rendering ─────────────────────────────────────────────────────
   const banner = <ConnectionBanner connected={isConnected} />;
 
+  if (screen === "rejoining") {
+    return <RejoiningScreen onGiveUp={() => { clearSession(); setScreen("menu"); }} />;
+  }
+
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} onBack={() => setScreen("lobby")} /></>;
+    return <>{banner}<HostDashboard game={game} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} onBack={() => setScreen("lobby")} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
-    return <>{banner}<LobbyScreen lobby={lobby} onBack={handleBack} onGameStarted={handleGameStarted} /></>;
+    return <>{banner}<LobbyScreen lobby={lobby} onLeave={handleLeaveRoom} onGameStarted={handleGameStarted} /></>;
   }
 
   if (screen === "create-name") {
