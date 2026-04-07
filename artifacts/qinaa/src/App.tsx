@@ -322,9 +322,10 @@ function JoinRoomScreen({ onBack, onSubmit }: {
   const handle = () => {
     if (!name.trim()) { setError("أدخل اسمك"); return; }
     if (code.trim().length !== 4) { setError("أدخل كود الغرفة كاملاً"); return; }
-    console.log("Attempting to join with code:", code.trim());
+    const reversedCode = code.trim().split("").reverse().join("");
+    console.log("Attempting to join with code:", reversedCode);
     setLoading(true); setError("");
-    onSubmit(name.trim(), code.trim(), (msg: string) => {
+    onSubmit(name.trim(), reversedCode, (msg: string) => {
       setLoading(false);
       setError(msg);
     });
