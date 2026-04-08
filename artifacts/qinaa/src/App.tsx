@@ -151,7 +151,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
         </button>
       ) : <div />}
       <div className="flex items-center gap-2">
-        <img src="/mask-logo.jpg" alt="" style={{ width: 26, height: 26, objectFit: "contain", borderRadius: 4 }} />
+        <img src="/mask-logo.png" alt="" style={{ width: 44, height: 44, objectFit: "contain" }} />
         <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
           {label ?? "القناع"}
         </span>
@@ -197,7 +197,7 @@ function ConnectionBanner({ connected }: { connected: boolean }) {
 function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
-      <img src="/mask-logo.jpg" alt="القناع" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 8 }} />
+      <img src="/mask-logo.png" alt="القناع" style={{ width: 110, height: 110, objectFit: "contain" }} />
       <div className="flex flex-col items-center gap-2">
         <Loader2 size={28} color="#D32F2F" className="animate-spin" />
         <p className="text-white font-bold text-lg">جاري استئناف الجلسة...</p>
@@ -218,7 +218,7 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <div className="flex flex-col items-center gap-3">
-          <img src="/mask-logo.jpg" alt="القناع" style={{ width: 130, height: 130, objectFit: "contain", borderRadius: 12 }} />
+          <img src="/mask-logo.png" alt="القناع" style={{ width: 210, height: 210, objectFit: "contain" }} />
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
         </div>
