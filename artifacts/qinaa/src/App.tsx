@@ -151,7 +151,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
         </button>
       ) : <div />}
       <div className="flex items-center gap-2">
-        <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
+        <img src="/mask-logo.jpg" alt="" style={{ width: 26, height: 26, objectFit: "contain", borderRadius: 4 }} />
         <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
           {label ?? "القناع"}
         </span>
@@ -197,7 +197,7 @@ function ConnectionBanner({ connected }: { connected: boolean }) {
 function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
-      <VenetianMask size={70} color="#D32F2F" strokeWidth={1.3} />
+      <img src="/mask-logo.jpg" alt="القناع" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 8 }} />
       <div className="flex flex-col items-center gap-2">
         <Loader2 size={28} color="#D32F2F" className="animate-spin" />
         <p className="text-white font-bold text-lg">جاري استئناف الجلسة...</p>
@@ -218,7 +218,7 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <div className="flex flex-col items-center gap-3">
-          <VenetianMask size={80} color="#D32F2F" strokeWidth={1.5} />
+          <img src="/mask-logo.jpg" alt="القناع" style={{ width: 130, height: 130, objectFit: "contain", borderRadius: 12 }} />
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
         </div>
@@ -267,8 +267,14 @@ function NameInputLayout({
               value={name} onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSubmit()}
               placeholder="مثال: أحمد" maxLength={20}
-              className="w-full px-4 py-3 rounded-xl text-white text-base outline-none placeholder-neutral-600"
-              style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", direction: "rtl" }}
+              className="w-full rounded-2xl text-white text-base outline-none placeholder-neutral-600"
+              style={{
+                backgroundColor: "#111111",
+                border: "1px solid #2A2A2A",
+                direction: "rtl",
+                padding: "14px 18px",
+                lineHeight: "1.5",
+              }}
             />
           </div>
           {extraField}
@@ -353,15 +359,18 @@ function JoinRoomScreen({ onBack, onSubmit, initialCode = "" }: {
             placeholder="0000"
             className="w-full rounded-xl font-black font-mono outline-none border-2"
             style={{
-              backgroundColor: "#1A1A1A",
-              borderColor: code.length > 0 ? "#D32F2F" : "#333333",
+              backgroundColor: "#111111",
+              borderColor: code.length > 0 ? "#D32F2F" : "#2A2A2A",
+              borderWidth: 1,
               color: "#FFFFFF",
               caretColor: "#D32F2F",
               direction: "ltr",
-              letterSpacing: "1em",
+              letterSpacing: "0.8em",
+              textIndent: "0.8em",
               textAlign: "center",
               fontSize: "2rem",
-              padding: "0.75rem 1.5rem",
+              padding: "1rem 1rem",
+              lineHeight: "1.4",
             }}
           />
         </div>
@@ -514,16 +523,16 @@ function LobbyScreen({
             const joinUrl = `${window.location.origin}${window.location.pathname}?code=${lobby.code.split("").reverse().join("")}`;
             return (
               <div className="w-full flex flex-col items-center gap-3">
-                <div className="w-full rounded-xl flex flex-col items-center gap-3 p-4"
-                  style={{ backgroundColor: "#0D0D0D", border: "2px solid #2A0000" }}>
+                <div className="w-full rounded-2xl flex flex-col items-center gap-3 p-5"
+                  style={{ backgroundColor: "#0A0A0A", border: "1px solid #D32F2F", boxShadow: "0 0 18px #D32F2F18" }}>
                   <QRCode
                     value={joinUrl}
-                    size={160}
-                    bgColor="#000000"
+                    size={170}
+                    bgColor="#0A0A0A"
                     fgColor="#FFFFFF"
-                    style={{ width: "100%", maxWidth: 180, height: "auto" }}
+                    style={{ width: "100%", maxWidth: 190, height: "auto", borderRadius: 4 }}
                   />
-                  <span className="text-xs font-medium" style={{ color: "#9E9E9E", direction: "rtl" }}>امسح للانضمام مباشرة</span>
+                  <span className="text-xs font-medium tracking-wide" style={{ color: "#666666", direction: "rtl" }}>امسح للانضمام مباشرة</span>
                 </div>
                 <button
                   onClick={handleShare}
