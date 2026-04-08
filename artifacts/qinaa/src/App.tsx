@@ -153,7 +153,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
       <div className="flex items-center gap-2">
         <VenetianMask size={20} color="#D32F2F" strokeWidth={1.5} />
         <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
-          {label ?? "قناع"}
+          {label ?? "القناع"}
         </span>
       </div>
     </div>
@@ -219,7 +219,7 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <div className="flex flex-col items-center gap-3">
           <VenetianMask size={80} color="#D32F2F" strokeWidth={1.5} />
-          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>قناع</h1>
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
         </div>
         <div className="flex flex-col gap-5 w-full">
@@ -425,7 +425,7 @@ function LobbyScreen({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "انضم للعب 'قناع'!",
+          title: "انضم للعب 'القناع'!",
           text: "استخدم هذا الرابط للانضمام لغرفة اللعب الجماعي:",
           url: joinUrl,
         });
