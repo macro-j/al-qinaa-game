@@ -26,6 +26,7 @@ import {
   AlertCircle,
   Lock,
   Unlock,
+  Share2,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -384,6 +385,7 @@ function LobbyScreen({
 }) {
   const [players, setPlayers] = useState<SocketPlayer[]>(lobby.players);
   const [copied, setCopied] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [closed, setClosed] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -417,6 +419,24 @@ function LobbyScreen({
   const copyCode = useCallback(async () => {
     try { await navigator.clipboard.writeText(lobby.code); } catch {}
     setCopied(true); setTimeout(() => setCopied(false), 2000);
+  }, [lobby.code]);
+
+  const handleShare = useCallback(async () => {
+    const visualCode = lobby.code.split("").reverse().join("");
+    const joinUrl = `${window.location.origin}${window.location.pathname}?code=${visualCode}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "انضم للعب 'قناع'!",
+          text: "استخدم هذا الرابط للانضمام لغرفة اللعب الجماعي:",
+          url: joinUrl,
+        });
+      } catch {}
+    } else {
+      try { await navigator.clipboard.writeText(joinUrl); } catch {}
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2500);
+    }
   }, [lobby.code]);
 
   const toggleAudio = useCallback(async () => {
@@ -495,10 +515,32 @@ function LobbyScreen({
           {(() => {
             const joinUrl = `${window.location.origin}${window.location.pathname}?code=${lobby.code.split("").reverse().join("")}`;
             return (
-              <div className="w-full rounded-xl flex flex-col items-center gap-2 p-3"
-                style={{ backgroundColor: "#FFFFFF", border: "2px solid #333333" }}>
-                <QRCode value={joinUrl} size={140} bgColor="#FFFFFF" fgColor="#000000" style={{ width: "100%", maxWidth: 180, height: "auto" }} />
-                <span className="text-xs font-semibold" style={{ color: "#555555", direction: "rtl" }}>امسح لانضمام مباشر</span>
+              <div className="w-full flex flex-col items-center gap-3">
+                <div className="w-full rounded-xl flex flex-col items-center gap-3 p-4"
+                  style={{ backgroundColor: "#0D0D0D", border: "2px solid #2A0000" }}>
+                  <QRCode
+                    value={joinUrl}
+                    size={160}
+                    bgColor="#000000"
+                    fgColor="#FFFFFF"
+                    style={{ width: "100%", maxWidth: 180, height: "auto" }}
+                  />
+                  <span className="text-xs font-medium" style={{ color: "#9E9E9E", direction: "rtl" }}>امسح للانضمام مباشرة</span>
+                </div>
+                <button
+                  onClick={handleShare}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors active:opacity-70"
+                  style={{
+                    backgroundColor: "#0D0D0D",
+                    border: "1px solid #D32F2F",
+                    color: shareCopied ? "#4CAF50" : "#D32F2F",
+                  }}
+                >
+                  <Share2 size={15} />
+                  <span className="text-sm font-semibold">
+                    {shareCopied ? "تم نسخ الرابط" : "مشاركة رابط الدعوة"}
+                  </span>
+                </button>
               </div>
             );
           })()}
