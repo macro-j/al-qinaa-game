@@ -129,9 +129,9 @@ function getSocket(): Socket {
 
 const PHASE_ACTIONS: { key: PhaseKey; label: string; sub: string; icon: React.ReactNode; accent: string }[] = [
   { key: "night",        label: "بدء الليل",         sub: "أطفئ الأنوار",   icon: <Moon   size={20} strokeWidth={1.8} />, accent: "#1A1A4A" },
-  { key: "mafia",        label: "استيقاظ المافيا",   sub: "الولد والأكة",   icon: <Skull  size={20} strokeWidth={1.8} />, accent: "#4A0000" },
-  { key: "investigator", label: "استيقاظ الشايب",    sub: "الكاشف يحقق",   icon: <Search size={20} strokeWidth={1.8} />, accent: "#4A3000" },
-  { key: "protector",    label: "استيقاظ البنت",     sub: "الدرع تحمي",    icon: <Shield size={20} strokeWidth={1.8} />, accent: "#003366" },
+  { key: "mafia",        label: "استيقاظ الذئاب",    sub: "الذئب والظل",    icon: <Skull  size={20} strokeWidth={1.8} />, accent: "#4A0000" },
+  { key: "investigator", label: "استيقاظ العرّاف",   sub: "العرّاف يحقق",  icon: <Search size={20} strokeWidth={1.8} />, accent: "#4A3000" },
+  { key: "protector",    label: "استيقاظ الحارس",    sub: "الحارس يحمي",   icon: <Shield size={20} strokeWidth={1.8} />, accent: "#003366" },
   { key: "day",          label: "بدء النهار",         sub: "المداولة تبدأ", icon: <Sun    size={20} strokeWidth={1.8} />, accent: "#3A2000" },
 ];
 
@@ -641,9 +641,9 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
   const [revealed, setRevealed]       = useState(false);
   const [selectedTarget, setSelected] = useState<string | null>(null);
 
-  const isMafia       = role.label.includes("الولد") || role.label.includes("الأكة");
-  const isInvestigator = role.label.includes("الشايب");
-  const isProtector   = role.label.includes("البنت");
+  const isMafia        = role.label.includes("الذئب") || role.label.includes("الظل");
+  const isInvestigator = role.label.includes("العرّاف");
+  const isProtector    = role.label.includes("الحارس");
 
   const isMyTurn =
     (gamePhase === "night_mafia"        && isMafia)       ||

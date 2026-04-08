@@ -184,7 +184,7 @@ io.on("connection", (socket) => {
       if (isHost) {
         callback({ code, started: true, isHost: true, players: allPlayers(room) });
       } else {
-        const myRole = room.roles[player.name] ?? { label: "قناع الشعب (المواطن)", color: "#555555" };
+        const myRole = room.roles[player.name] ?? { label: "قناع الضحية (المواطن)", color: "#555555" };
         callback({ code, started: true, isHost: false, myRole });
       }
     },
@@ -225,17 +225,17 @@ io.on("connection", (socket) => {
     if (room.players.filter((p) => p.online).length < 2) return;
 
     const roleDefs = [
-      { label: "قناع الولد",  sublabel: "الجلاد",  color: "#D32F2F" },
-      { label: "قناع الأكة",  sublabel: "الكاتم",  color: "#B71C1C" },
-      { label: "قناع الشايب", sublabel: "الكاشف",  color: "#FF8F00" },
-      { label: "قناع البنت",  sublabel: "الدرع",   color: "#1565C0" },
+      { label: "قناع الذئب",  sublabel: "الجلاد",  color: "#D32F2F" },
+      { label: "قناع الظل",   sublabel: "الكاتم",  color: "#B71C1C" },
+      { label: "قناع العرّاف", sublabel: "الكاشف",  color: "#FF8F00" },
+      { label: "قناع الحارس", sublabel: "الدرع",   color: "#1565C0" },
     ];
 
     const shuffled = [...room.players].sort(() => Math.random() - 0.5);
     const assigned = shuffled.map((p, i) => {
       const def = i < roleDefs.length
         ? roleDefs[i]
-        : { label: "قناع الشعب", sublabel: "المواطن", color: "#555555" };
+        : { label: "قناع الضحية", sublabel: "المواطن", color: "#555555" };
       const roleLabel = `${def.label} (${def.sublabel})`;
       const roleColor = def.color;
       room.roles[p.name] = { label: roleLabel, color: roleColor };
@@ -260,9 +260,9 @@ io.on("connection", (socket) => {
     // ── Night Phase Narration Sequence ──────────────────────────────────────
     const nightScript = [
       { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",         phase: "night_sleep"        },
-      { delay:  10000, text: "أصحاب قناع الولد والأكة.. يفتحون عيونهم.", phase: "night_mafia"        },
-      { delay:  30000, text: "قناع الشايب يفتح عيونه.. ويحقق.",          phase: "night_investigator" },
-      { delay:  45000, text: "قناع البنت تفتح عيونها.. وتحمي.",           phase: "night_protector"    },
+      { delay:  10000, text: "أصحاب قناع الذئب والظل.. يفتحون عيونهم.", phase: "night_mafia"        },
+      { delay:  30000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",         phase: "night_investigator" },
+      { delay:  45000, text: "قناع الحارس يفتح عيونه.. ويحمي.",          phase: "night_protector"    },
       { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",              phase: "day_discussion"     },
     ];
 
