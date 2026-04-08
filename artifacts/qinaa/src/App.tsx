@@ -14,8 +14,6 @@ import {
   ArrowRight,
   Users,
   Shuffle,
-  Eye,
-  EyeOff,
   Moon,
   Sun,
   Shield,
@@ -635,11 +633,9 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, narrationUnlocked, onUnlockNarration, onLeave }: {
+function PlayerScreen({ role, gamePhase, onLeave }: {
   role: MyRole;
   gamePhase: string;
-  narrationUnlocked: boolean;
-  onUnlockNarration: () => void;
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]       = useState(false);
@@ -794,25 +790,6 @@ function PlayerScreen({ role, gamePhase, narrationUnlocked, onUnlockNarration, o
           </div>
         )}
 
-        {!narrationUnlocked ? (
-          <button
-            onClick={onUnlockNarration}
-            className="w-full py-4 rounded-2xl flex flex-col items-center gap-1 transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F" }}
-          >
-            <span className="text-sm font-bold" style={{ color: "#D32F2F" }}>اضغط لتفعيل صوت الراوي</span>
-            <span className="text-xs" style={{ color: "#7A2020" }}>يتطلب إذن الصوت من المتصفح</span>
-          </button>
-        ) : (
-          <div
-            className="w-full py-3 rounded-2xl flex items-center justify-center gap-2"
-            style={{ backgroundColor: "#0A1A0A", border: "1px solid #2E7D32" }}
-          >
-            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#4CAF50" }} />
-            <span className="text-xs font-semibold" style={{ color: "#4CAF50" }}>الراوي نشط — استمع للتعليمات</span>
-          </div>
-        )}
-
         <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
@@ -823,7 +800,6 @@ function PlayerScreen({ role, gamePhase, narrationUnlocked, onUnlockNarration, o
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
 function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void }) {
-  const [rolesVisible, setRolesVisible] = useState(false);
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
   const [myRoleRevealed, setMyRoleRevealed] = useState(false);
 
@@ -906,16 +882,10 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
               <Users size={15} color="#D32F2F" />
               <span className="font-bold text-sm text-white">قائمة اللاعبين</span>
             </div>
-            <button onClick={() => setRolesVisible((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200"
-              style={{
-                backgroundColor: rolesVisible ? "#3A0000" : "#222222",
-                color:           rolesVisible ? "#FF6B6B" : "#9E9E9E",
-                border: `1px solid ${rolesVisible ? "#D32F2F" : "#333333"}`,
-              }}>
-              {rolesVisible ? <Eye size={13} /> : <EyeOff size={13} />}
-              <span>{rolesVisible ? "إخفاء الأدوار" : "إظهار الأدوار"}</span>
-            </button>
+            <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+              style={{ backgroundColor: "#1B5E20", color: "#4CAF50" }}>
+              {game.players.length} لاعب
+            </span>
           </div>
 
           <div className="flex flex-col max-h-64 overflow-y-auto">
@@ -927,17 +897,10 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
                 <div className="flex-1 min-w-0">
                   <span className="text-white text-sm font-semibold">{player.name}</span>
                   <div className="flex flex-row-reverse items-center gap-1.5 mt-0.5">
-                    {rolesVisible ? (
-                      <>
-                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: player.roleColor }} />
-                        <span className="text-xs font-medium" style={{ color: player.roleColor }}>{player.roleLabel}</span>
-                      </>
-                    ) : (
-                      <span className="text-xs tracking-widest font-mono" style={{ color: "#444444" }}>● ● ● ●</span>
-                    )}
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: "#4CAF50" }} />
+                    <span className="text-xs font-medium" style={{ color: "#4CAF50" }}>في اللعبة</span>
                   </div>
                 </div>
-                {rolesVisible && <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: player.roleColor }} />}
               </div>
             ))}
           </div>
@@ -1000,34 +963,35 @@ export default function App() {
   const lobbyRef = useRef<LobbyState | null>(null);
   lobbyRef.current = lobby;
 
-  // ── Narration state ──────────────────────────────────────────────────────
-  const narrationQueueRef    = useRef<string[]>([]);
-  const narrationUnlockedRef = useRef(false);
-  const [narrationUnlocked, setNarrationUnlocked] = useState(false);
+  // ── Host-only MP3 audio engine ───────────────────────────────────────────
+  const isHostRef       = useRef(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const speakText = useCallback((text: string) => {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang  = "ar-SA";
-    u.rate  = 0.8;
-    u.pitch = 0.7;
-    window.speechSynthesis.speak(u);
+  const PHASE_AUDIO: Record<string, string> = {
+    night_sleep:        "/sounds/sleep.mp3",
+    night_mafia:        "/sounds/mafia.mp3",
+    night_investigator: "/sounds/investigator.mp3",
+    night_protector:    "/sounds/protector.mp3",
+    day_discussion:     "/sounds/day.mp3",
+  };
+
+  const stopCurrentAudio = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
   }, []);
 
-  const onUnlockNarration = useCallback(() => {
-    narrationUnlockedRef.current = true;
-    setNarrationUnlocked(true);
-    const queue = narrationQueueRef.current.splice(0);
-    queue.forEach(speakText);
-  }, [speakText]);
-
-  const resetNarration = useCallback(() => {
-    narrationUnlockedRef.current = false;
-    narrationQueueRef.current    = [];
-    setNarrationUnlocked(false);
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  const playPhaseAudio = useCallback((phase: string) => {
+    if (!isHostRef.current) return;
+    const src = PHASE_AUDIO[phase];
+    if (!src) return;
+    stopCurrentAudio();
+    const audio = new Audio(src);
+    currentAudioRef.current = audio;
+    audio.play().catch(() => {});
+  }, [stopCurrentAudio]);
 
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
@@ -1135,33 +1099,27 @@ export default function App() {
       );
     };
 
-    const onPlayAudio = (text: string) => {
-      if (narrationUnlockedRef.current) {
-        speakText(text);
-      } else {
-        narrationQueueRef.current.push(text);
-      }
+    const onPhaseUpdate = (phase: string) => {
+      setGamePhase(phase);
+      playPhaseAudio(phase);
     };
-
-    const onPhaseUpdate = (phase: string) => setGamePhase(phase);
 
     socket.on("connect",     onConnect);
     socket.on("disconnect",  onDisconnect);
     socket.on("reconnect",   onReconnect);
-    socket.on("playAudio",   onPlayAudio);
     socket.on("phaseUpdate", onPhaseUpdate);
     return () => {
       socket.off("connect",     onConnect);
       socket.off("disconnect",  onDisconnect);
       socket.off("reconnect",   onReconnect);
-      socket.off("playAudio",   onPlayAudio);
       socket.off("phaseUpdate", onPhaseUpdate);
     };
-  }, [speakText]);
+  }, [playPhaseAudio]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
-    resetNarration();
+    isHostRef.current = payload.isHost;
+    stopCurrentAudio();
     setGamePhase("lobby");
     if (payload.isHost) {
       setGame({ code: payload.code, players: payload.players, myName: lobbyRef.current?.myName ?? "" });
@@ -1180,11 +1138,12 @@ export default function App() {
       });
       setScreen("player-screen");
     }
-  }, [resetNarration]);
+  }, [stopCurrentAudio]);
 
   // ── Explicit leave — emits to server + clears localStorage ──────────────
   const handleLeaveRoom = useCallback(() => {
-    resetNarration();
+    isHostRef.current = false;
+    stopCurrentAudio();
     setGamePhase("lobby");
     const current = lobbyRef.current;
     const uid     = getOrCreateUserId();
@@ -1194,7 +1153,7 @@ export default function App() {
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
     setScreen("menu");
-  }, [resetNarration]);
+  }, [stopCurrentAudio]);
 
   // ── Create room ──────────────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
@@ -1239,7 +1198,7 @@ export default function App() {
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} narrationUnlocked={narrationUnlocked} onUnlockNarration={onUnlockNarration} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
