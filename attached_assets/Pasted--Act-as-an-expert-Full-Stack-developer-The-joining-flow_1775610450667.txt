@@ -1,0 +1,38 @@
+"Act as an expert Full-Stack developer. The joining flow and UI are perfect! Now we must make the Night Phase interactive so players can actually use their roles when the narrator calls them.
+
+Task 1: Server-Side Phase Emitting (Backend index.js)
+Inside your startGame sequence (where you have the setTimeout calls for playAudio), you MUST also emit a phaseUpdate event to sync the clients' screens with the audio.
+Add these exactly alongside the audio emissions:
+
+Time 0s: io.to(roomCode).emit('phaseUpdate', 'night_sleep');
+
+Time 10s: io.to(roomCode).emit('phaseUpdate', 'night_mafia'); // الولد والأكة
+
+Time 30s: io.to(roomCode).emit('phaseUpdate', 'night_investigator'); // الشايب
+
+Time 45s: io.to(roomCode).emit('phaseUpdate', 'night_protector'); // البنت
+
+Time 60s: io.to(roomCode).emit('phaseUpdate', 'day_discussion'); // النهار
+
+Task 2: Client-Side Phase State (Frontend App.jsx)
+
+Add a state: const [gamePhase, setGamePhase] = useState('lobby');
+
+Listen for the phaseUpdate socket event and update this state.
+
+Pass gamePhase and the players array as props to PlayerScreen.
+
+Ensure gamePhase resets to 'lobby' when leaving or ending the game.
+
+Task 3: Interactive Action UI (Frontend PlayerScreen)
+Inside PlayerScreen, render an action area below the user's role mask, depending on the gamePhase and their role:
+
+If gamePhase === 'night_mafia' AND role is 'قناع الولد' or 'قناع الأكة': Show a list of all OTHER players. Add a 'اختر' (Select) button next to each to pick a target. (Just console.log the target for now, no backend logic needed yet).
+
+If gamePhase === 'night_investigator' AND role is 'قناع الشايب': Show the player list to investigate.
+
+If gamePhase === 'night_protector' AND role is 'قناع البنت': Show the player list to protect.
+
+If it is NOT the player's turn (e.g., they are 'قناع الشعب' or it is 'night_sleep'): Show a lock icon 🔒 with the text text-gray-500: 'المدينة نائمة... انتظر دورك' (The city is sleeping... wait your turn).
+
+Styling: The player lists should use the dark theme, with Crimson Red borders for selection buttons."
