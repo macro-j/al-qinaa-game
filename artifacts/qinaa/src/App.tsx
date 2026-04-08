@@ -79,6 +79,17 @@ interface InvestigateResultPayload {
   roleColor:  string;
 }
 
+interface VoteUpdatePayload {
+  votes:            Record<string, string>; // voterName → targetName
+  alivePlayerNames: string[];
+  totalAlive:       number;
+}
+
+interface GameOverPayload {
+  winner:              "wolves" | "citizens";
+  executedPlayerName:  string | null;
+}
+
 // ─── localStorage Persistence ─────────────────────────────────────────────────
 
 const STORAGE_UID     = "qinaa_uid";
@@ -653,16 +664,18 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
+  voteUpdate: VoteUpdatePayload | null;
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]           = useState(false);
   const [selectedTarget, setSelected]     = useState<string | null>(null);
   const [actionSubmitted, setSubmitted]   = useState(false);
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
+  const [votedFor, setVotedFor]           = useState<string | null>(null);
 
   const isMafia        = role.label.includes("الذئب") || role.label.includes("الظل");
   const isShadow       = role.label.includes("الظل");
@@ -711,6 +724,7 @@ function PlayerScreen({ role, gamePhase, morningResults, onLeave }: {
     setSelected(null);
     setSubmitted(false);
     setInvResult(null);
+    setVotedFor(null);
   }, [gamePhase]);
 
   // Listen for private investigator result
@@ -894,6 +908,50 @@ function PlayerScreen({ role, gamePhase, morningResults, onLeave }: {
           </div>
         )}
 
+        {/* ── Voting Panel ── */}
+        {gamePhase === "voting" && (
+          <div className="w-full rounded-2xl overflow-hidden"
+            style={{ border: "1px solid #FF8F00", backgroundColor: "#100A00" }}>
+            {votedFor ? (
+              <div className="flex flex-col items-center gap-3 py-6 px-4">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#FF8F00" }} />
+                <p className="text-sm font-bold" style={{ color: "#FF8F00" }}>
+                  صوّتت ضد: <span style={{ color: "#FFFFFF" }}>{votedFor}</span>
+                </p>
+                <p className="text-xs text-center" style={{ color: "#555555" }}>في انتظار باقي اللاعبين...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#FF8F00" }}>التصويت</span>
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#FF8F00" }} />
+                </div>
+                <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>من تعتقد أنه المجرم؟</p>
+                <div className="flex flex-col gap-2">
+                  {(voteUpdate?.alivePlayerNames ?? role.players)
+                    .filter((n) => n !== role.myName)
+                    .map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => {
+                          setVotedFor(name);
+                          getSocket().emit("submitVote", { targetName: name, roomCode: role.code });
+                        }}
+                        className="w-full flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95"
+                        style={{ backgroundColor: "#1A1A1A", border: "1px solid #2A2A2A", color: "#CCCCCC" }}>
+                        <span>{name}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-lg"
+                          style={{ backgroundColor: "#2A1800", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                          تصويت
+                        </span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
@@ -901,12 +959,75 @@ function PlayerScreen({ role, gamePhase, morningResults, onLeave }: {
   );
 }
 
+// ─── Game Over Screen ─────────────────────────────────────────────────────────
+
+function GameOverScreen({ result, isHost, onEnd }: {
+  result: GameOverPayload;
+  isHost: boolean;
+  onEnd: () => void;
+}) {
+  const wolvesWon = result.winner === "wolves";
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
+      {/* Executed player banner */}
+      {result.executedPlayerName && (
+        <div className="w-full max-w-sm rounded-2xl flex flex-col items-center gap-1 py-3 px-4"
+          style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F" }}>
+          <span className="text-xs font-semibold tracking-widest" style={{ color: "#666666" }}>تم إعدام</span>
+          <span className="text-lg font-black" style={{ color: "#FF6B6B" }}>{result.executedPlayerName}</span>
+        </div>
+      )}
+
+      {/* Main result card */}
+      <div className="w-full max-w-sm flex flex-col items-center gap-6">
+        <img
+          src="/mask-logo.png"
+          alt="القناع"
+          style={{
+            width: 160, height: 160,
+            objectFit: "contain",
+            filter: wolvesWon
+              ? "drop-shadow(0 0 30px #D32F2F)"
+              : "drop-shadow(0 0 30px #4CAF50)",
+          }}
+        />
+
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span
+            className="text-5xl font-black leading-tight"
+            style={{ color: wolvesWon ? "#D32F2F" : "#4CAF50", fontFamily: "serif" }}>
+            {wolvesWon ? "انتصر الذئاب" : "انتصرت المدينة"}
+          </span>
+          <p className="text-base font-semibold" style={{ color: wolvesWon ? "#FF6B6B" : "#8BC34A" }}>
+            {wolvesWon ? "المدينة سقطت!" : "تم القضاء على الذئاب!"}
+          </p>
+        </div>
+
+        <div className="w-16 h-0.5 rounded-full" style={{ backgroundColor: wolvesWon ? "#D32F2F" : "#4CAF50" }} />
+
+        <button
+          onClick={onEnd}
+          className="w-full py-4 rounded-2xl font-bold text-lg transition-all duration-200 active:scale-95"
+          style={{
+            backgroundColor: wolvesWon ? "#D32F2F" : "#1B5E20",
+            color: "#ffffff",
+          }}>
+          {isHost ? "إنهاء اللعبة وحل الغرفة" : "العودة للقائمة"}
+        </button>
+      </div>
+
+      <p className="text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+    </div>
+  );
+}
+
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
+  voteUpdate: VoteUpdatePayload | null;
   onLeave: () => void;
 }) {
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
@@ -920,6 +1041,10 @@ function HostDashboard({ game, activeGamePhase, morningResults, onLeave }: {
 
   const handleNextNight = () => {
     getSocket().emit("nextNight", { code: game.code });
+  };
+
+  const handleTallyAndExecute = () => {
+    getSocket().emit("tallyVotesAndExecute", { code: game.code });
   };
 
   return (
@@ -1044,6 +1169,44 @@ function HostDashboard({ game, activeGamePhase, morningResults, onLeave }: {
           </div>
         )}
 
+        {/* ── Voting Phase Controls ── */}
+        {activeGamePhase === "voting" && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التصويت جارٍ</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "#1A1A1A", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                {voteUpdate ? Object.keys(voteUpdate.votes).length : 0} / {voteUpdate?.totalAlive ?? "..."} صوت
+              </span>
+            </div>
+            {/* Live vote display */}
+            {voteUpdate && Object.keys(voteUpdate.votes).length > 0 && (
+              <div className="rounded-xl flex flex-col overflow-hidden"
+                style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+                {Object.entries(
+                  Object.values(voteUpdate.votes).reduce<Record<string, number>>((acc, t) => {
+                    acc[t] = (acc[t] ?? 0) + 1; return acc;
+                  }, {})
+                ).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
+                  <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
+                    style={{ borderBottom: i < Object.keys(voteUpdate.votes).length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                    <span className="text-sm font-semibold text-white">{name}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={handleTallyAndExecute}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#D32F2F", color: "#ffffff", border: "1px solid #FF6B6B" }}>
+              <Skull size={20} strokeWidth={2} />
+              <span>إنهاء التصويت وإعدام المتهم</span>
+            </button>
+          </div>
+        )}
+
         {/* ── Day Controls (host only, during day_discussion) ── */}
         {activeGamePhase === "day_discussion" && (
           <div className="flex flex-col gap-3">
@@ -1118,6 +1281,8 @@ export default function App() {
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
   const [initialJoinCode, setInitialJoinCode] = useState("");
   const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
+  const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
+  const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
 
   // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
@@ -1270,17 +1435,29 @@ export default function App() {
       setMorningResults(payload);
     };
 
+    const onVoteUpdate = (payload: VoteUpdatePayload) => {
+      setVoteUpdate(payload);
+    };
+
+    const onGameOver = (payload: GameOverPayload) => {
+      setGameOver(payload);
+    };
+
     socket.on("connect",        onConnect);
     socket.on("disconnect",     onDisconnect);
     socket.on("reconnect",      onReconnect);
     socket.on("phaseUpdate",    onPhaseUpdate);
     socket.on("morningResults", onMorningResults);
+    socket.on("voteUpdate",     onVoteUpdate);
+    socket.on("gameOver",       onGameOver);
     return () => {
       socket.off("connect",        onConnect);
       socket.off("disconnect",     onDisconnect);
       socket.off("reconnect",      onReconnect);
       socket.off("phaseUpdate",    onPhaseUpdate);
       socket.off("morningResults", onMorningResults);
+      socket.off("voteUpdate",     onVoteUpdate);
+      socket.off("gameOver",       onGameOver);
     };
   }, [playPhaseAudio]);
 
@@ -1320,6 +1497,7 @@ export default function App() {
     }
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
+    setMorningResults(null); setVoteUpdate(null); setGameOver(null);
     setScreen("menu");
   }, [stopCurrentAudio]);
 
@@ -1361,12 +1539,17 @@ export default function App() {
     return <RejoiningScreen onGiveUp={() => { clearSession(); setScreen("menu"); }} />;
   }
 
+  // Game Over — shown on top of everything for both host and players
+  if (gameOver && (screen === "dashboard" || screen === "player-screen")) {
+    return <GameOverScreen result={gameOver} isHost={screen === "dashboard"} onEnd={handleLeaveRoom} />;
+  }
+
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {

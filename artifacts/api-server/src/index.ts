@@ -42,6 +42,7 @@ interface Room {
   started:           boolean;
   roles:             Record<string, AssignedRole>;
   nightActions:      NightActions;
+  votes:             Record<string, string>; // voterName → targetName
   nightPhaseTimers?: ReturnType<typeof setTimeout>[];
 }
 
@@ -173,6 +174,7 @@ io.on("connection", (socket) => {
         started:    false,
         roles:      {},
         nightActions: freshNightActions(),
+        votes:      {},
       };
       rooms[code] = room;
       socket.join(code);
@@ -371,8 +373,91 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return;
     if (room.hostId !== socket.id) return;
+    room.votes = {};
+    const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
     io.to(code).emit("phaseUpdate", "voting");
+    io.to(code).emit("voteUpdate", { votes: {}, alivePlayerNames, totalAlive: alivePlayerNames.length });
     logger.info({ code }, "Phase → voting");
+  });
+
+  // ── Submit Vote ────────────────────────────────────────────────────────────
+  socket.on(
+    "submitVote",
+    ({ targetName, roomCode }: { targetName: string; roomCode: string }) => {
+      const room = rooms[roomCode];
+      if (!room) return;
+
+      const voter = room.players.find((p) => p.socketId === socket.id);
+      if (!voter || !voter.isAlive) return;
+
+      room.votes[voter.name] = targetName;
+      logger.info({ roomCode, voter: voter.name, targetName }, "Vote cast");
+
+      const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
+      io.to(roomCode).emit("voteUpdate", {
+        votes: room.votes,
+        alivePlayerNames,
+        totalAlive: alivePlayerNames.length,
+      });
+    },
+  );
+
+  // ── Host: Tally Votes & Execute ────────────────────────────────────────────
+  socket.on("tallyVotesAndExecute", ({ code }: { code: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+
+    // Count votes per target
+    const tally: Record<string, number> = {};
+    for (const targetName of Object.values(room.votes)) {
+      tally[targetName] = (tally[targetName] ?? 0) + 1;
+    }
+
+    let executedPlayerName: string | null = null;
+    const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+    if (entries.length > 0) {
+      const [topTarget] = entries[0];
+      const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
+      if (victim) {
+        victim.isAlive     = false;
+        executedPlayerName = victim.name;
+        logger.info({ code, executedPlayerName }, "Player executed by vote");
+      }
+    }
+
+    room.votes = {};
+
+    // Emit execution result regardless of win
+    io.to(code).emit("executionResult", { executedPlayerName });
+
+    // Win condition check
+    const alivePlayers  = room.players.filter((p) => p.isAlive);
+    const aliveWolves   = alivePlayers.filter((p) => {
+      const lbl = room.roles[p.name]?.label ?? "";
+      return lbl.includes("الذئب") || lbl.includes("الظل");
+    });
+    const aliveCitizens = alivePlayers.filter((p) => {
+      const lbl = room.roles[p.name]?.label ?? "";
+      return !lbl.includes("الذئب") && !lbl.includes("الظل");
+    });
+
+    if (aliveWolves.length === 0) {
+      io.to(code).emit("gameOver", { winner: "citizens", executedPlayerName });
+      logger.info({ code }, "Game over — citizens win");
+      return;
+    }
+
+    if (aliveWolves.length >= aliveCitizens.length) {
+      io.to(code).emit("gameOver", { winner: "wolves", executedPlayerName });
+      logger.info({ code }, "Game over — wolves win");
+      return;
+    }
+
+    // No winner yet — continue to next night
+    startNightSequence(code);
+    logger.info({ code }, "No winner — starting next night after execution");
   });
 
   // ── Host: Next Night ───────────────────────────────────────────────────────

@@ -1,0 +1,52 @@
+"Act as an expert Full-Stack Node.js and React developer. The night logic is flawless! Now we must implement the final core mechanics: The Voting Phase, Execution, and Win Conditions.
+
+CRITICAL TASK 1: Voting State (Backend index.ts)
+
+In your rooms object, add a votes: {} object to track votes during the day.
+
+Create a socket listener: socket.on('submitVote', ({ targetId, roomCode }) => { ... }). Store the vote (e.g., votes[voterId] = targetId).
+
+Emit the real-time vote count to the room so the Host can see how many people have voted: io.to(roomCode).emit('voteUpdate', votes).
+
+CRITICAL TASK 2: Execution & Win Conditions (Backend)
+Create a listener for the Host to end the voting: socket.on('tallyVotesAndExecute', ({ roomCode }) => { ... })
+
+Calculate the player with the most votes. Set their isAlive: false.
+
+Clear the votes object.
+
+Win Condition Check: >    - Count alive Wolves (قناع الذئب).
+
+Count alive Citizens (Everyone else).
+
+If Wolves >= Citizens, trigger Wolf Win (io.to(roomCode).emit('gameOver', { winner: 'wolves' })).
+
+If Wolves === 0, trigger Citizen Win (io.to(roomCode).emit('gameOver', { winner: 'citizens' })).
+
+If no one won yet, emit executionResult and transition back to night_mafia.
+
+TASK 3: Voting UI (PlayerScreen.tsx)
+
+When phase === 'voting', display a list of all alive players (excluding the user themselves).
+
+Allow the player to select a suspect and click 'تصويت' (Vote). Emit submitVote.
+
+Once voted, show a 'في انتظار باقي اللاعبين...' (Waiting for others) state.
+
+TASK 4: Host Voting Controls (HostDashboard.tsx)
+
+During voting phase, show the Host how many votes have been cast (e.g., 'تم تصويت 3 من أصل 5').
+
+Add a button for the Host: 'إنهاء التصويت وإعدام المتهم' (End Vote & Execute). This emits tallyVotesAndExecute.
+
+TASK 5: Game Over Screen (All Screens)
+
+If the gameOver event is received, clear the screen and show a massive, dramatic banner.
+
+If winner === 'wolves', show 'انتصر الذئاب.. المدينة سقطت!' (Wolves won) in red.
+
+If winner === 'citizens', show 'انتصرت المدينة.. تم القضاء على الذئاب!' (Citizens won) in green.
+
+Add a button for the Host to 'إنهاء اللعبة' (End Game) to disconnect everyone or restart.
+
+Execute this to finalize the core loop!"
