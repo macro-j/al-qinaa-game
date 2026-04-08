@@ -10,13 +10,15 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 
 // ─── Room State ───────────────────────────────────────────────────────────────
 
-const OFFLINE_GRACE_MS = 3 * 60 * 1000; // 3-minute grace before permanent removal
+const OFFLINE_GRACE_MS = 3 * 60 * 1000;
 
 interface Player {
-  userId:    string;   // stable across page refreshes (from client localStorage)
-  socketId:  string;   // volatile — changes every connection
+  userId:    string;
+  socketId:  string;
   name:      string;
   online:    boolean;
+  isAlive:   boolean;
+  isSilenced: boolean;
   offlineTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -25,14 +27,21 @@ interface AssignedRole {
   color: string;
 }
 
+interface NightActions {
+  killTarget:    string | null;
+  protectTarget: string | null;
+  silenceTarget: string | null;
+}
+
 interface Room {
   code:              string;
-  hostId:            string;    // current socket.id of host (kept up-to-date on rejoin)
-  hostUserId:        string;    // stable userId of host
-  hostName:          string;    // display name of host
+  hostId:            string;
+  hostUserId:        string;
+  hostName:          string;
   players:           Player[];
   started:           boolean;
-  roles:             Record<string, AssignedRole>; // player name → role
+  roles:             Record<string, AssignedRole>;
+  nightActions:      NightActions;
   nightPhaseTimers?: ReturnType<typeof setTimeout>[];
 }
 
@@ -53,9 +62,81 @@ function allPlayers(room: Room) {
     socketId:  p.socketId,
     name:      p.name,
     online:    p.online,
+    isAlive:   p.isAlive,
+    isSilenced: p.isSilenced,
     roleLabel: room.roles[p.name]?.label ?? "",
     roleColor: room.roles[p.name]?.color ?? "#555555",
   }));
+}
+
+function freshNightActions(): NightActions {
+  return { killTarget: null, protectTarget: null, silenceTarget: null };
+}
+
+// ─── Morning Resolution ───────────────────────────────────────────────────────
+
+function resolveMorning(code: string) {
+  const room = rooms[code];
+  if (!room) return;
+
+  const { killTarget, protectTarget, silenceTarget } = room.nightActions;
+
+  // Reset silence from previous night
+  for (const p of room.players) p.isSilenced = false;
+
+  let killedPlayerName:  string | null = null;
+  let silencedPlayerName: string | null = null;
+
+  if (killTarget && killTarget !== protectTarget) {
+    const victim = room.players.find((p) => p.name === killTarget);
+    if (victim && victim.isAlive) {
+      victim.isAlive    = false;
+      killedPlayerName  = victim.name;
+    }
+  }
+
+  if (silenceTarget) {
+    const target = room.players.find((p) => p.name === silenceTarget);
+    if (target && target.isAlive) {
+      target.isSilenced  = true;
+      silencedPlayerName = target.name;
+    }
+  }
+
+  io.to(code).emit("morningResults", { killedPlayerName, silencedPlayerName });
+  room.nightActions = freshNightActions();
+
+  logger.info({ code, killedPlayerName, silencedPlayerName }, "Morning resolved");
+}
+
+// ─── Night Sequence ───────────────────────────────────────────────────────────
+
+function startNightSequence(code: string) {
+  const room = rooms[code];
+  if (!room) return;
+
+  room.nightPhaseTimers?.forEach(clearTimeout);
+  room.nightActions = freshNightActions();
+  // Reset silence flags for the new night
+  for (const p of room.players) p.isSilenced = false;
+
+  const nightScript: { delay: number; text: string; phase: string; resolve?: true }[] = [
+    { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",         phase: "night_sleep"        },
+    { delay:  10000, text: "أصحاب قناع الذئب والظل.. يفتحون عيونهم.", phase: "night_mafia"        },
+    { delay:  30000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",         phase: "night_investigator" },
+    { delay:  45000, text: "قناع الحارس يفتح عيونه.. ويحمي.",          phase: "night_protector"    },
+    { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",              phase: "day_discussion",    resolve: true },
+  ];
+
+  room.nightPhaseTimers = nightScript.map(({ delay, text, phase, resolve }) =>
+    setTimeout(() => {
+      if (!rooms[code]) return;
+      if (resolve) resolveMorning(code);
+      io.to(code).emit("playAudio",   text);
+      io.to(code).emit("phaseUpdate", phase);
+      logger.info({ code, phase }, "Night phase broadcast");
+    }, delay),
+  );
 }
 
 // ─── HTTP + Socket.io Server ──────────────────────────────────────────────────
@@ -88,9 +169,10 @@ io.on("connection", (socket) => {
         hostId:     socket.id,
         hostUserId: userId,
         hostName:   name,
-        players:    [{ userId, socketId: socket.id, name, online: true }],
+        players:    [{ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false }],
         started:    false,
         roles:      {},
+        nightActions: freshNightActions(),
       };
       rooms[code] = room;
       socket.join(code);
@@ -110,10 +192,8 @@ io.on("connection", (socket) => {
       const room = rooms[code];
       if (!room) { callback({ error: "الغرفة غير موجودة، تحقق من الكود" }); return; }
 
-      // Check for an existing slot by userId (returning player without page persistence)
       const byUid = room.players.find((p) => p.userId === userId);
       if (byUid) {
-        // Treat as rejoin — update socketId
         if (byUid.offlineTimer) { clearTimeout(byUid.offlineTimer); byUid.offlineTimer = undefined; }
         byUid.socketId = socket.id;
         byUid.online   = true;
@@ -124,11 +204,10 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Check for duplicate display name from a different user
       const byName = room.players.find((p) => p.name === name && p.online);
       if (byName) { callback({ error: "يوجد لاعب بهذا الاسم بالفعل" }); return; }
 
-      room.players.push({ userId, socketId: socket.id, name, online: true });
+      room.players.push({ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false });
       socket.join(code);
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 
@@ -137,7 +216,7 @@ io.on("connection", (socket) => {
     },
   );
 
-  // ── Rejoin Room (page refresh / reconnect) ─────────────────────────────────
+  // ── Rejoin Room ────────────────────────────────────────────────────────────
   socket.on(
     "rejoinRoom",
     (
@@ -152,20 +231,15 @@ io.on("connection", (socket) => {
       const room = rooms[code];
       if (!room) { callback({ error: "انتهت صلاحية الغرفة" }); return; }
 
-      // Find by stable userId first, fall back to name
       const player = room.players.find((p) => p.userId === userId) ??
                      room.players.find((p) => p.name === name);
       if (!player) { callback({ error: "لم يُعثر على اللاعب في الغرفة" }); return; }
 
-      // Cancel pending removal timer
       if (player.offlineTimer) { clearTimeout(player.offlineTimer); player.offlineTimer = undefined; }
-
-      // Rehydrate with new socket and userId
       player.socketId = socket.id;
       player.userId   = userId;
       player.online   = true;
 
-      // Keep host metadata current
       if (room.hostUserId === userId || room.hostName === name) {
         room.hostId      = socket.id;
         room.hostUserId  = userId;
@@ -173,7 +247,7 @@ io.on("connection", (socket) => {
 
       socket.join(code);
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
-      logger.info({ code, name }, "Player rejoined room (page refresh / reconnect)");
+      logger.info({ code, name }, "Player rejoined room");
 
       if (!room.started) {
         callback({ code, players: onlinePlayers(room), started: false });
@@ -190,7 +264,7 @@ io.on("connection", (socket) => {
     },
   );
 
-  // ── Leave Room (intentional, clean exit) ───────────────────────────────────
+  // ── Leave Room ─────────────────────────────────────────────────────────────
   socket.on("leaveRoom", ({ code, userId }: { code: string; userId: string }) => {
     const room = rooms[code];
     if (!room) return;
@@ -198,7 +272,6 @@ io.on("connection", (socket) => {
     const player = room.players.find((p) => p.userId === userId);
     if (!player) return;
 
-    // Cancel any grace timer
     if (player.offlineTimer) { clearTimeout(player.offlineTimer); player.offlineTimer = undefined; }
 
     const wasHost = room.hostUserId === userId;
@@ -208,6 +281,7 @@ io.on("connection", (socket) => {
     socket.leave(code);
 
     if (wasHost || room.players.length === 0) {
+      room.nightPhaseTimers?.forEach(clearTimeout);
       delete rooms[code];
       io.to(code).emit("roomClosed");
       logger.info({ code, reason: wasHost ? "host left" : "empty" }, "Room dissolved on clean leave");
@@ -221,7 +295,7 @@ io.on("connection", (socket) => {
   socket.on("startGame", ({ code }: { code: string }) => {
     const room = rooms[code];
     if (!room) return;
-    if (room.hostId !== socket.id) return; // hostId is kept current on every rejoin
+    if (room.hostId !== socket.id) return;
     if (room.players.filter((p) => p.online).length < 2) return;
 
     const roleDefs = [
@@ -239,6 +313,8 @@ io.on("connection", (socket) => {
       const roleLabel = `${def.label} (${def.sublabel})`;
       const roleColor = def.color;
       room.roles[p.name] = { label: roleLabel, color: roleColor };
+      p.isAlive   = true;
+      p.isSilenced = false;
       return { socketId: p.socketId, name: p.name, roleLabel, roleColor };
     });
 
@@ -257,26 +333,58 @@ io.on("connection", (socket) => {
 
     logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
 
-    // ── Night Phase Narration Sequence ──────────────────────────────────────
-    const nightScript = [
-      { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",         phase: "night_sleep"        },
-      { delay:  10000, text: "أصحاب قناع الذئب والظل.. يفتحون عيونهم.", phase: "night_mafia"        },
-      { delay:  30000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",         phase: "night_investigator" },
-      { delay:  45000, text: "قناع الحارس يفتح عيونه.. ويحمي.",          phase: "night_protector"    },
-      { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",              phase: "day_discussion"     },
-    ];
-
-    room.nightPhaseTimers = nightScript.map(({ delay, text, phase }) =>
-      setTimeout(() => {
-        if (!rooms[code]) return; // room was destroyed before this fires
-        io.to(code).emit("playAudio",   text);
-        io.to(code).emit("phaseUpdate", phase);
-        logger.info({ code, text, phase }, "Night phase broadcast");
-      }, delay),
-    );
+    startNightSequence(code);
   });
 
-  // ── Disconnect (graceful grace period) ─────────────────────────────────────
+  // ── Submit Night Action ────────────────────────────────────────────────────
+  socket.on(
+    "submitNightAction",
+    ({ actionType, targetName, roomCode }: { actionType: string; targetName: string; roomCode: string }) => {
+      const room = rooms[roomCode];
+      if (!room) return;
+
+      logger.info({ roomCode, actionType, targetName }, "Night action received");
+
+      if (actionType === "kill") {
+        room.nightActions.killTarget = targetName;
+      } else if (actionType === "silence") {
+        room.nightActions.silenceTarget = targetName;
+      } else if (actionType === "protect") {
+        room.nightActions.protectTarget = targetName;
+      } else if (actionType === "investigate") {
+        const target = room.players.find((p) => p.name === targetName);
+        if (target) {
+          const role = room.roles[target.name];
+          socket.emit("investigateResult", {
+            targetName,
+            roleLabel: role?.label ?? "مجهول",
+            roleColor: role?.color ?? "#555555",
+          });
+          logger.info({ roomCode, targetName, roleLabel: role?.label }, "Investigate result sent");
+        }
+      }
+    },
+  );
+
+  // ── Host: Start Voting ─────────────────────────────────────────────────────
+  socket.on("startVoting", ({ code }: { code: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+    io.to(code).emit("phaseUpdate", "voting");
+    logger.info({ code }, "Phase → voting");
+  });
+
+  // ── Host: Next Night ───────────────────────────────────────────────────────
+  socket.on("nextNight", ({ code }: { code: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+    startNightSequence(code);
+    logger.info({ code }, "New night sequence started by host");
+  });
+
+  // ── Disconnect ─────────────────────────────────────────────────────────────
   socket.on("disconnect", (reason) => {
     logger.info({ socketId: socket.id, reason }, "Client disconnected");
 
@@ -289,7 +397,7 @@ io.on("connection", (socket) => {
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 
       player.offlineTimer = setTimeout(() => {
-        if (player.online) return; // rejoined in time
+        if (player.online) return;
 
         room.players = room.players.filter((p) => p.userId !== player.userId);
         delete room.roles[player.name];

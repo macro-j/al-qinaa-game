@@ -1,0 +1,51 @@
+"Act as an expert Full-Stack Node.js and React developer. The UI and branding are complete. Now we must implement the core 'Game Logic' (The Brain) on the server to process night actions, resolve them in the morning, and add Host controls for the daytime.
+
+CRITICAL TASK 1: Server-Side State & Actions (Backend index.ts / index.js)
+
+In your rooms object state, add a nightActions object for each room upon creation:
+nightActions: { killTarget: null, protectTarget: null, silenceTarget: null }
+
+Create a socket listener: socket.on('submitNightAction', ({ actionType, targetId, roomCode }) => { ... })
+
+If actionType === 'kill' (from قناع الذئب), store targetId in killTarget.
+
+If actionType === 'protect' (from قناع الحارس), store targetId in protectTarget.
+
+If actionType === 'silence' (from قناع الظل), store targetId in silenceTarget.
+
+If actionType === 'investigate' (from قناع العرّاف), immediately emit the target's role back ONLY to the investigator via a private emit.
+
+CRITICAL TASK 2: Morning Resolution Logic (Backend)
+Create a function to resolve the night when the phase transitions to day_discussion:
+
+Evaluate actions:
+
+If killTarget exists AND killTarget !== protectTarget, find that player and set their state to isAlive: false.
+
+If silenceTarget exists, add a property isSilenced: true to that player.
+
+Emit an event to the room: io.to(roomCode).emit('morningResults', { killedPlayerId, silencedPlayerId }) (send null if no one was killed/silenced).
+
+Clear the nightActions object for the next night.
+
+Ensure all players' isSilenced flag is reset to false at the start of every new night.
+
+TASK 3: Client Action Submission (PlayerScreen.tsx)
+During the night phase (night_mafia, night_police, night_doctor), when a player selects a target and submits, emit the action to the server:
+socket.emit('submitNightAction', { actionType: getActionTypeBasedOnMyRole(), targetId: target.id, roomCode });
+
+TASK 4: Display Morning Results (App.tsx or PlayerScreen.tsx)
+Listen for the morningResults event. When the phase becomes day_discussion, show a clear UI banner/alert to all players:
+
+If killedPlayerId exists: 'اكتشفنا جثة [Player Name]!'
+
+If no one died: 'مرت الليلة بسلام.. لم يمت أحد.'
+
+If silencedPlayerId exists, display an additional note: '[Player Name] مخروس ولا يمكنه الكلام اليوم!'
+
+TASK 5: Host Day Controls (HostDashboard.tsx)
+During day_discussion, the Host MUST see two new buttons below the active player list:
+
+'بدء التصويت' (Start Vote): Emits an event to change the phase to voting.
+
+'تجاوز إلى الليلة التالية' (Next Night): Emits an event to skip voting and restart the night_mafia phase directly."

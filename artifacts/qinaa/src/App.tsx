@@ -68,6 +68,17 @@ type GameStartedPayload =
 
 type PhaseKey = "night" | "mafia" | "investigator" | "protector" | "day";
 
+interface MorningResultsPayload {
+  killedPlayerName:  string | null;
+  silencedPlayerName: string | null;
+}
+
+interface InvestigateResultPayload {
+  targetName: string;
+  roleLabel:  string;
+  roleColor:  string;
+}
+
 // ─── localStorage Persistence ─────────────────────────────────────────────────
 
 const STORAGE_UID     = "qinaa_uid";
@@ -642,15 +653,19 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, onLeave }: {
   role: MyRole;
   gamePhase: string;
+  morningResults: MorningResultsPayload | null;
   onLeave: () => void;
 }) {
-  const [revealed, setRevealed]       = useState(false);
-  const [selectedTarget, setSelected] = useState<string | null>(null);
+  const [revealed, setRevealed]           = useState(false);
+  const [selectedTarget, setSelected]     = useState<string | null>(null);
+  const [actionSubmitted, setSubmitted]   = useState(false);
+  const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
 
   const isMafia        = role.label.includes("الذئب") || role.label.includes("الظل");
+  const isShadow       = role.label.includes("الظل");
   const isInvestigator = role.label.includes("العرّاف");
   const isProtector    = role.label.includes("الحارس");
 
@@ -661,19 +676,50 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
 
   const isNightPhase = gamePhase.startsWith("night_");
 
-  const actionLabel = isMafia
-    ? "اختر هدفك الليلي"
-    : isInvestigator
-      ? "اختر من تحقق معه"
-      : "اختر من تحمي";
+  const actionLabel = isShadow
+    ? "اختر من تُسكت الليلة"
+    : isMafia
+      ? "اختر هدفك الليلي"
+      : isInvestigator
+        ? "اختر من تحقق معه"
+        : "اختر من تحمي";
+
+  const getActionType = (): string => {
+    if (isShadow)       return "silence";
+    if (isMafia)        return "kill";
+    if (isInvestigator) return "investigate";
+    return "protect";
+  };
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);
-    console.log(`[قناع] ${role.myName} (${role.label}) selected target: ${name} during phase: ${gamePhase}`);
+    setSubmitted(false);
   };
 
-  // Reset target selection when phase changes
-  useEffect(() => { setSelected(null); }, [gamePhase]);
+  const handleSubmitAction = () => {
+    if (!selectedTarget) return;
+    getSocket().emit("submitNightAction", {
+      actionType: getActionType(),
+      targetName: selectedTarget,
+      roomCode:   role.code,
+    });
+    setSubmitted(true);
+  };
+
+  // Reset when phase changes
+  useEffect(() => {
+    setSelected(null);
+    setSubmitted(false);
+    setInvResult(null);
+  }, [gamePhase]);
+
+  // Listen for private investigator result
+  useEffect(() => {
+    const socket = getSocket();
+    const onResult = (payload: InvestigateResultPayload) => setInvResult(payload);
+    socket.on("investigateResult", onResult);
+    return () => { socket.off("investigateResult", onResult); };
+  }, []);
 
   const reveal  = useCallback(() => setRevealed(true),  []);
   const conceal = useCallback(() => setRevealed(false), []);
@@ -747,6 +793,35 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
           </p>
         </div>
 
+        {/* ── Morning Results Banner ── */}
+        {gamePhase === "day_discussion" && morningResults && (
+          <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
+            style={{ backgroundColor: morningResults.killedPlayerName ? "#1A0000" : "#001A0A", border: `1px solid ${morningResults.killedPlayerName ? "#D32F2F" : "#33691E"}` }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                style={{ backgroundColor: morningResults.killedPlayerName ? "#D32F2F" : "#4CAF50" }} />
+              <p className="text-sm font-bold" style={{ color: morningResults.killedPlayerName ? "#FF6B6B" : "#8BC34A" }}>
+                {morningResults.killedPlayerName
+                  ? `اكتشفنا جثة ${morningResults.killedPlayerName}!`
+                  : "مرت الليلة بسلام.. لم يمت أحد."}
+              </p>
+            </div>
+            {morningResults.silencedPlayerName && (
+              <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
+                {morningResults.silencedPlayerName} مخروس ولا يمكنه الكلام اليوم!
+              </p>
+            )}
+          </div>
+        )}
+
+        {gamePhase === "day_discussion" && !morningResults && (
+          <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
+            style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
+            <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع المدينة</p>
+          </div>
+        )}
+
         {/* ── Night Action Panel ── */}
         {isNightPhase && (
           <div className="w-full rounded-2xl overflow-hidden"
@@ -769,8 +844,9 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
                         style={{ backgroundColor: selectedTarget === name ? "#2A0000" : "#141414", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#222222"}` }}>
                         <button
                           onClick={() => handleSelectTarget(name)}
+                          disabled={actionSubmitted}
                           className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
-                          style={{ backgroundColor: selectedTarget === name ? "#D32F2F" : "#1A1A1A", color: selectedTarget === name ? "#ffffff" : "#888888", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#333333"}` }}>
+                          style={{ backgroundColor: selectedTarget === name ? "#D32F2F" : "#1A1A1A", color: selectedTarget === name ? "#ffffff" : "#888888", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#333333"}`, opacity: actionSubmitted ? 0.5 : 1 }}>
                           {selectedTarget === name ? "تم الاختيار" : "اختر"}
                         </button>
                         <span className="text-sm font-semibold" style={{ color: selectedTarget === name ? "#ffffff" : "#AAAAAA" }}>{name}</span>
@@ -778,8 +854,35 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
                     ))
                   )}
                 </div>
-                {selectedTarget && (
-                  <p className="text-xs text-center mt-1" style={{ color: "#888888" }}>اخترت: <span style={{ color: "#D32F2F", fontWeight: "bold" }}>{selectedTarget}</span></p>
+
+                {/* Confirm button */}
+                {selectedTarget && !actionSubmitted && (
+                  <button
+                    onClick={handleSubmitAction}
+                    className="w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
+                    style={{ backgroundColor: "#D32F2F", color: "#ffffff" }}>
+                    تأكيد الاختيار
+                  </button>
+                )}
+
+                {/* Submitted confirmation */}
+                {actionSubmitted && (
+                  <div className="flex items-center justify-center gap-2 py-2 rounded-xl"
+                    style={{ backgroundColor: "#0D2000", border: "1px solid #33691E" }}>
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#4CAF50" }} />
+                    <p className="text-xs font-bold" style={{ color: "#4CAF50" }}>تم تأكيد اختيارك</p>
+                  </div>
+                )}
+
+                {/* Investigator private result */}
+                {isInvestigator && investigateResult && (
+                  <div className="flex flex-col gap-1 px-3 py-3 rounded-xl"
+                    style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
+                    <span className="text-xs font-semibold" style={{ color: "#888888" }}>نتيجة التحقيق</span>
+                    <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
+                      {investigateResult.targetName}: {investigateResult.roleLabel}
+                    </span>
+                  </div>
                 )}
               </div>
             ) : (
@@ -788,14 +891,6 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
                 <p className="text-sm font-semibold text-center" style={{ color: "#333333" }}>المدينة نائمة... انتظر دورك</p>
               </div>
             )}
-          </div>
-        )}
-
-        {gamePhase === "day_discussion" && (
-          <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
-            style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
-            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
-            <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع المدينة</p>
           </div>
         )}
 
@@ -808,11 +903,24 @@ function PlayerScreen({ role, gamePhase, onLeave }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void }) {
+function HostDashboard({ game, activeGamePhase, morningResults, onLeave }: {
+  game: GameState;
+  activeGamePhase: string;
+  morningResults: MorningResultsPayload | null;
+  onLeave: () => void;
+}) {
   const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
   const [myRoleRevealed, setMyRoleRevealed] = useState(false);
 
   const myEntry = game.players.find((p) => p.name === game.myName);
+
+  const handleStartVoting = () => {
+    getSocket().emit("startVoting", { code: game.code });
+  };
+
+  const handleNextNight = () => {
+    getSocket().emit("nextNight", { code: game.code });
+  };
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
@@ -915,6 +1023,48 @@ function HostDashboard({ game, onLeave }: { game: GameState; onLeave: () => void
           </div>
         </div>
 
+        {/* ── Morning Results Banner (host view) ── */}
+        {activeGamePhase === "day_discussion" && morningResults && (
+          <div className="rounded-2xl flex flex-col gap-2 p-4"
+            style={{ backgroundColor: morningResults.killedPlayerName ? "#1A0000" : "#001A0A", border: `1px solid ${morningResults.killedPlayerName ? "#D32F2F" : "#33691E"}` }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                style={{ backgroundColor: morningResults.killedPlayerName ? "#D32F2F" : "#4CAF50" }} />
+              <p className="text-sm font-bold" style={{ color: morningResults.killedPlayerName ? "#FF6B6B" : "#8BC34A" }}>
+                {morningResults.killedPlayerName
+                  ? `اكتشفنا جثة ${morningResults.killedPlayerName}!`
+                  : "مرت الليلة بسلام.. لم يمت أحد."}
+              </p>
+            </div>
+            {morningResults.silencedPlayerName && (
+              <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
+                {morningResults.silencedPlayerName} مخروس ولا يمكنه الكلام اليوم!
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Day Controls (host only, during day_discussion) ── */}
+        {activeGamePhase === "day_discussion" && (
+          <div className="flex flex-col gap-3">
+            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم النهار</span>
+            <button
+              onClick={handleStartVoting}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F", color: "#D32F2F" }}>
+              <Sun size={20} strokeWidth={2} />
+              <span>بدء التصويت</span>
+            </button>
+            <button
+              onClick={handleNextNight}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#0A0A1A", borderColor: "#333366", color: "#8888CC" }}>
+              <Moon size={20} strokeWidth={2} />
+              <span>تجاوز إلى الليلة التالية</span>
+            </button>
+          </div>
+        )}
+
         {/* Phase Controls */}
         <div className="flex flex-col gap-3">
           <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التحكم في مراحل اللعبة</span>
@@ -967,6 +1117,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(true);
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
   const [initialJoinCode, setInitialJoinCode] = useState("");
+  const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
 
   // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
@@ -1111,17 +1262,25 @@ export default function App() {
     const onPhaseUpdate = (phase: string) => {
       setGamePhase(phase);
       playPhaseAudio(phase);
+      // Clear morning results at the start of a new night cycle
+      if (phase === "night_sleep") setMorningResults(null);
     };
 
-    socket.on("connect",     onConnect);
-    socket.on("disconnect",  onDisconnect);
-    socket.on("reconnect",   onReconnect);
-    socket.on("phaseUpdate", onPhaseUpdate);
+    const onMorningResults = (payload: MorningResultsPayload) => {
+      setMorningResults(payload);
+    };
+
+    socket.on("connect",        onConnect);
+    socket.on("disconnect",     onDisconnect);
+    socket.on("reconnect",      onReconnect);
+    socket.on("phaseUpdate",    onPhaseUpdate);
+    socket.on("morningResults", onMorningResults);
     return () => {
-      socket.off("connect",     onConnect);
-      socket.off("disconnect",  onDisconnect);
-      socket.off("reconnect",   onReconnect);
-      socket.off("phaseUpdate", onPhaseUpdate);
+      socket.off("connect",        onConnect);
+      socket.off("disconnect",     onDisconnect);
+      socket.off("reconnect",      onReconnect);
+      socket.off("phaseUpdate",    onPhaseUpdate);
+      socket.off("morningResults", onMorningResults);
     };
   }, [playPhaseAudio]);
 
@@ -1203,11 +1362,11 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
