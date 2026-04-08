@@ -392,7 +392,7 @@ function LobbyScreen({
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const canStart = lobby.isHost && players.length >= 5;
+  const canStart = lobby.isHost && players.length >= 2;
 
   useEffect(() => {
     const socket = getSocket();
@@ -558,8 +558,8 @@ function LobbyScreen({
               <span className="font-bold text-sm text-white">اللاعبون</span>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-              style={{ backgroundColor: players.length >= 5 ? "#1B5E20" : "#4A0000", color: players.length >= 5 ? "#4CAF50" : "#D32F2F" }}>
-              {players.length} / 5+
+              style={{ backgroundColor: players.length >= 2 ? "#1B5E20" : "#4A0000", color: players.length >= 2 ? "#4CAF50" : "#D32F2F" }}>
+              {players.length} / 2+
             </span>
           </div>
           <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
@@ -599,7 +599,7 @@ function LobbyScreen({
             </button>
             {!canStart && !starting && (
               <p className="text-center text-xs -mt-2" style={{ color: "#555555" }}>
-                يلزم {Math.max(0, 5 - players.length)} لاعب إضافي للبدء
+                يلزم {Math.max(0, 2 - players.length)} لاعب إضافي للبدء
               </p>
             )}
           </>
