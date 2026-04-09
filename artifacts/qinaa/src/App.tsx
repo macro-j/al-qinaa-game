@@ -657,11 +657,12 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
+  alivePlayerNames: string[];
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]           = useState(false);
@@ -700,17 +701,16 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
     return "protect";
   };
 
-  // Build filtered target list per strict role rules:
-  // Wolf: all others EXCEPT self (already excluded) and wolf allies
-  // Shadow: all others INCLUDING self
-  // Seer, Guard: all others EXCEPT self (already excluded)
-  const aliveOthers = voteUpdate?.alivePlayerNames
-    ? voteUpdate.alivePlayerNames.filter((n) => n !== role.myName)
-    : role.players;
+  // Build filtered target list using the authoritative alive list.
+  // alivePlayerNames is kept in sync at root App level (game start, morning, vote events).
+  // Wolf: alive players excluding self and wolf-team allies
+  // Shadow: ALL alive players (can silence self too)
+  // Seer, Guard: alive players excluding self
+  const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
   const targetList: string[] = isWolf
     ? aliveOthers.filter((n) => !role.wolfAllies.includes(n))
     : isShadow
-      ? [...aliveOthers, role.myName] // shadow can silence self too
+      ? alivePlayerNames // shadow targets any alive player incl. self
       : aliveOthers;
 
   const handleSelectTarget = (name: string) => {
@@ -974,7 +974,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
                 </div>
                 <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>من تعتقد أنه المجرم؟</p>
                 <div className="flex flex-col gap-2">
-                  {(voteUpdate?.alivePlayerNames ?? role.players)
+                  {alivePlayerNames
                     .filter((n) => n !== role.myName)
                     .map((name) => (
                       <button
@@ -1069,11 +1069,12 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAudioEnabled, onToggleAudio, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, isAudioEnabled, onToggleAudio, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
+  alivePlayerNames: string[];
   isAudioEnabled: boolean;
   onToggleAudio: () => void;
   onLeave: () => void;
@@ -1121,19 +1122,13 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
     return "protect";
   };
 
-  // Build host's targeting list — same strict rules as PlayerScreen
-  const allOthers = game.players
-    .filter((p) => p.name !== game.myName)
-    .map((p) => p.name);
-
-  const aliveOthers = voteUpdate?.alivePlayerNames
-    ? voteUpdate.alivePlayerNames.filter((n) => n !== game.myName)
-    : allOthers;
-
+  // Build host's targeting list from the authoritative alive list.
+  // Same strict rules as PlayerScreen — uses shared alivePlayerNames prop.
+  const aliveOthers = alivePlayerNames.filter((n) => n !== game.myName);
   const hostTargetList: string[] = hostIsWolf
     ? aliveOthers.filter((n) => !game.wolfAllies.includes(n))
     : hostIsShadow
-      ? [...aliveOthers, game.myName] // shadow can silence self
+      ? alivePlayerNames // shadow can target any alive player incl. self
       : aliveOthers;
 
   // Reset night action state when phase changes
@@ -1578,6 +1573,8 @@ export default function App() {
   const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
   const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
   const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
+  // Authoritative alive player list — updated from server events, used by both host/player
+  const [alivePlayerNames, setAlivePlayerNames] = useState<string[]>([]);
 
   // Always-fresh ref so async callbacks never read stale lobby
   const lobbyRef = useRef<LobbyState | null>(null);
@@ -1715,9 +1712,11 @@ export default function App() {
           }
           if (res.isHost) {
             setGame({ code: res.code, players: res.players, myName: current.myName, wolfAllies: [] });
+            setAlivePlayerNames(res.players.filter((p) => p.isAlive).map((p) => p.name));
             setScreen("dashboard");
           } else {
             setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName, players: [], wolfAllies: [] });
+            // Player rejoins: alive list will sync on next voteUpdate/morningResults
             setScreen("player-screen");
           }
         },
@@ -1736,31 +1735,43 @@ export default function App() {
 
     const onMorningResults = (payload: MorningResultsPayload) => {
       setMorningResults(payload);
+      // Remove killed player from alive list immediately
+      if (payload.killedPlayerName) {
+        setAlivePlayerNames((prev) => prev.filter((n) => n !== payload.killedPlayerName));
+      }
     };
 
     const onVoteUpdate = (payload: VoteUpdatePayload) => {
       setVoteUpdate(payload);
+      // Sync alive list with server's authoritative list
+      setAlivePlayerNames(payload.alivePlayerNames);
     };
 
     const onGameOver = (payload: GameOverPayload) => {
       setGameOver(payload);
     };
 
-    socket.on("connect",        onConnect);
-    socket.on("disconnect",     onDisconnect);
-    socket.on("reconnect",      onReconnect);
-    socket.on("phaseUpdate",    onPhaseUpdate);
-    socket.on("morningResults", onMorningResults);
-    socket.on("voteUpdate",     onVoteUpdate);
-    socket.on("gameOver",       onGameOver);
+    const onAlivePlayersSync = ({ alivePlayerNames: names }: { alivePlayerNames: string[] }) => {
+      setAlivePlayerNames(names);
+    };
+
+    socket.on("connect",          onConnect);
+    socket.on("disconnect",       onDisconnect);
+    socket.on("reconnect",        onReconnect);
+    socket.on("phaseUpdate",      onPhaseUpdate);
+    socket.on("morningResults",   onMorningResults);
+    socket.on("voteUpdate",       onVoteUpdate);
+    socket.on("gameOver",         onGameOver);
+    socket.on("alivePlayersSync", onAlivePlayersSync);
     return () => {
-      socket.off("connect",        onConnect);
-      socket.off("disconnect",     onDisconnect);
-      socket.off("reconnect",      onReconnect);
-      socket.off("phaseUpdate",    onPhaseUpdate);
-      socket.off("morningResults", onMorningResults);
-      socket.off("voteUpdate",     onVoteUpdate);
-      socket.off("gameOver",       onGameOver);
+      socket.off("connect",          onConnect);
+      socket.off("disconnect",       onDisconnect);
+      socket.off("reconnect",        onReconnect);
+      socket.off("phaseUpdate",      onPhaseUpdate);
+      socket.off("morningResults",   onMorningResults);
+      socket.off("voteUpdate",       onVoteUpdate);
+      socket.off("gameOver",         onGameOver);
+      socket.off("alivePlayersSync", onAlivePlayersSync);
     };
   }, [playPhaseAudio]);
 
@@ -1776,12 +1787,16 @@ export default function App() {
         myName: lobbyRef.current?.myName ?? "",
         wolfAllies: payload.wolfAllies ?? [],
       });
+      // Seed alive list with ALL player names at game start
+      setAlivePlayerNames(payload.players.map((p) => p.name));
       setScreen("dashboard");
     } else {
       const myName  = lobbyRef.current?.myName ?? "";
       const players = (lobbyRef.current?.players ?? [])
         .map((p) => p.name)
         .filter((n) => n !== myName);
+      // Seed alive list with ALL player names at game start (include self)
+      setAlivePlayerNames((lobbyRef.current?.players ?? []).map((p) => p.name));
       setPlayerRole({
         label:      payload.myRole.label,
         color:      payload.myRole.color,
@@ -1807,6 +1822,7 @@ export default function App() {
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
     setMorningResults(null); setVoteUpdate(null); setGameOver(null);
+    setAlivePlayerNames([]);
     setScreen("menu");
   }, [stopCurrentAudio]);
 
@@ -1830,16 +1846,39 @@ export default function App() {
     socket.emit(
       "joinRoom",
       { name, code, userId: uid },
-      (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => {
+      (res:
+        | { code: string; players: { socketId: string; name: string }[]; started: boolean }
+        | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
+        | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
+        | { error: string }
+      ) => {
         if ("error" in res) { onError(res.error); return; }
         setInitialJoinCode("");
-        const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: res.players };
-        setLobby(newLobby);
         saveSession({ code: res.code, isHost: false, myName: name });
+
+        if ("started" in res && res.started) {
+          // Mid-game rejoin: restore state and go straight to game screen
+          setLobby({ code: res.code, isHost: res.isHost, myName: name, players: [] });
+          if (res.isHost && "players" in res) {
+            isHostRef.current = true;
+            setGame({ code: res.code, players: res.players, myName: name, wolfAllies: [] });
+            setAlivePlayerNames(res.players.filter((p) => p.isAlive).map((p) => p.name));
+            setScreen("dashboard");
+          } else if (!res.isHost && "myRole" in res) {
+            isHostRef.current = false;
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: name, players: [], wolfAllies: [] });
+            setScreen("player-screen");
+          }
+          return;
+        }
+
+        // Normal pre-game join
+        const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: (res as { players: { socketId: string; name: string }[] }).players };
+        setLobby(newLobby);
         setScreen("lobby");
       },
     );
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Screen rendering ─────────────────────────────────────────────────────
   const banner = <ConnectionBanner connected={isConnected} />;
@@ -1854,11 +1893,11 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {

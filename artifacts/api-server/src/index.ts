@@ -185,25 +185,69 @@ io.on("connection", (socket) => {
     "joinRoom",
     (
       { code, name, userId }: { code: string; name: string; userId: string },
-      callback: (res: { code: string; players: { socketId: string; name: string }[]; started: boolean } | { error: string }) => void,
+      callback: (res:
+        | { code: string; players: { socketId: string; name: string }[]; started: boolean }
+        | { code: string; started: true; isHost: true;  players: ReturnType<typeof allPlayers> }
+        | { code: string; started: true; isHost: false; myRole: AssignedRole }
+        | { error: string }
+      ) => void,
     ) => {
       const room = rooms[code];
       if (!room) { callback({ error: "الغرفة غير موجودة، تحقق من الكود" }); return; }
 
+      // ── Reconnect by userId (same browser) ───────────────────────────────
       const byUid = room.players.find((p) => p.userId === userId);
       if (byUid) {
         if (byUid.offlineTimer) { clearTimeout(byUid.offlineTimer); byUid.offlineTimer = undefined; }
         byUid.socketId = socket.id;
         byUid.online   = true;
+        if (room.hostUserId === userId) room.hostId = socket.id;
         socket.join(code);
         io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
-        logger.info({ code, name }, "Player re-entered room via joinRoom");
-        callback({ code, players: onlinePlayers(room), started: room.started });
+        logger.info({ code, name: byUid.name }, "Player re-entered room via joinRoom (byUid)");
+        if (!room.started) {
+          callback({ code, players: onlinePlayers(room), started: false });
+        } else {
+          const alive = room.players.filter((p) => p.isAlive).map((p) => p.name);
+          socket.emit("alivePlayersSync", { alivePlayerNames: alive });
+          const isHost = room.hostUserId === userId;
+          if (isHost) {
+            callback({ code, started: true, isHost: true, players: allPlayers(room) });
+          } else {
+            const myRole = room.roles[byUid.name] ?? { label: "قناع الضحية (المواطن)", color: "#555555" };
+            callback({ code, started: true, isHost: false, myRole });
+          }
+        }
         return;
       }
 
-      const byName = room.players.find((p) => p.name === name && p.online);
-      if (byName) { callback({ error: "يوجد لاعب بهذا الاسم بالفعل" }); return; }
+      // ── Reconnect by name — player had an offline entry (ghost) ──────────
+      const ghostByName = room.players.find((p) => p.name === name && !p.online);
+      if (ghostByName) {
+        if (ghostByName.offlineTimer) { clearTimeout(ghostByName.offlineTimer); ghostByName.offlineTimer = undefined; }
+        ghostByName.userId   = userId;
+        ghostByName.socketId = socket.id;
+        ghostByName.online   = true;
+        socket.join(code);
+        io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
+        logger.info({ code, name }, "Ghost player reconnected by name via joinRoom");
+        if (!room.started) {
+          callback({ code, players: onlinePlayers(room), started: false });
+        } else {
+          const alive = room.players.filter((p) => p.isAlive).map((p) => p.name);
+          socket.emit("alivePlayersSync", { alivePlayerNames: alive });
+          const myRole = room.roles[ghostByName.name] ?? { label: "قناع الضحية (المواطن)", color: "#555555" };
+          callback({ code, started: true, isHost: false, myRole });
+        }
+        return;
+      }
+
+      // ── Reject if an ONLINE player already has this name ─────────────────
+      const onlineByName = room.players.find((p) => p.name === name && p.online);
+      if (onlineByName) { callback({ error: "يوجد لاعب بهذا الاسم بالفعل" }); return; }
+
+      // ── Reject new joins mid-game ─────────────────────────────────────────
+      if (room.started) { callback({ error: "اللعبة انطلقت بالفعل، لا يمكن الانضمام الآن" }); return; }
 
       room.players.push({ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false });
       socket.join(code);
@@ -253,6 +297,9 @@ io.on("connection", (socket) => {
       }
 
       const isHost = room.hostUserId === userId || room.hostName === name;
+      // Always emit the current alive player list to the rejoining socket
+      const alive = room.players.filter((p) => p.isAlive).map((p) => p.name);
+      socket.emit("alivePlayersSync", { alivePlayerNames: alive });
       if (isHost) {
         callback({ code, started: true, isHost: true, players: allPlayers(room) });
       } else {
@@ -403,15 +450,17 @@ io.on("connection", (socket) => {
 
       } else if (actionType === "investigate") {
         // investigateResult goes ONLY to the requesting socket — host-blind by default
+        // Returns verdict: 'مافيا' or 'بريء' — never the exact role label
         const target = room.players.find((p) => p.name === targetName);
         if (target) {
-          const role = room.roles[target.name];
+          const targetRoleLabel = room.roles[target.name]?.label ?? "";
+          const isMafiaRole = targetRoleLabel.includes("الذئب") || targetRoleLabel.includes("الظل");
           socket.emit("investigateResult", {
             targetName,
-            roleLabel: role?.label ?? "مجهول",
-            roleColor: role?.color ?? "#555555",
+            roleLabel: isMafiaRole ? "مافيا" : "بريء",
+            roleColor: isMafiaRole ? "#D32F2F" : "#4CAF50",
           });
-          logger.info({ roomCode, targetName, roleLabel: role?.label }, "Investigate result sent (private)");
+          logger.info({ roomCode, targetName, verdict: isMafiaRole ? "مافيا" : "بريء" }, "Investigate verdict sent (private)");
         }
       }
     },

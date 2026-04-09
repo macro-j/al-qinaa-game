@@ -1,0 +1,41 @@
+"Act as an expert Full-Stack Node.js and React developer. The user conducted a 5-player playtest and found critical game logic and state management bugs. We need to fix the Investigator logic, target filtering, and reconnect/rejoin handling.
+
+CRITICAL TASK 1: Investigator (Seer) Balance Logic (Backend index.ts)
+
+Update the submitNightAction listener for 'investigate'.
+
+DO NOT return the target's exact role.
+
+If the target's role is 'قناع الذئب' or 'قناع الظل', emit: investigateResult: 'مافيا'.
+
+If the target's role is anything else (e.g., 'قناع الحارس', 'قناع المواطن'), emit: investigateResult: 'بريء'.
+
+CRITICAL TASK 2: Robust Target Filtering & Voting List (PlayerScreen.tsx & HostDashboard.tsx)
+
+The target lists for night actions and voting are currently bugged and hiding eligible players.
+
+Rewrite the targetList mapping carefully. Ensure it iterates over all players.
+
+Wolf (الذئب): Can see all players where isAlive === true AND role !== 'قناع الذئب'.
+
+Shadow (الظل): Can see all players where isAlive === true (can target anyone, including themselves).
+
+Guard (الحارس) & Seer (العرّاف): Can see all players where isAlive === true AND player ID is not their own ID.
+
+Voting Phase: Ensure the voting list displays ALL players where isAlive === true (excluding the voter's own self).
+
+CRITICAL TASK 3: Seamless Rejoin & Disconnect Handling (Backend index.ts)
+
+When a player closes the browser and reconnects, they become a 'ghost'. Fix this in the joinRoom listener.
+
+When a user tries to join, check if playerName ALREADY EXISTS in room.players.
+
+If they exist: Do NOT reject them. Instead, UPDATE their id to the new socket.id in the room.players object, update the mapping, and emit their existing state back to them so they can resume exactly where they left off.
+
+Ensure disconnected players (if their state is isAlive: true) still appear correctly in the game, but if they are completely removed, they should not appear in the voting list.
+
+CRITICAL TASK 4: Phase UI Visibility Bug
+
+Fix the bug where 'قناع الظل' and 'قناع الحارس' did not see the target UI on the first night. Ensure the isMyTurn boolean strictly matches the currentPhase to their exact string roles ('قناع الظل', 'قناع الحارس').
+
+Execute these fixes comprehensively to ensure a stable 5+ player experience."
