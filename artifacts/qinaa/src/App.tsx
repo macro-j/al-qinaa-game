@@ -1118,8 +1118,22 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
     setSubmitted(true);
   };
 
+  // Phase labels for host status display
+  const NIGHT_PHASE_LABELS: Record<string, string> = {
+    night_sleep:  "المدينة نائمة — الكل يغمض عيونه",
+    night_wolf:   "قناع الذئب — يتحرك الآن",
+    night_shadow: "قناع الظل — يُسكت الآن",
+    night_seer:   "قناع العرّاف — يحقق الآن",
+    night_guard:  "قناع الحارس — يحمي الآن",
+  };
+
+  const isPreNight     = activeGamePhase === "lobby";
+  const isInNightSeq   = activeGamePhase.startsWith("night_");
+  const canAdvance     = isInNightSeq; // true for all night_ phases incl. night_guard → will go to day
+
   const handleStartVoting     = () => getSocket().emit("startVoting",         { code: game.code });
-  const handleNextNight       = () => getSocket().emit("nextNight",            { code: game.code });
+  const handleStartNightPhase = () => getSocket().emit("startNightPhase",     { code: game.code });
+  const handleAdvanceNight    = () => getSocket().emit("advanceNightPhase",   { roomCode: game.code });
   const handleTallyAndExecute = () => getSocket().emit("tallyVotesAndExecute", { code: game.code });
 
   return (
@@ -1374,7 +1388,48 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
           </div>
         )}
 
-        {/* ── Day Controls (admin only) ── */}
+        {/* ── HOST CONTROLS: pre-night → start first night ── */}
+        {isPreNight && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col items-center gap-3 px-4 py-4 rounded-2xl"
+              style={{ backgroundColor: "#0A0A1A", border: "1px solid #1A1A4A" }}>
+              <Moon size={28} color="#8888CC" />
+              <p className="text-sm font-bold text-center" style={{ color: "#AAAACC" }}>
+                الأقنعة وُزِّعت — اللعبة جاهزة للبدء
+              </p>
+            </div>
+            <button
+              onClick={handleStartNightPhase}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-5 rounded-2xl font-black text-lg transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#1A1A4A", borderColor: "#4444CC", border: "2px solid #4444CC", color: "#CCCCFF" }}>
+              <Moon size={22} strokeWidth={2.5} />
+              <span>بدء الليلة الأولى</span>
+            </button>
+          </div>
+        )}
+
+        {/* ── HOST CONTROLS: during night — advance to next phase ── */}
+        {canAdvance && (
+          <div className="flex flex-col gap-2">
+            {/* Current phase status label */}
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
+              style={{ backgroundColor: "#0D0D1A", border: "1px solid #2A2A5A" }}>
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#6666FF" }} />
+              <span className="text-xs font-bold" style={{ color: "#8888CC" }}>
+                المرحلة الحالية: {NIGHT_PHASE_LABELS[activeGamePhase] ?? activeGamePhase}
+              </span>
+            </div>
+            <button
+              onClick={handleAdvanceNight}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#1A1A4A", border: "1px solid #4444CC", color: "#CCCCFF" }}>
+              <Moon size={20} strokeWidth={2} />
+              <span>المرحلة التالية</span>
+            </button>
+          </div>
+        )}
+
+        {/* ── HOST CONTROLS: day — voting and next night ── */}
         {activeGamePhase === "day_discussion" && (
           <div className="flex flex-col gap-3">
             <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم المضيف</span>
@@ -1384,11 +1439,11 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
               <Sun size={20} strokeWidth={2} />
               <span>بدء التصويت</span>
             </button>
-            <button onClick={handleNextNight}
+            <button onClick={handleStartNightPhase}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#0A0A1A", borderColor: "#333366", color: "#8888CC" }}>
               <Moon size={20} strokeWidth={2} />
-              <span>تجاوز إلى الليلة التالية</span>
+              <span>بدء الليلة التالية</span>
             </button>
           </div>
         )}

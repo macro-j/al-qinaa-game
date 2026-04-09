@@ -34,16 +34,16 @@ interface NightActions {
 }
 
 interface Room {
-  code:              string;
-  hostId:            string;
-  hostUserId:        string;
-  hostName:          string;
-  players:           Player[];
-  started:           boolean;
-  roles:             Record<string, AssignedRole>;
-  nightActions:      NightActions;
-  votes:             Record<string, string>; // voterName → targetName
-  nightPhaseTimers?: ReturnType<typeof setTimeout>[];
+  code:            string;
+  hostId:          string;
+  hostUserId:      string;
+  hostName:        string;
+  players:         Player[];
+  started:         boolean;
+  roles:           Record<string, AssignedRole>;
+  nightActions:    NightActions;
+  votes:           Record<string, string>; // voterName → targetName
+  nightPhaseIndex: number; // index into NIGHT_SEQUENCE; -1 = not started
 }
 
 const rooms: Record<string, Room> = {};
@@ -110,35 +110,29 @@ function resolveMorning(code: string) {
   logger.info({ code, killedPlayerName, silencedPlayerName }, "Morning resolved");
 }
 
-// ─── Night Sequence ───────────────────────────────────────────────────────────
+// ─── Night Sequence (Manual State Machine) ────────────────────────────────────
 
-function startNightSequence(code: string) {
+const NIGHT_SEQUENCE = [
+  "night_sleep",
+  "night_wolf",
+  "night_shadow",
+  "night_seer",
+  "night_guard",
+  "day_discussion",
+] as const;
+
+/** Resets actions and starts the night from phase 0 (night_sleep). */
+function startNightPhase(code: string) {
   const room = rooms[code];
   if (!room) return;
 
-  room.nightPhaseTimers?.forEach(clearTimeout);
-  room.nightActions = freshNightActions();
-  // Reset silence flags for the new night
+  room.nightActions    = freshNightActions();
+  room.nightPhaseIndex = 0;
+  // Reset silence flags
   for (const p of room.players) p.isSilenced = false;
 
-  const nightScript: { delay: number; text: string; phase: string; resolve?: true }[] = [
-    { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",    phase: "night_sleep"  },
-    { delay:  12000, text: "قناع الذئب يفتح عيونه.. ويتحرك.",    phase: "night_wolf"   },
-    { delay:  24000, text: "قناع الظل يفتح عيونه.. ويسكت.",      phase: "night_shadow" },
-    { delay:  36000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",   phase: "night_seer"   },
-    { delay:  48000, text: "قناع الحارس يفتح عيونه.. ويحمي.",    phase: "night_guard"  },
-    { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",        phase: "day_discussion", resolve: true },
-  ];
-
-  room.nightPhaseTimers = nightScript.map(({ delay, text, phase, resolve }) =>
-    setTimeout(() => {
-      if (!rooms[code]) return;
-      if (resolve) resolveMorning(code);
-      io.to(code).emit("playAudio",   text);
-      io.to(code).emit("phaseUpdate", phase);
-      logger.info({ code, phase }, "Night phase broadcast");
-    }, delay),
-  );
+  io.to(code).emit("phaseUpdate", NIGHT_SEQUENCE[0]);
+  logger.info({ code, phase: NIGHT_SEQUENCE[0] }, "Night phase started (manual)");
 }
 
 // ─── HTTP + Socket.io Server ──────────────────────────────────────────────────
@@ -168,14 +162,15 @@ io.on("connection", (socket) => {
 
       const room: Room = {
         code,
-        hostId:     socket.id,
-        hostUserId: userId,
-        hostName:   name,
-        players:    [{ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false }],
-        started:    false,
-        roles:      {},
-        nightActions: freshNightActions(),
-        votes:      {},
+        hostId:          socket.id,
+        hostUserId:      userId,
+        hostName:        name,
+        players:         [{ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false }],
+        started:         false,
+        roles:           {},
+        nightActions:    freshNightActions(),
+        votes:           {},
+        nightPhaseIndex: -1,
       };
       rooms[code] = room;
       socket.join(code);
@@ -284,7 +279,6 @@ io.on("connection", (socket) => {
     socket.leave(code);
 
     if (wasHost || room.players.length === 0) {
-      room.nightPhaseTimers?.forEach(clearTimeout);
       delete rooms[code];
       io.to(code).emit("roomClosed");
       logger.info({ code, reason: wasHost ? "host left" : "empty" }, "Room dissolved on clean leave");
@@ -351,9 +345,10 @@ io.on("connection", (socket) => {
       isHost: true, code, players: assigned, wolfAllies: hostWolfAllies,
     });
 
-    logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
+    room.nightPhaseIndex = -1; // host will manually start first night
 
-    startNightSequence(code);
+    logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
+    // Night does NOT start automatically — host clicks 'بدء الليلة الأولى'
   });
 
   // ── Submit Night Action ────────────────────────────────────────────────────
@@ -480,18 +475,38 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // No winner yet — continue to next night
-    startNightSequence(code);
-    logger.info({ code }, "No winner — starting next night after execution");
+    // No winner yet — let host start the next night manually
+    startNightPhase(code);
+    logger.info({ code }, "No winner — night_sleep phase sent, host drives next night");
   });
 
-  // ── Host: Next Night ───────────────────────────────────────────────────────
-  socket.on("nextNight", ({ code }: { code: string }) => {
+  // ── Host: Start / Restart Night (goes to night_sleep) ────────────────────
+  socket.on("startNightPhase", ({ code }: { code: string }) => {
     const room = rooms[code];
     if (!room) return;
     if (room.hostId !== socket.id) return;
-    startNightSequence(code);
-    logger.info({ code }, "New night sequence started by host");
+    startNightPhase(code);
+    logger.info({ code }, "Night phase started by host button");
+  });
+
+  // ── Host: Advance Night Phase (move to next step) ─────────────────────────
+  socket.on("advanceNightPhase", ({ roomCode }: { roomCode: string }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+
+    const nextIndex = room.nightPhaseIndex + 1;
+    if (nextIndex >= NIGHT_SEQUENCE.length) return; // already at day_discussion
+
+    room.nightPhaseIndex = nextIndex;
+    const phase = NIGHT_SEQUENCE[nextIndex];
+
+    if (phase === "day_discussion") {
+      resolveMorning(roomCode); // resolve before emitting so clients get fresh data
+    }
+
+    io.to(roomCode).emit("phaseUpdate", phase);
+    logger.info({ roomCode, phase, index: nextIndex }, "Night phase advanced manually by host");
   });
 
   // ── Disconnect ─────────────────────────────────────────────────────────────
@@ -514,7 +529,6 @@ io.on("connection", (socket) => {
 
         const wasHost = room.hostUserId === player.userId;
         if (wasHost || room.players.length === 0) {
-          room.nightPhaseTimers?.forEach(clearTimeout);
           delete rooms[code];
           io.to(code).emit("roomClosed");
           logger.info({ code, reason: wasHost ? "host timed out" : "empty" }, "Room dissolved");
