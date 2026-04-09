@@ -702,16 +702,18 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   };
 
   // Build filtered target list using the authoritative alive list.
-  // alivePlayerNames is kept in sync at root App level (game start, morning, vote events).
-  // Wolf: alive players excluding self and wolf-team allies
-  // Shadow: ALL alive players (can silence self too)
-  // Seer, Guard: alive players excluding self
+  // Wolf:      alive players excluding self and wolf-team allies
+  // Shadow:    ALL alive players (can silence self too)
+  // Protector: ALL alive players (can self-protect)
+  // Seer:      alive players excluding self (cannot investigate self)
   const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
   const targetList: string[] = isWolf
     ? aliveOthers.filter((n) => !role.wolfAllies.includes(n))
     : isShadow
-      ? alivePlayerNames // shadow targets any alive player incl. self
-      : aliveOthers;
+      ? alivePlayerNames
+      : isProtector
+        ? alivePlayerNames  // guard may target self
+        : aliveOthers;      // seer excludes self
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);
@@ -878,20 +880,39 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                   {targetList.length === 0 ? (
                     <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا يوجد أهداف متاحة</p>
                   ) : (
-                    targetList.map((name) => (
-                      <div key={name}
-                        className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-                        style={{ backgroundColor: selectedTarget === name ? "#2A0000" : "#141414", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#222222"}` }}>
-                        <button
-                          onClick={() => handleSelectTarget(name)}
-                          disabled={actionSubmitted}
-                          className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
-                          style={{ backgroundColor: selectedTarget === name ? "#D32F2F" : "#1A1A1A", color: selectedTarget === name ? "#ffffff" : "#888888", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#333333"}`, opacity: actionSubmitted ? 0.5 : 1 }}>
-                          {selectedTarget === name ? "تم الاختيار" : "اختر"}
-                        </button>
-                        <span className="text-sm font-semibold" style={{ color: selectedTarget === name ? "#ffffff" : "#AAAAAA" }}>{name}</span>
-                      </div>
-                    ))
+                    targetList.map((name) => {
+                      const isAlly        = role.wolfAllies.includes(name);
+                      const isKillTarget  = isMafia && mafiaSync.killTarget    === name;
+                      const isSilTarget   = isMafia && mafiaSync.silenceTarget === name;
+                      const isSelected    = selectedTarget === name;
+                      const rowBorder     = isKillTarget ? "#FF4040" : isSilTarget ? "#FF8C42" : isSelected ? "#D32F2F" : "#222222";
+                      const rowBg         = isKillTarget ? "#200000" : isSilTarget ? "#201000" : isSelected ? "#2A0000" : "#141414";
+                      return (
+                        <div key={name}
+                          className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                          style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+                          <button
+                            onClick={() => handleSelectTarget(name)}
+                            disabled={actionSubmitted}
+                            className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
+                            style={{ backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A", color: isSelected ? "#ffffff" : "#888888", border: `1px solid ${isSelected ? "#D32F2F" : "#333333"}`, opacity: actionSubmitted ? 0.5 : 1 }}>
+                            {isSelected ? "تم الاختيار" : "اختر"}
+                          </button>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>{name}</span>
+                            {isAlly && (
+                              <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                            )}
+                            {isKillTarget && (
+                              <span className="text-xs font-bold" style={{ color: "#FF4040" }}>🔪 هدف الذئب</span>
+                            )}
+                            {isSilTarget && (
+                              <span className="text-xs font-bold" style={{ color: "#FF8C42" }}>🤐 هدف الظل</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
 
@@ -976,22 +997,30 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 <div className="flex flex-col gap-2">
                   {alivePlayerNames
                     .filter((n) => n !== role.myName)
-                    .map((name) => (
-                      <button
-                        key={name}
-                        onClick={() => {
-                          setVotedFor(name);
-                          getSocket().emit("submitVote", { targetName: name, roomCode: role.code });
-                        }}
-                        className="w-full flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95"
-                        style={{ backgroundColor: "#1A1A1A", border: "1px solid #2A2A2A", color: "#CCCCCC" }}>
-                        <span>{name}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-lg"
-                          style={{ backgroundColor: "#2A1800", color: "#FF8F00", border: "1px solid #FF8F00" }}>
-                          تصويت
-                        </span>
-                      </button>
-                    ))}
+                    .map((name) => {
+                      const isAlly = role.wolfAllies.includes(name);
+                      return (
+                        <button
+                          key={name}
+                          onClick={() => {
+                            setVotedFor(name);
+                            getSocket().emit("submitVote", { targetName: name, roomCode: role.code });
+                          }}
+                          className="w-full flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95"
+                          style={{ backgroundColor: "#1A1A1A", border: `1px solid ${isAlly ? "#5C1010" : "#2A2A2A"}`, color: "#CCCCCC" }}>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span>{name}</span>
+                            {isAlly && (
+                              <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                            )}
+                          </div>
+                          <span className="text-xs px-2 py-0.5 rounded-lg"
+                            style={{ backgroundColor: "#2A1800", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                            تصويت
+                          </span>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
             )}
