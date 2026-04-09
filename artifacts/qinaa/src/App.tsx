@@ -83,6 +83,11 @@ interface VoteUpdatePayload {
   totalAlive:       number;
 }
 
+interface MafiaActionSyncPayload {
+  actionType: "kill" | "silence";
+  targetName: string;
+}
+
 interface GameOverPayload {
   winner:              "wolves" | "citizens";
   executedPlayerName:  string | null;
@@ -664,6 +669,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
   const [actionSubmitted, setSubmitted]   = useState(false);
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
   const [votedFor, setVotedFor]           = useState<string | null>(null);
+  const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
   const isWolf         = role.label.includes("الذئب") && !role.label.includes("الظل");
   const isShadow       = role.label.includes("الظل");
@@ -722,12 +728,15 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
     setSubmitted(true);
   };
 
-  // Reset when phase changes
+  // Reset when phase changes (clear mafia sync on sleep or day)
   useEffect(() => {
     setSelected(null);
     setSubmitted(false);
     setInvResult(null);
     setVotedFor(null);
+    if (gamePhase === "night_sleep" || gamePhase === "day_discussion") {
+      setMafiaSync({ killTarget: null, silenceTarget: null });
+    }
   }, [gamePhase]);
 
   // Listen for private investigator result
@@ -737,6 +746,20 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
     socket.on("investigateResult", onResult);
     return () => { socket.off("investigateResult", onResult); };
   }, []);
+
+  // Listen for mafia team synergy updates (only relevant for wolf/shadow players)
+  useEffect(() => {
+    if (!isMafia) return;
+    const socket = getSocket();
+    const onSync = (payload: MafiaActionSyncPayload) => {
+      setMafiaSync((prev) => ({
+        killTarget:    payload.actionType === "kill"    ? payload.targetName : prev.killTarget,
+        silenceTarget: payload.actionType === "silence" ? payload.targetName : prev.silenceTarget,
+      }));
+    };
+    socket.on("mafiaActionSync", onSync);
+    return () => { socket.off("mafiaActionSync", onSync); };
+  }, [isMafia]);
 
   const reveal  = useCallback(() => setRevealed(true),  []);
   const conceal = useCallback(() => setRevealed(false), []);
@@ -908,6 +931,26 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
                 <p className="text-sm font-semibold text-center" style={{ color: "#333333" }}>المدينة نائمة... انتظر دورك</p>
               </div>
             )}
+
+            {/* ── Mafia Synergy Tactical Banner (wolf/shadow only) ── */}
+            {isMafia && (mafiaSync.killTarget || mafiaSync.silenceTarget) && (
+              <div className="flex flex-col gap-2 px-4 pb-4">
+                <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
+                <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
+                {mafiaSync.killTarget && (
+                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
+                    style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
+                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الذئب يخطط لقتل: {mafiaSync.killTarget}</span>
+                  </div>
+                )}
+                {mafiaSync.silenceTarget && (
+                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
+                    style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
+                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الظل سيُخرس: {mafiaSync.silenceTarget}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1042,6 +1085,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
   const [actionSubmitted, setSubmitted]   = useState(false);
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
   const [votedFor, setVotedFor]           = useState<string | null>(null);
+  const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
   const myEntry = game.players.find((p) => p.name === game.myName);
 
@@ -1098,6 +1142,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
     setSubmitted(false);
     setInvResult(null);
     setVotedFor(null);
+    if (activeGamePhase === "night_sleep" || activeGamePhase === "day_discussion") {
+      setMafiaSync({ killTarget: null, silenceTarget: null });
+    }
   }, [activeGamePhase]);
 
   // Listen for private investigator result (host may be seer)
@@ -1107,6 +1154,20 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
     socket.on("investigateResult", onResult);
     return () => { socket.off("investigateResult", onResult); };
   }, []);
+
+  // Listen for mafia team synergy updates (only relevant if host is wolf/shadow)
+  useEffect(() => {
+    if (!hostIsMafia) return;
+    const socket = getSocket();
+    const onSync = (payload: MafiaActionSyncPayload) => {
+      setMafiaSync((prev) => ({
+        killTarget:    payload.actionType === "kill"    ? payload.targetName : prev.killTarget,
+        silenceTarget: payload.actionType === "silence" ? payload.targetName : prev.silenceTarget,
+      }));
+    };
+    socket.on("mafiaActionSync", onSync);
+    return () => { socket.off("mafiaActionSync", onSync); };
+  }, [hostIsMafia]);
 
   const handleSubmitHostAction = () => {
     if (!selectedTarget) return;
@@ -1284,6 +1345,26 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAu
               <div className="flex flex-col items-center justify-center gap-3 py-4 px-4">
                 <Lock size={22} color="#2A2A2A" />
                 <p className="text-sm font-semibold text-center" style={{ color: "#333333" }}>انتظر دورك الليلي...</p>
+              </div>
+            )}
+
+            {/* ── Mafia Synergy Tactical Banner (host as wolf/shadow only) ── */}
+            {hostIsMafia && (mafiaSync.killTarget || mafiaSync.silenceTarget) && (
+              <div className="flex flex-col gap-2 px-4 pb-4">
+                <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
+                <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
+                {mafiaSync.killTarget && (
+                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
+                    style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
+                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الذئب يخطط لقتل: {mafiaSync.killTarget}</span>
+                  </div>
+                )}
+                {mafiaSync.silenceTarget && (
+                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
+                    style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
+                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الظل سيُخرس: {mafiaSync.silenceTarget}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

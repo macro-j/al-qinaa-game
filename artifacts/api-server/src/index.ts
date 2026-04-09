@@ -360,8 +360,12 @@ io.on("connection", (socket) => {
 
       logger.info({ roomCode, actionType, targetName }, "Night action received");
 
+      // ── HOST BLINDNESS: nightActions are server-only state, never emitted ──
+      // Only morningResults (killedPlayerName, silencedPlayerName) is broadcast.
+      // investigateResult goes only to the requesting socket. ─────────────────
+
       if (actionType === "kill") {
-        // Wolf cannot kill a fellow wolf-team member
+        // Wolf cannot kill a fellow wolf-team member (server-enforced)
         const targetRole = room.roles[targetName]?.label ?? "";
         const isTargetWolfTeam = targetRole.includes("الذئب") || targetRole.includes("الظل");
         if (isTargetWolfTeam) {
@@ -369,11 +373,36 @@ io.on("connection", (socket) => {
           return;
         }
         room.nightActions.killTarget = targetName;
+
+        // ── Mafia Synergy: privately notify ALL mafia members ─────────────
+        room.players
+          .filter((p) => {
+            const rl = room.roles[p.name]?.label ?? "";
+            return rl.includes("الذئب") || rl.includes("الظل");
+          })
+          .forEach((p) => {
+            io.to(p.socketId).emit("mafiaActionSync", { actionType: "kill", targetName });
+          });
+
       } else if (actionType === "silence") {
         room.nightActions.silenceTarget = targetName;
+
+        // ── Mafia Synergy: privately notify ALL mafia members ─────────────
+        room.players
+          .filter((p) => {
+            const rl = room.roles[p.name]?.label ?? "";
+            return rl.includes("الذئب") || rl.includes("الظل");
+          })
+          .forEach((p) => {
+            io.to(p.socketId).emit("mafiaActionSync", { actionType: "silence", targetName });
+          });
+
       } else if (actionType === "protect") {
+        // protectTarget is server-only — never emitted anywhere
         room.nightActions.protectTarget = targetName;
+
       } else if (actionType === "investigate") {
+        // investigateResult goes ONLY to the requesting socket — host-blind by default
         const target = room.players.find((p) => p.name === targetName);
         if (target) {
           const role = room.roles[target.name];
@@ -382,7 +411,7 @@ io.on("connection", (socket) => {
             roleLabel: role?.label ?? "مجهول",
             roleColor: role?.color ?? "#555555",
           });
-          logger.info({ roomCode, targetName, roleLabel: role?.label }, "Investigate result sent");
+          logger.info({ roomCode, targetName, roleLabel: role?.label }, "Investigate result sent (private)");
         }
       }
     },
