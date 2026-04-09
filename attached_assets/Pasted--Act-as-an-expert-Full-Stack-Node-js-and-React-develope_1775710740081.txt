@@ -1,0 +1,42 @@
+"Act as an expert Full-Stack Node.js and React developer. The user has clarified a crucial game design rule: The Host is also an active player playing from their own device, NOT a passive TV screen.
+
+CRITICAL TASK 1: Host is an Active Player (HostDashboard.tsx & PlayerScreen.tsx)
+
+The Host must be able to PLAY the game. If the Host is currently separated from the player logic, you must ensure the Host sees their own assigned Role Mask, can submit Night Actions, and can Vote, exactly like a regular player.
+
+The 'Host Controls' ('بدء التصويت', 'تجاوز إلى الليلة التالية', and 'إنهاء التصويت') should simply be rendered as extra Admin buttons visible ONLY to the Host, ideally integrated into their playing screen or dashboard.
+
+CRITICAL TASK 2: Sequential Night Phases (Backend index.ts)
+Replace the single night phase with a strict sequential state machine. When the Host clicks 'Start Game' (or 'Next Night'), the server must emit these phases in exact order (allow roughly 10-15 seconds per active role phase, or controlled by the host):
+
+night_start: Everyone sleeps.
+
+night_wolf: Only the Killer (قناع الذئب) wakes up and gets the UI to act.
+
+night_shadow: Only the Silencer (قناع الظل) wakes up.
+
+night_seer: Only the Investigator (قناع العرّاف) wakes up.
+
+night_guard: Only the Protector (قناع الحارس) wakes up.
+
+day_discussion: Everyone wakes up, resolve actions, emit morningResults.
+
+CRITICAL TASK 3: Restrict Action UI by Phase
+
+A player must ONLY see the target selection buttons if it is their specific active phase (e.g., currentPhase === 'night_wolf' && myRole === 'قناع الذئب').
+
+During other night phases, they just see 'المدينة تنام...' or 'انتظر دورك...'.
+
+CRITICAL TASK 4: Strict Targeting Rules
+
+Wolf (الذئب): Cannot target themselves or other Wolves. Filter the target list accordingly.
+
+Shadow (الظل): Can target ANYONE, including themselves or the Wolf.
+
+Seer & Guard: Cannot target themselves.
+
+CRITICAL TASK 5: Audio Mute Toggle for Host
+
+Add a visual 'Mute / Unmute Audio' toggle button (e.g., 🔊/🔇) to the Host's controls. This tracks a local state (isAudioEnabled) so the Host can decide whether their device plays the narration audio or if they want to narrate manually. Leave placeholders for the <audio> tags.
+
+Execute these updates so the Host can play and manage seamlessly from one screen, and the night happens in a strict, fair sequence."

@@ -16,8 +16,6 @@ import {
   Shuffle,
   Moon,
   Sun,
-  Shield,
-  Search,
   Skull,
   Mic,
   Loader2,
@@ -49,24 +47,24 @@ interface LobbyState {
 }
 
 interface MyRole {
-  label:   string;
-  color:   string;
-  code:    string;
-  myName:  string;
-  players: string[]; // other players' names (self excluded), for night action targeting
+  label:      string;
+  color:      string;
+  code:       string;
+  myName:     string;
+  players:    string[]; // all other player names (self excluded)
+  wolfAllies: string[]; // names of wolf-team allies (only populated for wolf/shadow)
 }
 
 interface GameState {
-  code:    string;
-  players: AssignedPlayer[];
-  myName:  string; // host's own display name — used to find their role card
+  code:       string;
+  players:    AssignedPlayer[];
+  myName:     string; // host's own display name — used to find their role card
+  wolfAllies: string[]; // host's own wolf allies (if host is wolf/shadow)
 }
 
 type GameStartedPayload =
-  | { isHost: true;  code: string; players: AssignedPlayer[] }
-  | { isHost: false; code: string; myRole: { label: string; color: string } };
-
-type PhaseKey = "night" | "mafia" | "investigator" | "protector" | "day";
+  | { isHost: true;  code: string; players: AssignedPlayer[]; wolfAllies: string[] }
+  | { isHost: false; code: string; myRole: { label: string; color: string }; wolfAllies: string[] };
 
 interface MorningResultsPayload {
   killedPlayerName:  string | null;
@@ -146,16 +144,6 @@ function getSocket(): Socket {
   }
   return _socket;
 }
-
-// ─── Phase Actions ────────────────────────────────────────────────────────────
-
-const PHASE_ACTIONS: { key: PhaseKey; label: string; sub: string; icon: React.ReactNode; accent: string }[] = [
-  { key: "night",        label: "بدء الليل",         sub: "أطفئ الأنوار",   icon: <Moon   size={20} strokeWidth={1.8} />, accent: "#1A1A4A" },
-  { key: "mafia",        label: "استيقاظ الذئاب",    sub: "الذئب والظل",    icon: <Skull  size={20} strokeWidth={1.8} />, accent: "#4A0000" },
-  { key: "investigator", label: "استيقاظ العرّاف",   sub: "العرّاف يحقق",  icon: <Search size={20} strokeWidth={1.8} />, accent: "#4A3000" },
-  { key: "protector",    label: "استيقاظ الحارس",    sub: "الحارس يحمي",   icon: <Shield size={20} strokeWidth={1.8} />, accent: "#003366" },
-  { key: "day",          label: "بدء النهار",         sub: "المداولة تبدأ", icon: <Sun    size={20} strokeWidth={1.8} />, accent: "#3A2000" },
-];
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 
@@ -677,32 +665,47 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
   const [votedFor, setVotedFor]           = useState<string | null>(null);
 
-  const isMafia        = role.label.includes("الذئب") || role.label.includes("الظل");
+  const isWolf         = role.label.includes("الذئب") && !role.label.includes("الظل");
   const isShadow       = role.label.includes("الظل");
+  const isMafia        = isWolf || isShadow;
   const isInvestigator = role.label.includes("العرّاف");
   const isProtector    = role.label.includes("الحارس");
 
   const isMyTurn =
-    (gamePhase === "night_mafia"        && isMafia)       ||
-    (gamePhase === "night_investigator" && isInvestigator) ||
-    (gamePhase === "night_protector"    && isProtector);
+    (gamePhase === "night_wolf"   && isWolf)         ||
+    (gamePhase === "night_shadow" && isShadow)       ||
+    (gamePhase === "night_seer"   && isInvestigator) ||
+    (gamePhase === "night_guard"  && isProtector);
 
   const isNightPhase = gamePhase.startsWith("night_");
 
-  const actionLabel = isShadow
-    ? "اختر من تُسكت الليلة"
-    : isMafia
-      ? "اختر هدفك الليلي"
+  const actionLabel = isWolf
+    ? "اختر هدفك الليلي (الذئب)"
+    : isShadow
+      ? "اختر من تُسكت الليلة (الظل)"
       : isInvestigator
-        ? "اختر من تحقق معه"
-        : "اختر من تحمي";
+        ? "اختر من تحقق معه (العرّاف)"
+        : "اختر من تحمي (الحارس)";
 
   const getActionType = (): string => {
+    if (isWolf)         return "kill";
     if (isShadow)       return "silence";
-    if (isMafia)        return "kill";
     if (isInvestigator) return "investigate";
     return "protect";
   };
+
+  // Build filtered target list per strict role rules:
+  // Wolf: all others EXCEPT self (already excluded) and wolf allies
+  // Shadow: all others INCLUDING self
+  // Seer, Guard: all others EXCEPT self (already excluded)
+  const aliveOthers = voteUpdate?.alivePlayerNames
+    ? voteUpdate.alivePlayerNames.filter((n) => n !== role.myName)
+    : role.players;
+  const targetList: string[] = isWolf
+    ? aliveOthers.filter((n) => !role.wolfAllies.includes(n))
+    : isShadow
+      ? [...aliveOthers, role.myName] // shadow can silence self too
+      : aliveOthers;
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);
@@ -849,10 +852,10 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, onLeave }: 
                 </div>
                 <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>{actionLabel}</p>
                 <div className="flex flex-col gap-2">
-                  {role.players.length === 0 ? (
-                    <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا يوجد لاعبون آخرون</p>
+                  {targetList.length === 0 ? (
+                    <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا يوجد أهداف متاحة</p>
                   ) : (
-                    role.players.map((name) => (
+                    targetList.map((name) => (
                       <div key={name}
                         className="flex items-center justify-between px-3 py-2.5 rounded-xl"
                         style={{ backgroundColor: selectedTarget === name ? "#2A0000" : "#141414", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#222222"}` }}>
@@ -1023,29 +1026,101 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, isAudioEnabled, onToggleAudio, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
+  isAudioEnabled: boolean;
+  onToggleAudio: () => void;
   onLeave: () => void;
 }) {
-  const [activePhase, setActivePhase] = useState<PhaseKey | null>(null);
   const [myRoleRevealed, setMyRoleRevealed] = useState(false);
+
+  // ── Host as active player: night action state ─────────────────────────
+  const [selectedTarget, setSelected]     = useState<string | null>(null);
+  const [actionSubmitted, setSubmitted]   = useState(false);
+  const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
+  const [votedFor, setVotedFor]           = useState<string | null>(null);
 
   const myEntry = game.players.find((p) => p.name === game.myName);
 
-  const handleStartVoting = () => {
-    getSocket().emit("startVoting", { code: game.code });
+  // Derive host's own role flags
+  const myRoleLabel    = myEntry?.roleLabel ?? "";
+  const myRoleColor    = myEntry?.roleColor ?? "#555555";
+  const hostIsWolf     = myRoleLabel.includes("الذئب") && !myRoleLabel.includes("الظل");
+  const hostIsShadow   = myRoleLabel.includes("الظل");
+  const hostIsMafia    = hostIsWolf || hostIsShadow;
+  const hostIsInvestigator = myRoleLabel.includes("العرّاف");
+  const hostIsProtector    = myRoleLabel.includes("الحارس");
+
+  const hostIsMyTurn =
+    (activeGamePhase === "night_wolf"   && hostIsWolf)         ||
+    (activeGamePhase === "night_shadow" && hostIsShadow)       ||
+    (activeGamePhase === "night_seer"   && hostIsInvestigator) ||
+    (activeGamePhase === "night_guard"  && hostIsProtector);
+
+  const isNightPhase = activeGamePhase.startsWith("night_");
+
+  const hostActionLabel = hostIsWolf
+    ? "اختر هدفك الليلي (الذئب)"
+    : hostIsShadow
+      ? "اختر من تُسكت الليلة (الظل)"
+      : hostIsInvestigator
+        ? "اختر من تحقق معه (العرّاف)"
+        : "اختر من تحمي (الحارس)";
+
+  const getHostActionType = (): string => {
+    if (hostIsWolf)         return "kill";
+    if (hostIsShadow)       return "silence";
+    if (hostIsInvestigator) return "investigate";
+    return "protect";
   };
 
-  const handleNextNight = () => {
-    getSocket().emit("nextNight", { code: game.code });
+  // Build host's targeting list — same strict rules as PlayerScreen
+  const allOthers = game.players
+    .filter((p) => p.name !== game.myName)
+    .map((p) => p.name);
+
+  const aliveOthers = voteUpdate?.alivePlayerNames
+    ? voteUpdate.alivePlayerNames.filter((n) => n !== game.myName)
+    : allOthers;
+
+  const hostTargetList: string[] = hostIsWolf
+    ? aliveOthers.filter((n) => !game.wolfAllies.includes(n))
+    : hostIsShadow
+      ? [...aliveOthers, game.myName] // shadow can silence self
+      : aliveOthers;
+
+  // Reset night action state when phase changes
+  useEffect(() => {
+    setSelected(null);
+    setSubmitted(false);
+    setInvResult(null);
+    setVotedFor(null);
+  }, [activeGamePhase]);
+
+  // Listen for private investigator result (host may be seer)
+  useEffect(() => {
+    const socket = getSocket();
+    const onResult = (payload: InvestigateResultPayload) => setInvResult(payload);
+    socket.on("investigateResult", onResult);
+    return () => { socket.off("investigateResult", onResult); };
+  }, []);
+
+  const handleSubmitHostAction = () => {
+    if (!selectedTarget) return;
+    getSocket().emit("submitNightAction", {
+      actionType: getHostActionType(),
+      targetName: selectedTarget,
+      roomCode:   game.code,
+    });
+    setSubmitted(true);
   };
 
-  const handleTallyAndExecute = () => {
-    getSocket().emit("tallyVotesAndExecute", { code: game.code });
-  };
+  const handleStartVoting     = () => getSocket().emit("startVoting",         { code: game.code });
+  const handleNextNight       = () => getSocket().emit("nextNight",            { code: game.code });
+  const handleTallyAndExecute = () => getSocket().emit("tallyVotesAndExecute", { code: game.code });
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
@@ -1053,102 +1128,154 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLe
 
         <TopBar />
 
+        {/* Header row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Mic size={16} color="#D32F2F" />
-            <span className="font-bold text-white text-base">لوحة تحكم الراوي</span>
+            <span className="font-bold text-white text-base">{game.myName}</span>
+            <span className="text-xs px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: "#3A0000", color: "#FF6B6B", fontSize: "0.65rem" }}>مضيف + لاعب</span>
           </div>
-          <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
-            style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "isolate" }}>
-            #{game.code}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Audio mute toggle */}
+            <button
+              onClick={onToggleAudio}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200"
+              style={{
+                backgroundColor: isAudioEnabled ? "#0D1F0D" : "#1A1A1A",
+                border: `1px solid ${isAudioEnabled ? "#4CAF50" : "#333333"}`,
+                color:  isAudioEnabled ? "#4CAF50" : "#555555",
+              }}>
+              {isAudioEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+              <span>{isAudioEnabled ? "صوت" : "كتم"}</span>
+            </button>
+            <span dir="ltr" className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+              style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "isolate" }}>
+              #{game.code}
+            </span>
+          </div>
         </div>
 
         {/* ── My Role Card (host's personal role, hidden by default) ── */}
         {myEntry && (
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>
-              بطاقة قناعي
-            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>بطاقة قناعي</span>
             <div
               onPointerDown={() => setMyRoleRevealed(true)}
               onPointerUp={() => setMyRoleRevealed(false)}
               onPointerLeave={() => setMyRoleRevealed(false)}
               onPointerCancel={() => setMyRoleRevealed(false)}
-              className="w-full rounded-xl border-2 flex items-center gap-4 px-4 py-4 select-none transition-all duration-300"
+              className="w-full rounded-xl border-2 flex items-center gap-4 px-4 py-3 select-none transition-all duration-300"
               style={{
                 backgroundColor: myRoleRevealed ? "#0A0000" : "#111111",
-                borderColor:     myRoleRevealed ? myEntry.roleColor : "#2A2A2A",
-                boxShadow:       myRoleRevealed ? `0 0 24px ${myEntry.roleColor}33` : "none",
+                borderColor:     myRoleRevealed ? myRoleColor : "#2A2A2A",
+                boxShadow:       myRoleRevealed ? `0 0 24px ${myRoleColor}33` : "none",
                 cursor: "pointer",
                 touchAction: "none",
                 userSelect: "none",
                 WebkitUserSelect: "none",
-              }}
-            >
+              }}>
               {myRoleRevealed ? (
                 <>
-                  <VenetianMask size={36} color={myEntry.roleColor} strokeWidth={1.3} className="flex-shrink-0" />
+                  <VenetianMask size={32} color={myRoleColor} strokeWidth={1.3} className="flex-shrink-0" />
                   <div className="flex flex-col items-end flex-1 min-w-0">
                     <span className="text-xs" style={{ color: "#666666" }}>قناعك</span>
-                    <span className="text-lg font-black leading-tight text-right"
-                      style={{ color: myEntry.roleColor, fontFamily: "serif" }}>
-                      {myEntry.roleLabel}
+                    <span className="text-base font-black leading-tight text-right" style={{ color: myRoleColor, fontFamily: "serif" }}>
+                      {myRoleLabel}
                     </span>
+                    {hostIsMafia && game.wolfAllies.length > 0 && (
+                      <span className="text-xs mt-0.5" style={{ color: "#D32F2F" }}>
+                        زميلك: {game.wolfAllies.join("، ")}
+                      </span>
+                    )}
                   </div>
-                  <Unlock size={16} color="#555555" className="flex-shrink-0" />
+                  <Unlock size={14} color="#555555" className="flex-shrink-0" />
                 </>
               ) : (
                 <>
                   <div className="relative flex-shrink-0">
-                    <VenetianMask size={36} color="#2A2A2A" strokeWidth={1.3} />
+                    <VenetianMask size={32} color="#2A2A2A" strokeWidth={1.3} />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <Lock size={14} color="#555555" />
+                      <Lock size={12} color="#555555" />
                     </div>
                   </div>
                   <div className="flex flex-col items-end flex-1 min-w-0">
                     <span className="text-sm font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
                     <span className="text-xs" style={{ color: "#333333" }}>اضغط وامسك للكشف</span>
                   </div>
-                  <Lock size={16} color="#333333" className="flex-shrink-0" />
+                  <Lock size={14} color="#333333" className="flex-shrink-0" />
                 </>
               )}
             </div>
           </div>
         )}
 
-        {/* Roster with eye toggle */}
-        <div className="rounded-xl border flex flex-col overflow-hidden" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#2A2A2A" }}>
-            <div className="flex items-center gap-2">
-              <Users size={15} color="#D32F2F" />
-              <span className="font-bold text-sm text-white">قائمة اللاعبين</span>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-              style={{ backgroundColor: "#1B5E20", color: "#4CAF50" }}>
-              {game.players.length} لاعب
-            </span>
-          </div>
-
-          <div className="flex flex-col max-h-64 overflow-y-auto">
-            {game.players.map((player, idx) => (
-              <div key={player.socketId} className="flex flex-row-reverse items-center gap-3 px-4 py-3"
-                style={{ borderBottom: idx < game.players.length - 1 ? "1px solid #1E1E1E" : "none" }}>
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                  style={{ backgroundColor: "#2A2A2A", color: "#9E9E9E" }}>{idx + 1}</div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-white text-sm font-semibold">{player.name}</span>
-                  <div className="flex flex-row-reverse items-center gap-1.5 mt-0.5">
-                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: "#4CAF50" }} />
-                    <span className="text-xs font-medium" style={{ color: "#4CAF50" }}>في اللعبة</span>
-                  </div>
+        {/* ── Night Action Panel (host as player) ── */}
+        {isNightPhase && (
+          <div className="w-full rounded-2xl overflow-hidden"
+            style={{ border: `1px solid ${hostIsMyTurn ? "#D32F2F" : "#1E1E1E"}`, backgroundColor: hostIsMyTurn ? "#0D0000" : "#0A0A0A" }}>
+            {hostIsMyTurn ? (
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>دورك الآن</span>
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#D32F2F" }} />
                 </div>
+                <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>{hostActionLabel}</p>
+                <div className="flex flex-col gap-2">
+                  {hostTargetList.length === 0 ? (
+                    <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا يوجد أهداف متاحة</p>
+                  ) : (
+                    hostTargetList.map((name) => (
+                      <div key={name} className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                        style={{ backgroundColor: selectedTarget === name ? "#2A0000" : "#141414", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#222222"}` }}>
+                        <button
+                          onClick={() => { setSelected(name); setSubmitted(false); }}
+                          disabled={actionSubmitted}
+                          className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
+                          style={{ backgroundColor: selectedTarget === name ? "#D32F2F" : "#1A1A1A", color: selectedTarget === name ? "#fff" : "#888", border: `1px solid ${selectedTarget === name ? "#D32F2F" : "#333"}`, opacity: actionSubmitted ? 0.5 : 1 }}>
+                          {selectedTarget === name ? "تم الاختيار" : "اختر"}
+                        </button>
+                        <span className="text-sm font-semibold" style={{ color: selectedTarget === name ? "#fff" : "#AAA" }}>
+                          {name}{name === game.myName ? " (أنت)" : ""}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {selectedTarget && !actionSubmitted && (
+                  <button onClick={handleSubmitHostAction}
+                    className="w-full py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
+                    style={{ backgroundColor: "#D32F2F", color: "#fff" }}>
+                    تأكيد الاختيار
+                  </button>
+                )}
+                {actionSubmitted && (
+                  <div className="flex items-center justify-center gap-2 py-2 rounded-xl"
+                    style={{ backgroundColor: "#0D2000", border: "1px solid #33691E" }}>
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#4CAF50" }} />
+                    <p className="text-xs font-bold" style={{ color: "#4CAF50" }}>تم تأكيد اختيارك</p>
+                  </div>
+                )}
+                {hostIsInvestigator && investigateResult && (
+                  <div className="flex flex-col gap-1 px-3 py-3 rounded-xl"
+                    style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
+                    <span className="text-xs font-semibold" style={{ color: "#888" }}>نتيجة التحقيق</span>
+                    <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
+                      {investigateResult.targetName}: {investigateResult.roleLabel}
+                    </span>
+                  </div>
+                )}
               </div>
-            ))}
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3 py-4 px-4">
+                <Lock size={22} color="#2A2A2A" />
+                <p className="text-sm font-semibold text-center" style={{ color: "#333333" }}>انتظر دورك الليلي...</p>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* ── Morning Results Banner (host view) ── */}
+        {/* ── Morning Results Banner ── */}
         {activeGamePhase === "day_discussion" && morningResults && (
           <div className="rounded-2xl flex flex-col gap-2 p-4"
             style={{ backgroundColor: morningResults.killedPlayerName ? "#1A0000" : "#001A0A", border: `1px solid ${morningResults.killedPlayerName ? "#D32F2F" : "#33691E"}` }}>
@@ -1169,17 +1296,56 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLe
           </div>
         )}
 
-        {/* ── Voting Phase Controls ── */}
+        {/* ── Voting: host casts their own vote + tally + execute ── */}
         {activeGamePhase === "voting" && (
           <div className="flex flex-col gap-3">
+            {/* Host's own vote */}
+            <div className="w-full rounded-2xl overflow-hidden"
+              style={{ border: "1px solid #FF8F00", backgroundColor: "#100A00" }}>
+              {votedFor ? (
+                <div className="flex flex-col items-center gap-2 py-4 px-4">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#FF8F00" }} />
+                  <p className="text-sm font-bold" style={{ color: "#FF8F00" }}>
+                    صوّتت ضد: <span style={{ color: "#fff" }}>{votedFor}</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#FF8F00" }}>صوّت أنت</span>
+                    <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#FF8F00" }} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {(voteUpdate?.alivePlayerNames ?? game.players.map((p) => p.name))
+                      .filter((n) => n !== game.myName)
+                      .map((name) => (
+                        <button key={name}
+                          onClick={() => {
+                            setVotedFor(name);
+                            getSocket().emit("submitVote", { targetName: name, roomCode: game.code });
+                          }}
+                          className="w-full flex flex-row-reverse items-center justify-between px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95"
+                          style={{ backgroundColor: "#1A1A1A", border: "1px solid #2A2A2A", color: "#CCC" }}>
+                          <span>{name}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-lg"
+                            style={{ backgroundColor: "#2A1800", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                            تصويت
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Live tally */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التصويت جارٍ</span>
+              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التصويت الكلي</span>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: "#1A1A1A", color: "#FF8F00", border: "1px solid #FF8F00" }}>
                 {voteUpdate ? Object.keys(voteUpdate.votes).length : 0} / {voteUpdate?.totalAlive ?? "..."} صوت
               </span>
             </div>
-            {/* Live vote display */}
             {voteUpdate && Object.keys(voteUpdate.votes).length > 0 && (
               <div className="rounded-xl flex flex-col overflow-hidden"
                 style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
@@ -1187,9 +1353,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLe
                   Object.values(voteUpdate.votes).reduce<Record<string, number>>((acc, t) => {
                     acc[t] = (acc[t] ?? 0) + 1; return acc;
                   }, {})
-                ).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
+                ).sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => (
                   <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
-                    style={{ borderBottom: i < Object.keys(voteUpdate.votes).length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                    style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
                     <span className="text-sm font-semibold text-white">{name}</span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
@@ -1197,29 +1363,28 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLe
                 ))}
               </div>
             )}
-            <button
-              onClick={handleTallyAndExecute}
+
+            {/* Execute button */}
+            <button onClick={handleTallyAndExecute}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#D32F2F", color: "#ffffff", border: "1px solid #FF6B6B" }}>
+              style={{ backgroundColor: "#D32F2F", color: "#fff", border: "1px solid #FF6B6B" }}>
               <Skull size={20} strokeWidth={2} />
               <span>إنهاء التصويت وإعدام المتهم</span>
             </button>
           </div>
         )}
 
-        {/* ── Day Controls (host only, during day_discussion) ── */}
+        {/* ── Day Controls (admin only) ── */}
         {activeGamePhase === "day_discussion" && (
           <div className="flex flex-col gap-3">
-            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم النهار</span>
-            <button
-              onClick={handleStartVoting}
+            <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم المضيف</span>
+            <button onClick={handleStartVoting}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F", color: "#D32F2F" }}>
               <Sun size={20} strokeWidth={2} />
               <span>بدء التصويت</span>
             </button>
-            <button
-              onClick={handleNextNight}
+            <button onClick={handleNextNight}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#0A0A1A", borderColor: "#333366", color: "#8888CC" }}>
               <Moon size={20} strokeWidth={2} />
@@ -1228,40 +1393,34 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, onLe
           </div>
         )}
 
-        {/* Phase Controls */}
-        <div className="flex flex-col gap-3">
-          <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التحكم في مراحل اللعبة</span>
-          <div className="grid grid-cols-1 gap-2">
-            {PHASE_ACTIONS.map((phase) => {
-              const isActive = activePhase === phase.key;
-              return (
-                <button key={phase.key} onClick={() => setActivePhase(isActive ? null : phase.key)}
-                  className="flex flex-row-reverse items-center gap-4 w-full px-4 py-3.5 rounded-xl border transition-all duration-200 active:scale-95"
-                  style={{ backgroundColor: isActive ? phase.accent : "#1A1A1A", borderColor: isActive ? "#D32F2F" : "#2A2A2A" }}>
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors duration-200"
-                    style={{ backgroundColor: isActive ? "#D32F2F" : "#242424", color: isActive ? "#ffffff" : "#9E9E9E" }}>
-                    {phase.icon}
-                  </div>
-                  <div className="flex flex-col items-end flex-1 min-w-0">
-                    <span className="text-sm font-bold leading-tight" style={{ color: isActive ? "#ffffff" : "#CCCCCC" }}>{phase.label}</span>
-                    <span className="text-xs mt-0.5" style={{ color: isActive ? "#FF8A80" : "#555555" }}>{phase.sub}</span>
-                  </div>
-                  {isActive && <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {activePhase && (
-          <div className="rounded-xl px-4 py-3 flex items-center gap-3 flex-row-reverse"
-            style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F" }}>
-            <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />
-            <span className="text-sm font-medium" style={{ color: "#FF8A80" }}>
-              المرحلة النشطة: {PHASE_ACTIONS.find((p) => p.key === activePhase)?.label}
+        {/* Roster */}
+        <div className="rounded-xl border flex flex-col overflow-hidden" style={{ backgroundColor: "#1A1A1A", borderColor: "#333333" }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#2A2A2A" }}>
+            <div className="flex items-center gap-2">
+              <Users size={15} color="#D32F2F" />
+              <span className="font-bold text-sm text-white">قائمة اللاعبين</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+              style={{ backgroundColor: "#1B5E20", color: "#4CAF50" }}>
+              {game.players.length} لاعب
             </span>
           </div>
-        )}
+          <div className="flex flex-col max-h-48 overflow-y-auto">
+            {game.players.map((player, idx) => (
+              <div key={player.socketId} className="flex flex-row-reverse items-center gap-3 px-4 py-2.5"
+                style={{ borderBottom: idx < game.players.length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ backgroundColor: "#2A2A2A", color: "#9E9E9E" }}>{idx + 1}</div>
+                <div className="flex-1 min-w-0 flex flex-row-reverse items-center gap-2">
+                  <span className="text-white text-sm font-semibold">{player.name}</span>
+                  {player.name === game.myName && (
+                    <span className="text-xs" style={{ color: "#555" }}>(أنت)</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <LeaveButton onLeave={onLeave} label="إنهاء الجلسة والخروج" />
         <Footer />
@@ -1289,15 +1448,19 @@ export default function App() {
   lobbyRef.current = lobby;
 
   // ── Host-only MP3 audio engine ───────────────────────────────────────────
-  const isHostRef       = useRef(false);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isHostRef           = useRef(false);
+  const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const isAudioEnabledRef   = useRef(false);
+  isAudioEnabledRef.current = isAudioEnabled;
 
   const PHASE_AUDIO: Record<string, string> = {
-    night_sleep:        "/sounds/sleep.mp3",
-    night_mafia:        "/sounds/mafia.mp3",
-    night_investigator: "/sounds/investigator.mp3",
-    night_protector:    "/sounds/protector.mp3",
-    day_discussion:     "/sounds/day.mp3",
+    night_sleep:   "/sounds/sleep.mp3",
+    night_wolf:    "/sounds/mafia.mp3",
+    night_shadow:  "/sounds/mafia.mp3",
+    night_seer:    "/sounds/investigator.mp3",
+    night_guard:   "/sounds/protector.mp3",
+    day_discussion: "/sounds/day.mp3",
   };
 
   const stopCurrentAudio = useCallback(() => {
@@ -1309,14 +1472,15 @@ export default function App() {
   }, []);
 
   const playPhaseAudio = useCallback((phase: string) => {
-    if (!isHostRef.current) return;
+    if (!isHostRef.current)           return;
+    if (!isAudioEnabledRef.current)   return;
     const src = PHASE_AUDIO[phase];
     if (!src) return;
     stopCurrentAudio();
     const audio = new Audio(src);
     currentAudioRef.current = audio;
     audio.play().catch(() => {});
-  }, [stopCurrentAudio]);
+  }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
@@ -1366,11 +1530,11 @@ export default function App() {
 
           if (res.isHost) {
             setLobby({ code: res.code, isHost: true, myName: session.myName, players: [] });
-            setGame({ code: res.code, players: res.players, myName: session.myName });
+            setGame({ code: res.code, players: res.players, myName: session.myName, wolfAllies: [] });
             setScreen("dashboard");
           } else {
             setLobby({ code: res.code, isHost: false, myName: session.myName, players: [] });
-            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName, players: [] });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName, players: [], wolfAllies: [] });
             setScreen("player-screen");
           }
         },
@@ -1414,10 +1578,10 @@ export default function App() {
             return;
           }
           if (res.isHost) {
-            setGame({ code: res.code, players: res.players, myName: current.myName });
+            setGame({ code: res.code, players: res.players, myName: current.myName, wolfAllies: [] });
             setScreen("dashboard");
           } else {
-            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName, players: [] });
+            setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName, players: [], wolfAllies: [] });
             setScreen("player-screen");
           }
         },
@@ -1427,8 +1591,11 @@ export default function App() {
     const onPhaseUpdate = (phase: string) => {
       setGamePhase(phase);
       playPhaseAudio(phase);
-      // Clear morning results at the start of a new night cycle
-      if (phase === "night_sleep") setMorningResults(null);
+      // At the start of a new night, clear stale day-phase state
+      if (phase === "night_sleep") {
+        setMorningResults(null);
+        setVoteUpdate(null);
+      }
     };
 
     const onMorningResults = (payload: MorningResultsPayload) => {
@@ -1467,7 +1634,12 @@ export default function App() {
     stopCurrentAudio();
     setGamePhase("lobby");
     if (payload.isHost) {
-      setGame({ code: payload.code, players: payload.players, myName: lobbyRef.current?.myName ?? "" });
+      setGame({
+        code: payload.code,
+        players: payload.players,
+        myName: lobbyRef.current?.myName ?? "",
+        wolfAllies: payload.wolfAllies ?? [],
+      });
       setScreen("dashboard");
     } else {
       const myName  = lobbyRef.current?.myName ?? "";
@@ -1475,11 +1647,12 @@ export default function App() {
         .map((p) => p.name)
         .filter((n) => n !== myName);
       setPlayerRole({
-        label:  payload.myRole.label,
-        color:  payload.myRole.color,
-        code:   payload.code,
+        label:      payload.myRole.label,
+        color:      payload.myRole.color,
+        code:       payload.code,
         myName,
         players,
+        wolfAllies: payload.wolfAllies ?? [],
       });
       setScreen("player-screen");
     }
@@ -1545,7 +1718,7 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {

@@ -122,11 +122,12 @@ function startNightSequence(code: string) {
   for (const p of room.players) p.isSilenced = false;
 
   const nightScript: { delay: number; text: string; phase: string; resolve?: true }[] = [
-    { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",         phase: "night_sleep"        },
-    { delay:  10000, text: "أصحاب قناع الذئب والظل.. يفتحون عيونهم.", phase: "night_mafia"        },
-    { delay:  30000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",         phase: "night_investigator" },
-    { delay:  45000, text: "قناع الحارس يفتح عيونه.. ويحمي.",          phase: "night_protector"    },
-    { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",              phase: "day_discussion",    resolve: true },
+    { delay:      0, text: "المدينة تنام.. الكل يغمض عيونه.",    phase: "night_sleep"  },
+    { delay:  12000, text: "قناع الذئب يفتح عيونه.. ويتحرك.",    phase: "night_wolf"   },
+    { delay:  24000, text: "قناع الظل يفتح عيونه.. ويسكت.",      phase: "night_shadow" },
+    { delay:  36000, text: "قناع العرّاف يفتح عيونه.. ويحقق.",   phase: "night_seer"   },
+    { delay:  48000, text: "قناع الحارس يفتح عيونه.. ويحمي.",    phase: "night_guard"  },
+    { delay:  60000, text: "المدينة تصحى.. ويبدأ النهار.",        phase: "day_discussion", resolve: true },
   ];
 
   room.nightPhaseTimers = nightScript.map(({ delay, text, phase, resolve }) =>
@@ -322,15 +323,32 @@ io.on("connection", (socket) => {
 
     room.started = true;
 
+    // Build a map of wolf-team names for ally awareness
+    const wolfTeamNames = assigned
+      .filter((p) => p.roleLabel.includes("الذئب") || p.roleLabel.includes("الظل"))
+      .map((p) => p.name);
+
     for (const ap of assigned) {
       if (ap.name === room.hostName) continue;
+      const isWolfTeam = ap.roleLabel.includes("الذئب") || ap.roleLabel.includes("الظل");
+      const wolfAllies = isWolfTeam
+        ? wolfTeamNames.filter((n) => n !== ap.name)
+        : [];
       io.to(ap.socketId).emit("gameStarted", {
-        isHost: false, code, myRole: { label: ap.roleLabel, color: ap.roleColor },
+        isHost: false, code, myRole: { label: ap.roleLabel, color: ap.roleColor }, wolfAllies,
       });
     }
 
+    // Host gets the full player roster (including their own role card visible via game.players)
+    // Also include wolfAllies for the host player's own role
+    const hostEntry = assigned.find((p) => p.name === room.hostName);
+    const hostIsWolfTeam = hostEntry && (hostEntry.roleLabel.includes("الذئب") || hostEntry.roleLabel.includes("الظل"));
+    const hostWolfAllies = hostIsWolfTeam
+      ? wolfTeamNames.filter((n) => n !== room.hostName)
+      : [];
+
     io.to(room.hostId).emit("gameStarted", {
-      isHost: true, code, players: assigned,
+      isHost: true, code, players: assigned, wolfAllies: hostWolfAllies,
     });
 
     logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
@@ -348,6 +366,13 @@ io.on("connection", (socket) => {
       logger.info({ roomCode, actionType, targetName }, "Night action received");
 
       if (actionType === "kill") {
+        // Wolf cannot kill a fellow wolf-team member
+        const targetRole = room.roles[targetName]?.label ?? "";
+        const isTargetWolfTeam = targetRole.includes("الذئب") || targetRole.includes("الظل");
+        if (isTargetWolfTeam) {
+          logger.warn({ roomCode, targetName }, "Wolf tried to kill wolf ally — rejected");
+          return;
+        }
         room.nightActions.killTarget = targetName;
       } else if (actionType === "silence") {
         room.nightActions.silenceTarget = targetName;
