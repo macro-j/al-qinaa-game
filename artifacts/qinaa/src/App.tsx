@@ -672,11 +672,11 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   const [votedFor, setVotedFor]           = useState<string | null>(null);
   const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
-  const isWolf         = role.label.includes("الذئب") && !role.label.includes("الظل");
-  const isShadow       = role.label.includes("الظل");
+  const isWolf         = role.label === "الولد";
+  const isShadow       = role.label === "الإكة";
   const isMafia        = isWolf || isShadow;
-  const isInvestigator = role.label.includes("العرّاف");
-  const isProtector    = role.label.includes("الحارس");
+  const isInvestigator = role.label === "الشايب";
+  const isProtector    = role.label === "البنت";
 
   const isMyTurn =
     (gamePhase === "night_wolf"   && isWolf)         ||
@@ -687,12 +687,12 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   const isNightPhase = gamePhase.startsWith("night_");
 
   const actionLabel = isWolf
-    ? "اختر هدفك الليلي (الذئب)"
+    ? "تذبح مين هذي الليلة يا ولد؟"
     : isShadow
-      ? "اختر من تُسكت الليلة (الظل)"
+      ? "تسكتين مين يا إكة الليلة؟"
       : isInvestigator
-        ? "اختر من تحقق معه (العرّاف)"
-        : "اختر من تحمي (الحارس)";
+        ? "تسأل عن مين يا شايب؟"
+        : "تحمين مين يا بنت؟";
 
   const getActionType = (): string => {
     if (isWolf)         return "kill";
@@ -763,6 +763,27 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
     return () => { socket.off("mafiaActionSync", onSync); };
   }, [isMafia]);
 
+  // Alert player when it becomes their turn (beep + vibrate)
+  useEffect(() => {
+    if (!isMyTurn) return;
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    } catch { /* AudioContext not supported */ }
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  }, [isMyTurn]);
+
   const reveal  = useCallback(() => setRevealed(true),  []);
   const conceal = useCallback(() => setRevealed(false), []);
 
@@ -806,6 +827,13 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                     style={{ color: role.color, fontFamily: "serif", direction: "rtl" }}>
                     {role.label}
                   </span>
+                  <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
+                    {role.label === "الولد"  && "أنت القاتل. اختر ضحيتك كل ليلة."}
+                    {role.label === "الإكة"  && "أنت الكاتم. امنع لاعب من الكلام غداً."}
+                    {role.label === "الشايب" && "أنت العرّاف. اكشف حقيقة لاعب كل ليلة."}
+                    {role.label === "البنت"  && "أنت الحارس. احمِ لاعباً من القتل."}
+                    {role.label === "المواطن" && "أنت من الشعب. ابحث عن المافيا وصوّت ضدهم."}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
                   <Unlock size={14} /><span className="text-xs">أنت ترى قناعك</span>
@@ -844,13 +872,13 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 style={{ backgroundColor: morningResults.killedPlayerName ? "#D32F2F" : "#4CAF50" }} />
               <p className="text-sm font-bold" style={{ color: morningResults.killedPlayerName ? "#FF6B6B" : "#8BC34A" }}>
                 {morningResults.killedPlayerName
-                  ? `اكتشفنا جثة ${morningResults.killedPlayerName}!`
+                  ? `اكتشفنا جثة المقتول: ${morningResults.killedPlayerName}`
                   : "مرت الليلة بسلام.. لم يمت أحد."}
               </p>
             </div>
             {morningResults.silencedPlayerName && (
               <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
-                {morningResults.silencedPlayerName} مخروس ولا يمكنه الكلام اليوم!
+                والساكت: {morningResults.silencedPlayerName}
               </p>
             )}
           </div>
@@ -904,10 +932,10 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                               <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
                             )}
                             {isKillTarget && (
-                              <span className="text-xs font-bold" style={{ color: "#FF4040" }}>🔪 هدف الذئب</span>
+                              <span className="text-xs font-bold" style={{ color: "#FF4040" }}>🔪 هدف الولد</span>
                             )}
                             {isSilTarget && (
-                              <span className="text-xs font-bold" style={{ color: "#FF8C42" }}>🤐 هدف الظل</span>
+                              <span className="text-xs font-bold" style={{ color: "#FF8C42" }}>🤐 هدف الإكة</span>
                             )}
                           </div>
                         </div>
@@ -961,13 +989,13 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 {mafiaSync.killTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الذئب يخطط لقتل: {mafiaSync.killTarget}</span>
+                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الولد يخطط لقتل: {mafiaSync.killTarget}</span>
                   </div>
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الظل سيُخرس: {mafiaSync.silenceTarget}</span>
+                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الإكة ستُسكت: {mafiaSync.silenceTarget}</span>
                   </div>
                 )}
               </div>
@@ -1122,11 +1150,11 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   // Derive host's own role flags
   const myRoleLabel    = myEntry?.roleLabel ?? "";
   const myRoleColor    = myEntry?.roleColor ?? "#555555";
-  const hostIsWolf     = myRoleLabel.includes("الذئب") && !myRoleLabel.includes("الظل");
-  const hostIsShadow   = myRoleLabel.includes("الظل");
-  const hostIsMafia    = hostIsWolf || hostIsShadow;
-  const hostIsInvestigator = myRoleLabel.includes("العرّاف");
-  const hostIsProtector    = myRoleLabel.includes("الحارس");
+  const hostIsWolf         = myRoleLabel === "الولد";
+  const hostIsShadow       = myRoleLabel === "الإكة";
+  const hostIsMafia        = hostIsWolf || hostIsShadow;
+  const hostIsInvestigator = myRoleLabel === "الشايب";
+  const hostIsProtector    = myRoleLabel === "البنت";
 
   const hostIsMyTurn =
     (activeGamePhase === "night_wolf"   && hostIsWolf)         ||
@@ -1137,12 +1165,12 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   const isNightPhase = activeGamePhase.startsWith("night_");
 
   const hostActionLabel = hostIsWolf
-    ? "اختر هدفك الليلي (الذئب)"
+    ? "تذبح مين هذي الليلة يا ولد؟"
     : hostIsShadow
-      ? "اختر من تُسكت الليلة (الظل)"
+      ? "تسكتين مين يا إكة الليلة؟"
       : hostIsInvestigator
-        ? "اختر من تحقق معه (العرّاف)"
-        : "اختر من تحمي (الحارس)";
+        ? "تسأل عن مين يا شايب؟"
+        : "تحمين مين يا بنت؟";
 
   const getHostActionType = (): string => {
     if (hostIsWolf)         return "kill";
@@ -1152,13 +1180,15 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   };
 
   // Build host's targeting list from the authoritative alive list.
-  // Same strict rules as PlayerScreen — uses shared alivePlayerNames prop.
+  // Mirrors PlayerScreen rules exactly (guard self-targeting included).
   const aliveOthers = alivePlayerNames.filter((n) => n !== game.myName);
   const hostTargetList: string[] = hostIsWolf
     ? aliveOthers.filter((n) => !game.wolfAllies.includes(n))
     : hostIsShadow
-      ? alivePlayerNames // shadow can target any alive player incl. self
-      : aliveOthers;
+      ? alivePlayerNames      // shadow can target any alive player incl. self
+      : hostIsProtector
+        ? alivePlayerNames    // guard can self-protect
+        : aliveOthers;        // seer excludes self
 
   // Reset night action state when phase changes
   useEffect(() => {
@@ -1206,19 +1236,17 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   // Phase labels for host status display
   const NIGHT_PHASE_LABELS: Record<string, string> = {
     night_sleep:  "المدينة نائمة — الكل يغمض عيونه",
-    night_wolf:   "قناع الذئب — يتحرك الآن",
-    night_shadow: "قناع الظل — يُسكت الآن",
-    night_seer:   "قناع العرّاف — يحقق الآن",
-    night_guard:  "قناع الحارس — يحمي الآن",
+    night_wolf:   "الولد — يتحرك الآن",
+    night_shadow: "الإكة — تُسكت الآن",
+    night_seer:   "الشايب — يحقق الآن",
+    night_guard:  "البنت — تحمي الآن",
   };
 
-  const isPreNight     = activeGamePhase === "lobby";
-  const isInNightSeq   = activeGamePhase.startsWith("night_");
-  const canAdvance     = isInNightSeq; // true for all night_ phases incl. night_guard → will go to day
+  const isPreNight   = activeGamePhase === "lobby";
+  const isInNightSeq = activeGamePhase.startsWith("night_");
 
-  const handleStartVoting     = () => getSocket().emit("startVoting",         { code: game.code });
-  const handleStartNightPhase = () => getSocket().emit("startNightPhase",     { code: game.code });
-  const handleAdvanceNight    = () => getSocket().emit("advanceNightPhase",   { roomCode: game.code });
+  const handleStartVoting     = () => getSocket().emit("startVoting",          { code: game.code });
+  const handleStartNightPhase = () => getSocket().emit("startNightPhase",      { code: game.code });
   const handleTallyAndExecute = () => getSocket().emit("tallyVotesAndExecute", { code: game.code });
 
   return (
@@ -1380,13 +1408,13 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 {mafiaSync.killTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الذئب يخطط لقتل: {mafiaSync.killTarget}</span>
+                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الولد يخطط لقتل: {mafiaSync.killTarget}</span>
                   </div>
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الظل سيُخرس: {mafiaSync.silenceTarget}</span>
+                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الإكة ستُسكت: {mafiaSync.silenceTarget}</span>
                   </div>
                 )}
               </div>
@@ -1403,13 +1431,13 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 style={{ backgroundColor: morningResults.killedPlayerName ? "#D32F2F" : "#4CAF50" }} />
               <p className="text-sm font-bold" style={{ color: morningResults.killedPlayerName ? "#FF6B6B" : "#8BC34A" }}>
                 {morningResults.killedPlayerName
-                  ? `اكتشفنا جثة ${morningResults.killedPlayerName}!`
+                  ? `اكتشفنا جثة المقتول: ${morningResults.killedPlayerName}`
                   : "مرت الليلة بسلام.. لم يمت أحد."}
               </p>
             </div>
             {morningResults.silencedPlayerName && (
               <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
-                {morningResults.silencedPlayerName} مخروس ولا يمكنه الكلام اليوم!
+                والساكت: {morningResults.silencedPlayerName}
               </p>
             )}
           </div>
@@ -1513,24 +1541,14 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         )}
 
-        {/* ── HOST CONTROLS: during night — advance to next phase ── */}
-        {canAdvance && (
-          <div className="flex flex-col gap-2">
-            {/* Current phase status label */}
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
-              style={{ backgroundColor: "#0D0D1A", border: "1px solid #2A2A5A" }}>
-              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#6666FF" }} />
-              <span className="text-xs font-bold" style={{ color: "#8888CC" }}>
-                المرحلة الحالية: {NIGHT_PHASE_LABELS[activeGamePhase] ?? activeGamePhase}
-              </span>
-            </div>
-            <button
-              onClick={handleAdvanceNight}
-              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#1A1A4A", border: "1px solid #4444CC", color: "#CCCCFF" }}>
-              <Moon size={20} strokeWidth={2} />
-              <span>المرحلة التالية</span>
-            </button>
+        {/* ── HOST CONTROLS: during night — auto-timer phase indicator ── */}
+        {isInNightSeq && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
+            style={{ backgroundColor: "#0D0D1A", border: "1px solid #2A2A5A" }}>
+            <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#6666FF" }} />
+            <span className="text-xs font-bold" style={{ color: "#8888CC" }}>
+              {NIGHT_PHASE_LABELS[activeGamePhase] ?? activeGamePhase}
+            </span>
           </div>
         )}
 

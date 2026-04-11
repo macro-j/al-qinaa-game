@@ -1,0 +1,33 @@
+
+"Act as an expert Full-Stack Node.js and React developer. The user wants to deeply localize the game roles to traditional Arabic Mafia names, update all narrative texts, add role descriptions to the cards, and revert the night phases to an automated 10-second timer triggered by the Host, including a turn-alert sound.
+> **CRITICAL TASK 1: Rename Roles & Update Logic (Backend & Frontend)**
+>  * Globally rename the roles in both index.ts (room generation) and Frontend:
+>    * 'قناع الذئب' -> **'الولد'**
+>    * 'قناع الظل' -> **'الإكة'**
+>    * 'قناع العرّاف' -> **'الشايب'**
+>    * 'قناع الحارس' -> **'البنت'**
+>    * 'قناع المواطن' -> **'المواطن'**
+>  * Update Backend logic: Mafia allies are now 'الولد' and 'الإكة'. The investigate result returns 'مافيا' for these two, and 'بريء' for the rest.
+> **CRITICAL TASK 2: Role Descriptions (PlayerScreen.tsx)**
+>  * During the role_reveal phase (when the card is shown), add a small, elegant text description below the role name:
+>    * الولد: 'أنت القاتل. اختر ضحيتك كل ليلة.'
+>    * الإكة: 'أنت الكاتم. امنع لاعب من الكلام غداً.'
+>    * الشايب: 'أنت العرّاف. اكشف حقيقة لاعب كل ليلة.'
+>    * البنت: 'أنت الحارس. احمِ لاعباً من القتل.'
+>    * المواطن: 'أنت من الشعب. ابحث عن المافيا وصوّت ضدهم.'
+> **CRITICAL TASK 3: Narrative & Morning Texts (PlayerScreen.tsx & App.tsx)**
+>  * Update the action banners for each phase:
+>    * night_wolf banner: 'تذبح مين هذي الليلة يا ولد؟'
+>    * night_shadow banner: 'تسكتين مين يا إكة الليلة؟'
+>    * night_seer banner: 'تسأل عن مين يا شايب؟'
+>    * night_guard banner: 'تحمين مين يا بنت؟'
+>  * Update Morning Results banner:
+>    * Kill text: 'اكتشفنا جثة المقتول: [Name]'
+>    * Silence text: 'والساكت: [Name]' (Remove 'مخروس' completely).
+> **CRITICAL TASK 4: Auto-Timer Night Sequence (Backend index.ts)**
+>  * Revert the night sequence to an automated state machine. When the Host emits startNightPhase, the backend should automatically progress through the array using setTimeout.
+>  * Timings: night_sleep (3 seconds) -> night_wolf (10s) -> night_shadow (10s) -> night_seer (10s) -> night_guard (10s) -> day_discussion.
+>  * Remove the manual 'المرحلة التالية' button from the Host dashboard, as it will auto-advance. Keep 'بدء الليلة الأولى/التالية' to trigger the automated loop.
+> **CRITICAL TASK 5: Turn Alert (Frontend PlayerScreen.tsx)**
+>  * Use the browser's native AudioContext or a simple base64 audio URI to play a short, crisp 'Beep' sound.
+>  * Use a useEffect to detect when isMyTurn becomes true. When it does, play the Beep sound (and trigger navigator.vibrate([200, 100, 200]) if supported) so the player knows to look at their screen before the 10 seconds run out."
