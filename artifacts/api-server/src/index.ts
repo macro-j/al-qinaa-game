@@ -483,17 +483,20 @@ io.on("connection", (socket) => {
 
       } else if (actionType === "investigate") {
         // investigateResult goes ONLY to the requesting socket — host-blind by default
-        // Returns verdict: 'مافيا' or 'بريء' — never the exact role label
+        // Returns a full Arabic verdict sentence with the player's name embedded
         const target = room.players.find((p) => p.name === targetName);
         if (target) {
           const targetRoleLabel = room.roles[target.name]?.label ?? "";
-          const isMafiaRole = targetRoleLabel.includes("الذئب") || targetRoleLabel.includes("الظل");
+          const isMafiaRole = targetRoleLabel === "الولد" || targetRoleLabel === "الإكة";
+          const verdict = isMafiaRole
+            ? `نعم، ${targetName} من المافيا`
+            : `لا، ${targetName} بريء`;
           socket.emit("investigateResult", {
             targetName,
-            roleLabel: isMafiaRole ? "مافيا" : "بريء",
+            roleLabel: verdict,
             roleColor: isMafiaRole ? "#D32F2F" : "#4CAF50",
           });
-          logger.info({ roomCode, targetName, verdict: isMafiaRole ? "مافيا" : "بريء" }, "Investigate verdict sent (private)");
+          logger.info({ roomCode, targetName, verdict }, "Investigate verdict sent (private)");
         }
       }
     },

@@ -1,0 +1,22 @@
+> "Act as an expert Full-Stack Node.js and React developer. We need to fix the Host role visibility, refine the Seer's investigation result, replace the Settings button with a Game Guide, and fix the audio alert issue.
+> **CRITICAL TASK 1: Show Host Role Card (HostDashboard.tsx)**
+>  * The Host is currently not seeing their assigned role card. Ensure the RoleReveal component (the press-and-hold card) is rendered at the top of the HostDashboard during the role_reveal phase, exactly like it is for regular players.
+> **CRITICAL TASK 2: Refine Seer (الشايب) Result (index.ts & PlayerScreen.tsx)**
+>  * In the backend submitNightAction for 'investigate', change the result logic:
+>    * If the target is 'الولد' or 'الإكة', return: **'نعم، [اسم اللاعب] من المافيا'**.
+>    * If the target is innocent, return: **'لا، [اسم اللاعب] بريء'**.
+>  * Ensure this text is displayed clearly in the Seer's night panel.
+> **CRITICAL TASK 3: Replace Settings with 'How to Play' (Landing Page)**
+>  * In the main menu/landing page, replace the 'إعدادات' (Settings) button with **'شرح اللعبة'** (Game Guide).
+>  * When clicked, show a clean, centered Modal or Overlay with this text:
+>    * 'الهدف: أنت في قرية غامضة. إذا كنت من الشعب، هدفك هو كشف المافيا والتصويت ضدهم للنجاة. إذا كنت من المافيا (الولد أو الإكة)، هدفك هو تصفية الشعب والسيطرة على القرية دون أن ينكشف أمرك.'
+>    * Add brief descriptions for the 4 key roles (الولد، الإكة، الشايب، البنت).
+> **CRITICAL TASK 4: Update Victory Texts (GameOverScreen.tsx)**
+>  * Change the game over headlines:
+>    * If Wolves win: **'انتصرت المافيا.. سقطت القرية!'**
+>    * If Citizens win: **'انتصر الشعب.. تم القضاء على المافيا!'**
+> **CRITICAL TASK 5: Fix Audio Beep & Interaction (App.tsx)**
+>  * The turn-alert beep is not audible on some devices.
+>  * Create a 'Sync Audio' or 'تفعيل الصوت' hidden trigger or ensure the first interaction (Start Game button) initializes the AudioContext correctly.
+>  * Increase the beep volume or duration slightly to ensure it is noticed during phase transitions.
+> Execute these changes to finalize the game's polish and logic."

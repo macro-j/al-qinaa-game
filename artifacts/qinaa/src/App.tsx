@@ -6,7 +6,7 @@ import {
   Plus,
   LogIn,
   LogOut,
-  Settings,
+  BookOpen,
   Copy,
   Check,
   Volume2,
@@ -228,7 +228,16 @@ function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
 
 // ─── Main Menu ────────────────────────────────────────────────────────────────
 
+const GUIDE_ROLES = [
+  { label: "الولد",   color: "#D32F2F", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
+  { label: "الإكة",  color: "#B71C1C", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
+  { label: "الشايب", color: "#FF8F00", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
+  { label: "البنت",  color: "#1565C0", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
+];
+
 function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
+  const [showGuide, setShowGuide] = useState(false);
+
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
@@ -244,11 +253,71 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
           <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
             <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
           </button>
-          <button className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <Settings size={22} color="#D32F2F" strokeWidth={2.5} /><span>إعدادات</span>
+          <button onClick={() => setShowGuide(true)} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <BookOpen size={22} color="#D32F2F" strokeWidth={2.5} /><span>شرح اللعبة</span>
           </button>
         </div>
       </div>
+
+      {/* ── Game Guide Modal ── */}
+      {showGuide && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.88)" }}
+          onClick={() => setShowGuide(false)}>
+          <div
+            className="w-full max-w-sm rounded-2xl flex flex-col gap-5 p-6 overflow-y-auto max-h-[90vh]"
+            style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
+            onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <button onClick={() => setShowGuide(false)}
+                className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+                style={{ backgroundColor: "#1A1A1A", color: "#555555", border: "1px solid #333333" }}>
+                إغلاق
+              </button>
+              <div className="flex items-center gap-2">
+                <BookOpen size={18} color="#D32F2F" />
+                <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
+              </div>
+            </div>
+
+            {/* Objective */}
+            <div className="rounded-xl px-4 py-4 flex flex-col gap-2"
+              style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
+              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+                أنت في قرية غامضة. إذا كنت من الشعب، هدفك هو كشف المافيا والتصويت ضدهم للنجاة. إذا كنت من المافيا (الولد أو الإكة)، هدفك هو تصفية الشعب والسيطرة على القرية دون أن ينكشف أمرك.
+              </p>
+            </div>
+
+            {/* Role cards */}
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
+              {GUIDE_ROLES.map((r) => (
+                <div key={r.label} className="flex flex-row-reverse items-start gap-3 rounded-xl px-4 py-3"
+                  style={{ backgroundColor: "#0D0D0D", border: `1px solid ${r.color}22` }}>
+                  <VenetianMask size={20} color={r.color} strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                  <div className="flex flex-col items-end gap-0.5 flex-1">
+                    <span className="font-black text-sm" style={{ color: r.color, fontFamily: "serif" }}>{r.label}</span>
+                    <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>{r.desc}</span>
+                  </div>
+                </div>
+              ))}
+              <div className="flex flex-row-reverse items-start gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #33333322" }}>
+                <VenetianMask size={20} color="#555555" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col items-end gap-0.5 flex-1">
+                  <span className="font-black text-sm" style={{ color: "#777777", fontFamily: "serif" }}>المواطن</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب — لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-center" style={{ color: "#333333" }}>اضغط خارج النافذة للإغلاق</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -763,21 +832,30 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
     return () => { socket.off("mafiaActionSync", onSync); };
   }, [isMafia]);
 
+  // Persistent AudioContext ref — created once, reused on every turn alert
+  const alertCtxRef = useRef<AudioContext | null>(null);
+
   // Alert player when it becomes their turn (beep + vibrate)
   useEffect(() => {
     if (!isMyTurn) return;
     try {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
+      if (!alertCtxRef.current || alertCtxRef.current.state === "closed") {
+        alertCtxRef.current = new AudioContext();
+      }
+      const ctx = alertCtxRef.current;
+      const playBeep = (startOffset: number) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, ctx.currentTime + startOffset);
+        gain.gain.setValueAtTime(0.7, ctx.currentTime + startOffset);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + 0.35);
+        osc.start(ctx.currentTime + startOffset);
+        osc.stop(ctx.currentTime + startOffset + 0.35);
+      };
+      ctx.resume().then(() => { playBeep(0); playBeep(0.45); });
     } catch { /* AudioContext not supported */ }
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
@@ -969,7 +1047,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                     style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
                     <span className="text-xs font-semibold" style={{ color: "#888888" }}>نتيجة التحقيق</span>
                     <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
-                      {investigateResult.targetName}: {investigateResult.roleLabel}
+                      {investigateResult.roleLabel}
                     </span>
                   </div>
                 )}
@@ -1099,10 +1177,10 @@ function GameOverScreen({ result, isHost, onEnd }: {
           <span
             className="text-5xl font-black leading-tight"
             style={{ color: wolvesWon ? "#D32F2F" : "#4CAF50", fontFamily: "serif" }}>
-            {wolvesWon ? "انتصر الذئاب" : "انتصرت المدينة"}
+            {wolvesWon ? "انتصرت المافيا" : "انتصر الشعب"}
           </span>
           <p className="text-base font-semibold" style={{ color: wolvesWon ? "#FF6B6B" : "#8BC34A" }}>
-            {wolvesWon ? "المدينة سقطت!" : "تم القضاء على الذئاب!"}
+            {wolvesWon ? "سقطت القرية!" : "تم القضاء على المافيا!"}
           </p>
         </div>
 
@@ -1283,8 +1361,72 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         </div>
 
-        {/* ── My Role Card (host's personal role, hidden by default) ── */}
-        {myEntry && (
+        {/* ── My Role Card: big centered card only during role_reveal phase ── */}
+        {myEntry && activeGamePhase === "role_reveal" && (
+          <div className="flex flex-col gap-3">
+            <div
+              onPointerDown={() => setMyRoleRevealed(true)}
+              onPointerUp={() => setMyRoleRevealed(false)}
+              onPointerLeave={() => setMyRoleRevealed(false)}
+              onPointerCancel={() => setMyRoleRevealed(false)}
+              className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none transition-all duration-300"
+              style={{
+                backgroundColor: myRoleRevealed ? "#0A0000" : "#111111",
+                borderColor:     myRoleRevealed ? myRoleColor : "#2A2A2A",
+                boxShadow:       myRoleRevealed ? `0 0 40px ${myRoleColor}33` : "none",
+                cursor: "pointer", touchAction: "none",
+                userSelect: "none", WebkitUserSelect: "none",
+              }}>
+              {myRoleRevealed ? (
+                <>
+                  <VenetianMask size={64} color={myRoleColor} strokeWidth={1.2} />
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
+                    <span className="text-3xl font-black text-center leading-tight"
+                      style={{ color: myRoleColor, fontFamily: "serif", direction: "rtl" }}>
+                      {myRoleLabel}
+                    </span>
+                    <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
+                      {myRoleLabel === "الولد"   && "أنت القاتل. اختر ضحيتك كل ليلة."}
+                      {myRoleLabel === "الإكة"   && "أنت الكاتم. امنع لاعب من الكلام غداً."}
+                      {myRoleLabel === "الشايب"  && "أنت العرّاف. اكشف حقيقة لاعب كل ليلة."}
+                      {myRoleLabel === "البنت"   && "أنت الحارس. احمِ لاعباً من القتل."}
+                      {myRoleLabel === "المواطن" && "أنت من الشعب. ابحث عن المافيا وصوّت ضدهم."}
+                    </span>
+                    {hostIsMafia && game.wolfAllies.length > 0 && (
+                      <span className="text-xs mt-1" style={{ color: "#D32F2F" }}>زميلك: {game.wolfAllies.join("، ")}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
+                    <Unlock size={14} /><span className="text-xs">أنت ترى قناعك</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="relative">
+                    <VenetianMask size={64} color="#2A2A2A" strokeWidth={1.2} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Lock size={22} color="#555555" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-xl font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
+                    <span className="text-sm text-center" style={{ color: "#333333" }}>اضغط وامسك للكشف عن قناعك</span>
+                  </div>
+                  <div className="flex items-center gap-2" style={{ color: "#333333" }}>
+                    <Lock size={14} /><span className="text-xs">مخفي عن الجميع</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
+              {myRoleRevealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
+            </p>
+          </div>
+        )}
+
+        {/* ── My Role Card (compact, shown after role_reveal phase) ── */}
+        {myEntry && activeGamePhase !== "role_reveal" && (
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>بطاقة قناعي</span>
             <div
@@ -1388,7 +1530,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                     style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
                     <span className="text-xs font-semibold" style={{ color: "#888" }}>نتيجة التحقيق</span>
                     <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
-                      {investigateResult.targetName}: {investigateResult.roleLabel}
+                      {investigateResult.roleLabel}
                     </span>
                   </div>
                 )}
