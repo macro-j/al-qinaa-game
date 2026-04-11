@@ -581,9 +581,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // No winner yet — let host start the next night manually
-    startNightPhase(code);
-    logger.info({ code }, "No winner — night_sleep phase sent, host drives next night");
+    // No winner yet — return to day_discussion so host manually starts next night
+    io.to(code).emit("phaseUpdate", "day_discussion");
+    logger.info({ code }, "No winner after execution — waiting for host to start next night");
   });
 
   // ── Host: Start / Restart Night (goes to night_sleep) ────────────────────

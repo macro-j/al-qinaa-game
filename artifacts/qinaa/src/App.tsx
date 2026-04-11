@@ -1552,21 +1552,23 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         )}
 
-        {/* ── HOST CONTROLS: day — voting and next night ── */}
+        {/* ── HOST CONTROLS: day — next night (primary) + voting (secondary) ── */}
         {activeGamePhase === "day_discussion" && (
           <div className="flex flex-col gap-3">
             <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم المضيف</span>
+            {/* PRIMARY: start next night — host must tap this to advance */}
+            <button onClick={handleStartNightPhase}
+              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 shadow-lg"
+              style={{ backgroundColor: "#D32F2F", color: "#FFFFFF", border: "none" }}>
+              <Moon size={20} strokeWidth={2.5} />
+              <span>بدء الليلة التالية</span>
+            </button>
+            {/* SECONDARY: open voting */}
             <button onClick={handleStartVoting}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F", color: "#D32F2F" }}>
+              style={{ backgroundColor: "#1A1A1A", borderColor: "#555555", color: "#999999" }}>
               <Sun size={20} strokeWidth={2} />
               <span>بدء التصويت</span>
-            </button>
-            <button onClick={handleStartNightPhase}
-              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#0A0A1A", borderColor: "#333366", color: "#8888CC" }}>
-              <Moon size={20} strokeWidth={2} />
-              <span>بدء الليلة التالية</span>
             </button>
           </div>
         )}
