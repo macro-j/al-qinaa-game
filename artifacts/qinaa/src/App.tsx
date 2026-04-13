@@ -2061,7 +2061,7 @@ export default function App() {
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
     isHostRef.current = payload.isHost;
     stopCurrentAudio();
-    setGamePhase("lobby");
+    setGamePhase("role_reveal");
     if (payload.isHost) {
       setGame({
         code: payload.code,
