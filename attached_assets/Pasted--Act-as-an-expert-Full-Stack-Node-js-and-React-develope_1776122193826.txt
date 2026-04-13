@@ -1,0 +1,67 @@
+"Act as an expert Full-Stack Node.js and React developer. The user has playtested the game and found 8 critical bugs. You MUST fix all of them strictly according to these rules. Do not ignore any task.
+
+CRITICAL TASK 1: RTL Room Code Bug (PlayerScreen.tsx & HostDashboard.tsx)
+
+The room code displays backwards due to Arabic RTL layout.
+
+Wrap the room code text in a span or div with style={{ direction: 'ltr', unicodeBidi: 'plaintext', letterSpacing: '2px' }} to ensure it reads correctly (e.g., A B C D).
+
+CRITICAL TASK 2: Global Night Phase Visibility (PlayerScreen.tsx)
+
+Currently, only the Host sees which role is acting.
+
+Modify the night phase waiting screen for regular players. Instead of just 'انتظر دورك', display the actual active phase label to ALL players (e.g., 'الولد يتحرك الآن...', 'الإكة تتحرك الآن...').
+
+CRITICAL TASK 3: Overlapping Kill & Silence (App.tsx or where Morning Results are rendered)
+
+If the Wolf (الولد) and Shadow (الإكة) target the exact same person, the morning banner must announce both.
+
+If killedPlayerId === silencedPlayerId, the text should clearly state: 'اكتشفنا جثة المقتول: [اسم].. والمفارقة أنه كان ساكتاً أيضاً!'
+
+CRITICAL TASK 4: Instant Win Check (index.ts backend)
+
+The game only ends after voting. It MUST also check for game over immediately after resolveMorning() resolves the night kills.
+
+Call the win condition check right after processing the night kill. If Mafia >= Citizens, or Mafia == 0, trigger gameOver immediately without going to day_discussion.
+
+CRITICAL TASK 5: Strict Target Filtering (PlayerScreen.tsx)
+
+Fix the targetList filter strictly to these rules (only isAlive === true players):
+
+الولد (Wolf): Sees ALL alive players EXCEPT himself (id !== socket.id).
+
+الإكة (Shadow): Sees ALL alive players INCLUDING himself (No filter).
+
+الشايب (Seer): Sees ALL alive players EXCEPT himself (id !== socket.id).
+
+البنت (Guard): Sees ALL alive players INCLUDING herself (No filter).
+
+CRITICAL TASK 6: Synchronized Countdowns (index.ts & Frontend)
+
+The players need to see the timers. When the server changes phases, emit a phaseEndTime timestamp (e.g., Date.now() + duration).
+
+Implement a visual countdown UI (e.g., ⏳ 00:09) in PlayerScreen and HostDashboard.
+
+Night Active Roles: 10 seconds.
+
+Day Discussion (day_discussion): Add an auto-timer of 25 seconds before the Host is forced/prompted to start Voting.
+
+Voting Phase (voting): Add an auto-timer of 30 seconds.
+
+CRITICAL TASK 7: Advanced Voting Logic (index.ts backend)
+
+In tallyVotesAndExecute:
+
+Rule 1: A player is ONLY executed if their votes are STRICTLY GREATER THAN half of the alive players (votes > Math.floor(totalAlive / 2)).
+
+Rule 2: If there is a tie for the most votes, NO ONE is executed.
+
+If either rule fails, emit executionResult with null (nobody executed) and transition to night/sleep.
+
+CRITICAL TASK 8: Kick Dead Players (App.tsx & PlayerScreen.tsx)
+
+Dead players (especially Mafia) are seeing the voting screen.
+
+If a player's isAlive state becomes false, they MUST NOT see the game screens anymore.
+
+Render a distinct red 'Dead Screen' saying 'لقد قُتلت وتم استبعادك من الجلسة' with a button 'العودة للرئيسية' that disconnects them and returns them to the start screen. They cannot vote or act."

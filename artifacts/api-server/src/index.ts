@@ -137,6 +137,19 @@ function clearNightTimers(room: Room) {
   room.nightTimers = [];
 }
 
+/** Shared win-condition helper — used after night kill and after vote execution. */
+function checkWinConditions(code: string): "citizens" | "wolves" | null {
+  const room = rooms[code];
+  if (!room) return null;
+  const isMafiaLbl    = (lbl: string) => lbl === "الولد" || lbl === "الإكة";
+  const alivePlayers  = room.players.filter((p) => p.isAlive);
+  const aliveWolves   = alivePlayers.filter((p) => isMafiaLbl(room.roles[p.name]?.label ?? ""));
+  const aliveCitizens = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? ""));
+  if (aliveWolves.length === 0)                       return "citizens";
+  if (aliveWolves.length >= aliveCitizens.length)     return "wolves";
+  return null;
+}
+
 /** Resets actions and starts the night from phase 0 (night_sleep), auto-advancing each phase. */
 function startNightPhase(code: string) {
   const room = rooms[code];
@@ -147,7 +160,9 @@ function startNightPhase(code: string) {
   room.nightPhaseIndex = 0;
   for (const p of room.players) p.isSilenced = false;
 
+  const sleepDuration = NIGHT_PHASE_DURATIONS["night_sleep"] ?? 3_000;
   io.to(code).emit("phaseUpdate", "night_sleep");
+  io.to(code).emit("phaseTimer", { endsAt: Date.now() + sleepDuration });
   logger.info({ code, phase: "night_sleep" }, "Night phase started (auto-timer)");
 
   // Schedule each subsequent phase
@@ -160,10 +175,23 @@ function startNightPhase(code: string) {
     const t = setTimeout(() => {
       if (!rooms[code]) return; // room was dissolved
       room.nightPhaseIndex = i + 1;
+
       if (toPhase === "day_discussion") {
-        resolveMorning(code); // resolve before emitting so clients get fresh data
+        resolveMorning(code); // applies kill/silence, emits morningResults
+        // Immediate win check after night kill
+        const winner = checkWinConditions(code);
+        if (winner) {
+          io.to(code).emit("gameOver", { winner, executedPlayerName: null });
+          logger.info({ code, winner }, "Game over after night kill");
+          return;
+        }
+        io.to(code).emit("phaseUpdate", "day_discussion");
+        io.to(code).emit("phaseTimer", { endsAt: Date.now() + 25_000 });
+      } else {
+        io.to(code).emit("phaseUpdate", toPhase);
+        const phaseDuration = NIGHT_PHASE_DURATIONS[toPhase] ?? 10_000;
+        io.to(code).emit("phaseTimer", { endsAt: Date.now() + phaseDuration });
       }
-      io.to(code).emit("phaseUpdate", toPhase);
       logger.info({ code, phase: toPhase, index: i + 1 }, "Night phase auto-advanced");
     }, delay);
     room.nightTimers.push(t);
@@ -510,6 +538,7 @@ io.on("connection", (socket) => {
     room.votes = {};
     const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
     io.to(code).emit("phaseUpdate", "voting");
+    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 30_000 });
     io.to(code).emit("voteUpdate", { votes: {}, alivePlayerNames, totalAlive: alivePlayerNames.length });
     logger.info({ code }, "Phase → voting");
   });
@@ -543,6 +572,7 @@ io.on("connection", (socket) => {
     if (room.hostId !== socket.id) return;
 
     // Count votes per target
+    const totalAlive = room.players.filter((p) => p.isAlive).length;
     const tally: Record<string, number> = {};
     for (const targetName of Object.values(room.votes)) {
       tally[targetName] = (tally[targetName] ?? 0) + 1;
@@ -552,40 +582,40 @@ io.on("connection", (socket) => {
     const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
 
     if (entries.length > 0) {
-      const [topTarget] = entries[0];
-      const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
-      if (victim) {
-        victim.isAlive     = false;
-        executedPlayerName = victim.name;
-        logger.info({ code, executedPlayerName }, "Player executed by vote");
+      const [topTarget, topVotes] = entries[0];
+      // Rule 2: tie → no execution
+      const hasTie = entries.length > 1 && entries[1][1] === topVotes;
+      // Rule 1: must be strictly > half of alive players
+      const hasEnoughVotes = topVotes > Math.floor(totalAlive / 2);
+
+      if (!hasTie && hasEnoughVotes) {
+        const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
+        if (victim) {
+          victim.isAlive     = false;
+          executedPlayerName = victim.name;
+          logger.info({ code, executedPlayerName }, "Player executed by vote");
+        }
+      } else {
+        logger.info({ code, hasTie, hasEnoughVotes, topVotes, totalAlive }, "No execution — vote thresholds not met");
       }
     }
 
     room.votes = {};
 
-    // Emit execution result regardless of win
+    // Emit execution result (null when nobody executed)
     io.to(code).emit("executionResult", { executedPlayerName });
 
-    // Win condition check
-    const isMafiaLbl    = (lbl: string) => lbl === "الولد" || lbl === "الإكة";
-    const alivePlayers  = room.players.filter((p) => p.isAlive);
-    const aliveWolves   = alivePlayers.filter((p) => isMafiaLbl(room.roles[p.name]?.label ?? ""));
-    const aliveCitizens = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? ""));
-
-    if (aliveWolves.length === 0) {
-      io.to(code).emit("gameOver", { winner: "citizens", executedPlayerName });
-      logger.info({ code }, "Game over — citizens win");
+    // Win condition check (uses shared helper)
+    const winner = checkWinConditions(code);
+    if (winner) {
+      io.to(code).emit("gameOver", { winner, executedPlayerName });
+      logger.info({ code, winner }, "Game over after execution");
       return;
     }
 
-    if (aliveWolves.length >= aliveCitizens.length) {
-      io.to(code).emit("gameOver", { winner: "wolves", executedPlayerName });
-      logger.info({ code }, "Game over — wolves win");
-      return;
-    }
-
-    // No winner yet — return to day_discussion so host manually starts next night
+    // No winner — return to day_discussion; host manually starts next night
     io.to(code).emit("phaseUpdate", "day_discussion");
+    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 25_000 });
     logger.info({ code }, "No winner after execution — waiting for host to start next night");
   });
 
