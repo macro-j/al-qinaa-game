@@ -877,10 +877,12 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
           <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
           <div className="flex items-center gap-2">
             <Countdown endsAt={phaseEndsAt} />
-            <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
-              style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "plaintext", letterSpacing: "2px" }}>
-              #{role.code}
-            </span>
+            {gamePhase === "lobby" && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+                style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "plaintext", letterSpacing: "2px" }}>
+                #{role.code}
+              </span>
+            )}
           </div>
         </div>
 
@@ -1421,10 +1423,12 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
               {isAudioEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
               <span>{isAudioEnabled ? "صوت" : "كتم"}</span>
             </button>
-            <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
-              style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "plaintext", letterSpacing: "2px" }}>
-              #{game.code}
-            </span>
+            {activeGamePhase === "lobby" && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-mono font-bold"
+                style={{ backgroundColor: "#1A1A1A", color: "#D32F2F", border: "1px solid #D32F2F", direction: "ltr", unicodeBidi: "plaintext", letterSpacing: "2px" }}>
+                #{game.code}
+              </span>
+            )}
           </div>
         </div>
 
