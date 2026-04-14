@@ -13,12 +13,13 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 const OFFLINE_GRACE_MS = 3 * 60 * 1000;
 
 interface Player {
-  userId:    string;
-  socketId:  string;
-  name:      string;
-  online:    boolean;
-  isAlive:   boolean;
-  isSilenced: boolean;
+  userId:      string;
+  socketId:    string;
+  name:        string;
+  online:      boolean;
+  isAlive:     boolean;
+  isSilenced:  boolean;
+  deathReason: "assassinated" | "executed" | null;
   offlineTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -93,6 +94,7 @@ function resolveMorning(code: string) {
     const victim = room.players.find((p) => p.name === killTarget);
     if (victim && victim.isAlive) {
       victim.isAlive    = false;
+      victim.deathReason = "assassinated";
       killedPlayerName  = victim.name;
     }
   }
@@ -228,7 +230,7 @@ io.on("connection", (socket) => {
         hostId:          socket.id,
         hostUserId:      userId,
         hostName:        name,
-        players:         [{ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false }],
+        players:         [{ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false, deathReason: null }],
         started:         false,
         roles:           {},
         nightActions:    freshNightActions(),
@@ -313,7 +315,7 @@ io.on("connection", (socket) => {
       // ── Reject new joins mid-game ─────────────────────────────────────────
       if (room.started) { callback({ error: "اللعبة انطلقت بالفعل، لا يمكن الانضمام الآن" }); return; }
 
-      room.players.push({ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false });
+      room.players.push({ userId, socketId: socket.id, name, online: true, isAlive: true, isSilenced: false, deathReason: null });
       socket.join(code);
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 
@@ -422,8 +424,9 @@ io.on("connection", (socket) => {
       const roleLabel = def.label;
       const roleColor = def.color;
       room.roles[p.name] = { label: roleLabel, color: roleColor };
-      p.isAlive   = true;
+      p.isAlive    = true;
       p.isSilenced = false;
+      p.deathReason = null;
       return { socketId: p.socketId, name: p.name, roleLabel, roleColor };
     });
 
@@ -470,6 +473,13 @@ io.on("connection", (socket) => {
     ({ actionType, targetName, roomCode }: { actionType: string; targetName: string; roomCode: string }) => {
       const room = rooms[roomCode];
       if (!room) return;
+
+      // Dead players cannot act
+      const actor = room.players.find((p) => p.socketId === socket.id);
+      if (actor && !actor.isAlive) {
+        logger.warn({ roomCode, actionType }, "Dead player attempted night action — rejected");
+        return;
+      }
 
       logger.info({ roomCode, actionType, targetName }, "Night action received");
 
@@ -592,6 +602,7 @@ io.on("connection", (socket) => {
         const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
         if (victim) {
           victim.isAlive     = false;
+          victim.deathReason = "executed";
           executedPlayerName = victim.name;
           logger.info({ code, executedPlayerName }, "Player executed by vote");
         }
@@ -671,6 +682,7 @@ io.on("connection", (socket) => {
     for (const p of room.players) {
       p.isAlive    = true;
       p.isSilenced = false;
+      p.deathReason = null;
     }
 
     const lobbyPlayers = onlinePlayers(room);

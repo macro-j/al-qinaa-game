@@ -753,13 +753,14 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
+  myDeathReason: "assassinated" | "executed" | null;
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]           = useState(false);
@@ -906,7 +907,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 
         {/* Dead player screen — overlays content when eliminated */}
         {alivePlayerNames.length > 0 && !alivePlayerNames.includes(role.myName) && (
-          <DeadScreen myName={role.myName} />
+          <DeadScreen myName={role.myName} deathReason={myDeathReason} />
         )}
 
         <div className="flex-1 flex flex-col items-center justify-center gap-6"
@@ -1210,20 +1211,28 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
 }
 
 // ── DeadScreen (shown to eliminated players) ───────────────────────────────
-function DeadScreen({ myName }: { myName: string }) {
+function DeadScreen({ myName, deathReason }: { myName: string; deathReason: "assassinated" | "executed" | null }) {
+  const reasonText =
+    deathReason === "assassinated" ? "تم اغتيالك من قبل الولد 🔪" :
+    deathReason === "executed"     ? "تم إعدامك بناءً على تصويت القرية ⚖️" :
+                                     "لقد خرجت من اللعبة";
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 py-8">
       <div className="w-16 h-16 rounded-full flex items-center justify-center"
         style={{ backgroundColor: "#1A0000", border: "2px solid #D32F2F" }}>
         <Skull size={32} color="#D32F2F" />
       </div>
-      <div className="flex flex-col items-center gap-2 text-center">
+      <div className="flex flex-col items-center gap-3 text-center">
         <p className="text-xl font-black" style={{ color: "#D32F2F" }}>لقد قُتلت</p>
-        <p className="text-sm font-semibold" style={{ color: "#555555" }}>{myName}</p>
-        <p className="text-xs leading-relaxed mt-1" style={{ color: "#444444" }}>
-          الجلسة لم تنته بعد.{"\n"}يمكنك المشاهدة حتى نهاية اللعبة.
+        <p className="text-sm font-semibold" style={{ color: "#888888" }}>{myName}</p>
+        <p className="text-base font-bold leading-snug mt-1" style={{ color: "#CC4444" }}>
+          {reasonText}
         </p>
       </div>
+      <p className="text-xs text-center mt-4 px-2" style={{ color: "#333333" }}>
+        أنت الآن في طور المشاهدة.. انتظر نهاية الجولة
+      </p>
     </div>
   );
 }
@@ -1863,6 +1872,7 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(true);
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
   const [initialJoinCode, setInitialJoinCode] = useState("");
+  const [myDeathReason, setMyDeathReason]   = useState<"assassinated" | "executed" | null>(null);
   const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
   const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
   const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
@@ -2032,6 +2042,13 @@ export default function App() {
       // Remove killed player from alive list immediately
       if (payload.killedPlayerName) {
         setAlivePlayerNames((prev) => prev.filter((n) => n !== payload.killedPlayerName));
+        // If I was the one killed, record the death reason
+        setPlayerRole((role) => {
+          if (role && role.myName === payload.killedPlayerName) {
+            setMyDeathReason("assassinated");
+          }
+          return role;
+        });
       }
     };
 
@@ -2056,6 +2073,13 @@ export default function App() {
     const onExecutionResult = ({ executedPlayerName }: { executedPlayerName: string | null }) => {
       if (executedPlayerName) {
         setAlivePlayerNames((prev) => prev.filter((n) => n !== executedPlayerName));
+        // If I was the one executed, record the death reason
+        setPlayerRole((role) => {
+          if (role && role.myName === executedPlayerName) {
+            setMyDeathReason("executed");
+          }
+          return role;
+        });
       }
     };
 
@@ -2067,6 +2091,7 @@ export default function App() {
       setMorningResults(null);
       setVoteUpdate(null);
       setAlivePlayerNames([]);
+      setMyDeathReason(null);
       setGamePhase("lobby");
       setPhaseEndsAt(null);
       // Reconstruct lobby state from current session so UI returns to lobby screen
@@ -2155,7 +2180,7 @@ export default function App() {
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
     setMorningResults(null); setVoteUpdate(null); setGameOver(null);
-    setAlivePlayerNames([]);
+    setAlivePlayerNames([]); setMyDeathReason(null);
     setScreen("menu");
   }, [stopCurrentAudio]);
 
@@ -2230,7 +2255,7 @@ export default function App() {
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
