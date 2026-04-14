@@ -1407,7 +1407,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
     night_guard:  "البنت — تحمي الآن",
   };
 
-  const isPreNight   = activeGamePhase === "lobby";
+  const isPreNight   = activeGamePhase === "role_reveal";
   const isInNightSeq = activeGamePhase.startsWith("night_");
 
   const handleStartVoting     = () => getSocket().emit("startVoting",          { code: game.code });
@@ -1508,18 +1508,6 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
             <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
               {myRoleRevealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
             </p>
-
-            {/* ── Emergency Abort (role_reveal only) ── */}
-            <button
-              onClick={() => {
-                if (confirm("إلغاء التوزيع والعودة للوبي؟ سيعود جميع اللاعبين للغرفة من جديد.")) {
-                  getSocket().emit("abortGame", { code: game.code });
-                }
-              }}
-              className="w-full py-3 rounded-2xl font-bold text-sm transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "transparent", border: "1px solid #D32F2F", color: "#D32F2F" }}>
-              إلغاء التوزيع والعودة للوبي
-            </button>
           </div>
         )}
 
@@ -1843,6 +1831,20 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
             ))}
           </div>
         </div>
+
+        {/* ── Emergency Abort — only shown during role_reveal phase ── */}
+        {activeGamePhase === "role_reveal" && (
+          <button
+            onClick={() => {
+              if (confirm("إلغاء التوزيع والعودة للوبي؟ سيعود جميع اللاعبين للغرفة من جديد.")) {
+                getSocket().emit("abortGame", { code: game.code });
+              }
+            }}
+            className="w-full py-3 rounded-2xl font-bold text-sm transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", border: "1px solid #D32F2F", color: "#D32F2F" }}>
+            إلغاء التوزيع والعودة للوبي
+          </button>
+        )}
 
         <LeaveButton onLeave={onLeave} label="إنهاء الجلسة والخروج" />
         <Footer />
