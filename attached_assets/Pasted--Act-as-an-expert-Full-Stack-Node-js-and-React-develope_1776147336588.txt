@@ -1,0 +1,41 @@
+"Act as an expert Full-Stack Node.js and React developer. The user discovered a critical edge case: players disconnecting right before or during the 'role_reveal' phase break the game balance. We need an auto-cleanup, a manual host kick, and an abort mechanism.
+
+CRITICAL TASK 1: Auto-Cleanup in Lobby (Backend index.ts)
+
+Update the disconnect and leaveRoom socket listeners.
+
+If a player disconnects AND the room has NOT started yet (e.g., the phase is still 'lobby'), completely delete that player from room.players.
+
+Emit the updated player list to the room so the UI updates instantly.
+
+CRITICAL TASK 2: Host Manual Kick (Backend index.ts)
+
+Add a new socket listener: socket.on('kickPlayer', (playerName) => { ... }).
+
+Verify the requester is the Host. If so, completely delete playerName from room.players.
+
+Find the target player's socket (if still connected) and emit a private event kickedFromRoom. Then make their socket leave the room.
+
+Emit the updated player list to the room.
+
+CRITICAL TASK 3: Host Kick UI (Frontend App.tsx / Lobby)
+
+In the Lobby UI (before roles are distributed), where the list of joined players is rendered, add a small, distinct red 'طرد' (Kick) button or an 'X' icon next to each player's name.
+
+ONLY the Host should see this button.
+
+Clicking it calls socket.emit('kickPlayer', playerName).
+
+Add a socket listener for kickedFromRoom that resets the kicked user's state to the main menu and alerts them ('تم طردك من الغرفة').
+
+CRITICAL TASK 4: Emergency Abort during Role Reveal (HostDashboard.tsx & Backend)
+
+If a player disconnects during the role_reveal phase, the Host is stuck.
+
+In HostDashboard.tsx, during the role_reveal phase, add an emergency button: 'إلغاء التوزيع والعودة للوبي' (Abort & Return to Lobby) styled with a red border.
+
+Clicking this emits 'abortGame'.
+
+Backend: Add socket.on('abortGame'). This resets the room's phase to 'lobby', clears all night timers, clears assigned roles (resets all to blank), and emits phaseUpdate('lobby') to all players.
+
+Execute these safety measures to give the Host ultimate control over offline or disruptive players before the game locks in."

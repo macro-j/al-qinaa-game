@@ -629,6 +629,56 @@ io.on("connection", (socket) => {
   });
 
 
+  // ── Host: Kick Player (lobby only) ─────────────────────────────────────────
+  socket.on("kickPlayer", ({ code, playerName }: { code: string; playerName: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+    if (room.started) return; // only allowed in lobby
+
+    const target = room.players.find((p) => p.name === playerName);
+    if (!target) return;
+
+    // Tell that socket they've been kicked, then remove from room
+    const targetSocket = io.sockets.sockets.get(target.socketId);
+    if (targetSocket) {
+      targetSocket.emit("kickedFromRoom");
+      targetSocket.leave(code);
+    }
+
+    room.players = room.players.filter((p) => p.name !== playerName);
+    io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
+    logger.info({ code, playerName }, "Player kicked by host");
+  });
+
+  // ── Host: Abort Game (role_reveal only) ────────────────────────────────────
+  socket.on("abortGame", ({ code }: { code: string }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (room.hostId !== socket.id) return;
+
+    // Cancel all night timers (if any started)
+    clearNightTimers(room);
+
+    // Reset game state back to lobby
+    room.started         = false;
+    room.roles           = {};
+    room.nightActions    = freshNightActions();
+    room.nightPhaseIndex = -1;
+    room.votes           = {};
+
+    // Reset every player to alive/un-silenced (clean slate)
+    for (const p of room.players) {
+      p.isAlive    = true;
+      p.isSilenced = false;
+    }
+
+    const lobbyPlayers = onlinePlayers(room);
+    io.to(code).emit("gameAborted", { players: lobbyPlayers });
+    io.to(code).emit("playersUpdated", { players: lobbyPlayers });
+    logger.info({ code }, "Game aborted — returned to lobby");
+  });
+
   // ── Disconnect ─────────────────────────────────────────────────────────────
   socket.on("disconnect", (reason) => {
     logger.info({ socketId: socket.id, reason }, "Client disconnected");
@@ -638,6 +688,23 @@ io.on("connection", (socket) => {
       const player = room.players.find((p) => p.socketId === socket.id);
       if (!player) continue;
 
+      // ── Pre-game lobby: remove immediately (no grace period) ─────────────
+      if (!room.started) {
+        room.players = room.players.filter((p) => p.userId !== player.userId);
+        const wasHost = room.hostUserId === player.userId;
+        if (wasHost || room.players.length === 0) {
+          clearNightTimers(room);
+          delete rooms[code];
+          io.to(code).emit("roomClosed");
+          logger.info({ code, reason: wasHost ? "host disconnected in lobby" : "empty" }, "Room dissolved in lobby");
+        } else {
+          io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
+          logger.info({ code, name: player.name }, "Player removed from lobby on disconnect");
+        }
+        break;
+      }
+
+      // ── In-game: mark offline + start 3-min grace period ─────────────────
       player.online = false;
       io.to(code).emit("playersUpdated", { players: onlinePlayers(room) });
 

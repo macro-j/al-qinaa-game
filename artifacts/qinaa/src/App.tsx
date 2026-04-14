@@ -481,6 +481,7 @@ function LobbyScreen({
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [closed, setClosed] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [kicked, setKicked] = useState(false);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -491,14 +492,17 @@ function LobbyScreen({
     const onPlayersUpdated = ({ players: updated }: { players: SocketPlayer[] }) => setPlayers(updated);
     const onRoomClosed = () => setClosed(true);
     const onGameStartedEvt = (payload: GameStartedPayload) => onGameStarted(payload);
+    const onKickedFromRoom = () => setKicked(true);
 
     socket.on("playersUpdated", onPlayersUpdated);
     socket.on("roomClosed", onRoomClosed);
     socket.on("gameStarted", onGameStartedEvt);
+    socket.on("kickedFromRoom", onKickedFromRoom);
     return () => {
       socket.off("playersUpdated", onPlayersUpdated);
       socket.off("roomClosed", onRoomClosed);
       socket.off("gameStarted", onGameStartedEvt);
+      socket.off("kickedFromRoom", onKickedFromRoom);
     };
   }, [onGameStarted]);
 
@@ -547,6 +551,19 @@ function LobbyScreen({
     wakeLockRef.current?.release().catch(() => {});
     audioCtxRef.current?.close().catch(() => {});
   }, []);
+
+  if (kicked) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
+        <Skull size={48} color="#D32F2F" />
+        <p className="text-white font-bold text-xl">تم طردك من الغرفة</p>
+        <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>قرر المضيف إزالتك من هذه الجلسة</p>
+        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
+          العودة للقائمة الرئيسية
+        </button>
+      </div>
+    );
+  }
 
   if (closed) {
     return (
@@ -667,6 +684,15 @@ function LobbyScreen({
                 </div>
                 {player.name === lobby.myName && lobby.isHost && (
                   <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: "#3A0000", color: "#FF6B6B" }}>مضيف</span>
+                )}
+                {lobby.isHost && player.name !== lobby.myName && (
+                  <button
+                    onClick={() => getSocket().emit("kickPlayer", { code: lobby.code, playerName: player.name })}
+                    className="flex items-center justify-center w-6 h-6 rounded-md flex-shrink-0 transition-opacity active:opacity-60"
+                    style={{ backgroundColor: "#3A0000", border: "1px solid #D32F2F" }}
+                    title="طرد اللاعب">
+                    <span className="text-xs font-bold leading-none" style={{ color: "#D32F2F" }}>✕</span>
+                  </button>
                 )}
               </div>
             ))}
@@ -1482,6 +1508,18 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
             <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
               {myRoleRevealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
             </p>
+
+            {/* ── Emergency Abort (role_reveal only) ── */}
+            <button
+              onClick={() => {
+                if (confirm("إلغاء التوزيع والعودة للوبي؟ سيعود جميع اللاعبين للغرفة من جديد.")) {
+                  getSocket().emit("abortGame", { code: game.code });
+                }
+              }}
+              className="w-full py-3 rounded-2xl font-bold text-sm transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "transparent", border: "1px solid #D32F2F", color: "#D32F2F" }}>
+              إلغاء التوزيع والعودة للوبي
+            </button>
           </div>
         )}
 
@@ -2019,6 +2057,29 @@ export default function App() {
       }
     };
 
+    const onGameAborted = ({ players: updatedPlayers }: { players: SocketPlayer[] }) => {
+      // Reset all game state
+      setGame(null);
+      setPlayerRole(null);
+      setGameOver(null);
+      setMorningResults(null);
+      setVoteUpdate(null);
+      setAlivePlayerNames([]);
+      setGamePhase("lobby");
+      setPhaseEndsAt(null);
+      // Reconstruct lobby state from current session so UI returns to lobby screen
+      const session = loadSession();
+      if (session) {
+        setLobby({
+          code:     session.code,
+          isHost:   session.isHost,
+          myName:   session.myName,
+          players:  updatedPlayers,
+        });
+      }
+      setScreen("lobby");
+    };
+
     socket.on("connect",          onConnect);
     socket.on("disconnect",       onDisconnect);
     socket.on("reconnect",        onReconnect);
@@ -2029,6 +2090,7 @@ export default function App() {
     socket.on("alivePlayersSync", onAlivePlayersSync);
     socket.on("phaseTimer",       onPhaseTimer);
     socket.on("executionResult",  onExecutionResult);
+    socket.on("gameAborted",      onGameAborted);
     return () => {
       socket.off("connect",          onConnect);
       socket.off("disconnect",       onDisconnect);
@@ -2040,6 +2102,7 @@ export default function App() {
       socket.off("alivePlayersSync", onAlivePlayersSync);
       socket.off("phaseTimer",       onPhaseTimer);
       socket.off("executionResult",  onExecutionResult);
+      socket.off("gameAborted",      onGameAborted);
     };
   }, [playPhaseAudio]);
 
