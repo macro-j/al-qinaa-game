@@ -143,12 +143,29 @@ function clearNightTimers(room: Room) {
 function checkWinConditions(code: string): "citizens" | "wolves" | null {
   const room = rooms[code];
   if (!room) return null;
-  const isMafiaLbl    = (lbl: string) => lbl === "الولد" || lbl === "الإكة";
-  const alivePlayers  = room.players.filter((p) => p.isAlive);
-  const aliveWolves   = alivePlayers.filter((p) => isMafiaLbl(room.roles[p.name]?.label ?? ""));
-  const aliveCitizens = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? ""));
-  if (aliveWolves.length === 0)                       return "citizens";
-  if (aliveWolves.length >= aliveCitizens.length)     return "wolves";
+
+  // Roles must be distributed before any check is meaningful
+  if (Object.keys(room.roles).length === 0) return null;
+
+  const MAIN_WOLF  = "الولد";
+  const isMafiaLbl = (lbl: string) => lbl === "الولد" || lbl === "الإكة";
+
+  const alivePlayers = room.players.filter((p) => p.isAlive);
+
+  // ── Citizen win ─────────────────────────────────────────────────────────────
+  // Citizens win ONLY when الولد (the main wolf) is eliminated.
+  // الإكة surviving alone does NOT keep the game going for mafia.
+  const mainWolfAlive = alivePlayers.some(
+    (p) => (room.roles[p.name]?.label ?? "") === MAIN_WOLF,
+  );
+  if (!mainWolfAlive) return "citizens";
+
+  // ── Mafia win ───────────────────────────────────────────────────────────────
+  // Mafia wins if alive citizens drop to ≤ 2, OR alive mafia ≥ alive citizens.
+  const aliveMafiaCount    = alivePlayers.filter((p) =>  isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
+  const aliveCitizenCount  = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
+  if (aliveCitizenCount <= 2 || aliveMafiaCount >= aliveCitizenCount) return "wolves";
+
   return null;
 }
 
