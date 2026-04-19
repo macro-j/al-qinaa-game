@@ -1175,6 +1175,36 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
           </div>
         )}
 
+        {/* ── Live vote tally — visible to all players during voting phase ── */}
+        {gamePhase === "voting" && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التصويت الكلي</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "#1A1A1A", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                {voteUpdate ? Object.keys(voteUpdate.votes).length : 0} / {voteUpdate?.totalAlive ?? "..."} صوت
+              </span>
+            </div>
+            {voteUpdate && Object.keys(voteUpdate.votes).length > 0 && (
+              <div className="rounded-xl flex flex-col overflow-hidden"
+                style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+                {Object.entries(
+                  Object.values(voteUpdate.votes).reduce<Record<string, number>>((acc, t) => {
+                    acc[t] = (acc[t] ?? 0) + 1; return acc;
+                  }, {})
+                ).sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => (
+                  <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
+                    style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                    <span className="text-sm font-semibold text-white">{name}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
