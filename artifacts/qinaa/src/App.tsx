@@ -94,6 +94,11 @@ interface ExecutionResultPayload {
   tally:              Record<string, number>; // targetName → vote count (anonymous)
 }
 
+interface SeerResultPayload {
+  targetName: string;
+  isMafia:    boolean;
+}
+
 interface GameOverPayload {
   winner:              "wolves" | "citizens";
   executedPlayerName:  string | null;
@@ -773,6 +778,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionRe
   const [selectedTarget, setSelected]     = useState<string | null>(null);
   const [actionSubmitted, setSubmitted]   = useState(false);
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
+  const [seerResult, setSeerResult]       = useState<SeerResultPayload | null>(null);
   const [votedFor, setVotedFor]           = useState<string | null>(null);
   const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
@@ -807,17 +813,17 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionRe
 
   // Build filtered target list — recomputed whenever alivePlayerNames or the
   // active phase changes. Never stored in state; always derived fresh.
-  // الولد  (Wolf):      all alive players EXCEPT self — can see/select الإكة
-  // الإكة  (Shadow):    ALL alive players — can silence anyone including self or wolf
+  // الولد  (Wolf):      alive non-mafia ONLY — allies excluded (matches backend validation)
+  // الإكة  (Shadow):    ALL alive players — can silence anyone including self
   // الشايب (Seer):      all alive players EXCEPT self
   // البنت  (Guard):     ALL alive players — can protect anyone including self
   const targetList = useMemo(() => {
     const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
-    if (isWolf)         return aliveOthers;      // wolf: alive minus self
-    if (isShadow)       return alivePlayerNames; // shadow: everyone alive
-    if (isProtector)    return alivePlayerNames; // guard: everyone alive
-    return aliveOthers;                          // seer: alive minus self
-  }, [alivePlayerNames, gamePhase, role.myName, isWolf, isShadow, isProtector]);
+    if (isWolf)      return aliveOthers.filter((n) => !role.wolfAllies.includes(n)); // wolf: exclude allies
+    if (isShadow)    return alivePlayerNames; // shadow: everyone incl. self
+    if (isProtector) return alivePlayerNames; // guard: everyone incl. self
+    return aliveOthers;                       // seer: alive minus self
+  }, [alivePlayerNames, gamePhase, role.myName, role.wolfAllies, isWolf, isShadow, isProtector]);
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);
@@ -834,23 +840,35 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionRe
     setSubmitted(true);
   };
 
-  // Reset when phase changes (clear mafia sync on sleep or day)
+  // Reset when phase changes.
+  // seerResult & investigateResult persist across intermediate night phases so the
+  // Seer can still read the verdict while waiting for subsequent phases to finish.
+  // They're cleared only on night_sleep (new night) or day_discussion (new day).
   useEffect(() => {
     setSelected(null);
     setSubmitted(false);
-    setInvResult(null);
     setVotedFor(null);
-    if (gamePhase === "night_sleep" || gamePhase === "day_discussion") {
+    if (gamePhase === "night_sleep" || gamePhase === "day_discussion" || gamePhase === "lobby") {
+      setInvResult(null);
+      setSeerResult(null);
       setMafiaSync({ killTarget: null, silenceTarget: null });
     }
   }, [gamePhase]);
 
-  // Listen for private investigator result
+  // Listen for private investigator result (legacy display)
   useEffect(() => {
     const socket = getSocket();
     const onResult = (payload: InvestigateResultPayload) => setInvResult(payload);
     socket.on("investigateResult", onResult);
     return () => { socket.off("investigateResult", onResult); };
+  }, []);
+
+  // Listen for persistent seer result (new event — emitted before auto-advance)
+  useEffect(() => {
+    const socket = getSocket();
+    const onSeer = (payload: SeerResultPayload) => setSeerResult(payload);
+    socket.on("seerResult", onSeer);
+    return () => { socket.off("seerResult", onSeer); };
   }, []);
 
   // Listen for mafia team synergy updates (only relevant for wolf/shadow players)
@@ -1040,6 +1058,28 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionRe
           </div>
         )}
 
+        {/* ── Seer Result: persistent banner shown across ALL night phases after submit ── */}
+        {isNightPhase && isInvestigator && seerResult && (
+          <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
+            style={{
+              backgroundColor: seerResult.isMafia ? "#1A0000" : "#001A0A",
+              border: `2px solid ${seerResult.isMafia ? "#D32F2F" : "#2E7D32"}`,
+            }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                style={{ backgroundColor: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }} />
+              <span className="text-xs font-bold tracking-widest uppercase"
+                style={{ color: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }}>نتيجة تحقيقك الليلي</span>
+            </div>
+            <p className="text-base font-bold text-right"
+              style={{ color: seerResult.isMafia ? "#FF6B6B" : "#81C784" }}>
+              {seerResult.isMafia
+                ? `${seerResult.targetName} هو مافيا 🔪`
+                : `${seerResult.targetName} مواطن شريف 🛡️`}
+            </p>
+          </div>
+        )}
+
         {/* ── Night Action Panel ── */}
         {isNightPhase && (
           <div className="w-full rounded-2xl overflow-hidden"
@@ -1111,14 +1151,27 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionRe
                   </div>
                 )}
 
-                {/* Investigator private result */}
-                {isInvestigator && investigateResult && (
-                  <div className="flex flex-col gap-1 px-3 py-3 rounded-xl"
-                    style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
-                    <span className="text-xs font-semibold" style={{ color: "#888888" }}>نتيجة التحقيق</span>
-                    <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
-                      {investigateResult.roleLabel}
-                    </span>
+                {/* Seer result — persistent across all subsequent night phases */}
+                {isInvestigator && seerResult && (
+                  <div className="flex flex-col gap-2 px-4 py-3 rounded-xl"
+                    style={{
+                      backgroundColor: seerResult.isMafia ? "#1A0000" : "#001A0A",
+                      border: `2px solid ${seerResult.isMafia ? "#D32F2F" : "#2E7D32"}`,
+                    }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                        style={{ backgroundColor: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }} />
+                      <span className="text-xs font-bold tracking-widest uppercase"
+                        style={{ color: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }}>
+                        نتيجة تحقيقك الليلي
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-right"
+                      style={{ color: seerResult.isMafia ? "#FF6B6B" : "#81C784" }}>
+                      {seerResult.isMafia
+                        ? `${seerResult.targetName} هو مافيا 🔪`
+                        : `${seerResult.targetName} مواطن شريف 🛡️`}
+                    </p>
                   </div>
                 )}
               </div>
@@ -1353,6 +1406,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, exec
   const [selectedTarget, setSelected]     = useState<string | null>(null);
   const [actionSubmitted, setSubmitted]   = useState(false);
   const [investigateResult, setInvResult] = useState<InvestigateResultPayload | null>(null);
+  const [seerResult, setSeerResult]       = useState<SeerResultPayload | null>(null);
   const [votedFor, setVotedFor]           = useState<string | null>(null);
   const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
@@ -1401,23 +1455,34 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, exec
         ? alivePlayerNames    // guard can self-protect
         : aliveOthers;        // seer excludes self
 
-  // Reset night action state when phase changes
+  // Reset night action state when phase changes.
+  // seerResult persists across intermediate night phases so the host-seer can still
+  // read the verdict while other roles act. Cleared only on sleep/day/lobby.
   useEffect(() => {
     setSelected(null);
     setSubmitted(false);
-    setInvResult(null);
     setVotedFor(null);
-    if (activeGamePhase === "night_sleep" || activeGamePhase === "day_discussion") {
+    if (activeGamePhase === "night_sleep" || activeGamePhase === "day_discussion" || activeGamePhase === "lobby") {
+      setInvResult(null);
+      setSeerResult(null);
       setMafiaSync({ killTarget: null, silenceTarget: null });
     }
   }, [activeGamePhase]);
 
-  // Listen for private investigator result (host may be seer)
+  // Listen for private investigator result (legacy display, host may be seer)
   useEffect(() => {
     const socket = getSocket();
     const onResult = (payload: InvestigateResultPayload) => setInvResult(payload);
     socket.on("investigateResult", onResult);
     return () => { socket.off("investigateResult", onResult); };
+  }, []);
+
+  // Listen for persistent seer result (new event — emitted before auto-advance)
+  useEffect(() => {
+    const socket = getSocket();
+    const onSeer = (payload: SeerResultPayload) => setSeerResult(payload);
+    socket.on("seerResult", onSeer);
+    return () => { socket.off("seerResult", onSeer); };
   }, []);
 
   // Listen for mafia team synergy updates (only relevant if host is wolf/shadow)
@@ -1611,6 +1676,28 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, exec
           </div>
         )}
 
+        {/* ── Seer Result: persistent banner for host-seer across ALL night phases ── */}
+        {isNightPhase && hostIsInvestigator && seerResult && (
+          <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
+            style={{
+              backgroundColor: seerResult.isMafia ? "#1A0000" : "#001A0A",
+              border: `2px solid ${seerResult.isMafia ? "#D32F2F" : "#2E7D32"}`,
+            }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                style={{ backgroundColor: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }} />
+              <span className="text-xs font-bold tracking-widest uppercase"
+                style={{ color: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }}>نتيجة تحقيقك الليلي</span>
+            </div>
+            <p className="text-base font-bold text-right"
+              style={{ color: seerResult.isMafia ? "#FF6B6B" : "#81C784" }}>
+              {seerResult.isMafia
+                ? `${seerResult.targetName} هو مافيا 🔪`
+                : `${seerResult.targetName} مواطن شريف 🛡️`}
+            </p>
+          </div>
+        )}
+
         {/* ── Night Action Panel (host as player) ── */}
         {isNightPhase && (
           <div className="w-full rounded-2xl overflow-hidden"
@@ -1657,13 +1744,24 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, exec
                     <p className="text-xs font-bold" style={{ color: "#4CAF50" }}>تم تأكيد اختيارك</p>
                   </div>
                 )}
-                {hostIsInvestigator && investigateResult && (
-                  <div className="flex flex-col gap-1 px-3 py-3 rounded-xl"
-                    style={{ backgroundColor: "#1A1000", border: `1px solid ${investigateResult.roleColor}` }}>
-                    <span className="text-xs font-semibold" style={{ color: "#888" }}>نتيجة التحقيق</span>
-                    <span className="text-sm font-bold" style={{ color: investigateResult.roleColor }}>
-                      {investigateResult.roleLabel}
-                    </span>
+                {hostIsInvestigator && seerResult && (
+                  <div className="flex flex-col gap-2 px-4 py-3 rounded-xl"
+                    style={{
+                      backgroundColor: seerResult.isMafia ? "#1A0000" : "#001A0A",
+                      border: `2px solid ${seerResult.isMafia ? "#D32F2F" : "#2E7D32"}`,
+                    }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                        style={{ backgroundColor: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }} />
+                      <span className="text-xs font-bold tracking-widest uppercase"
+                        style={{ color: seerResult.isMafia ? "#D32F2F" : "#4CAF50" }}>نتيجة تحقيقك الليلي</span>
+                    </div>
+                    <p className="text-sm font-bold text-right"
+                      style={{ color: seerResult.isMafia ? "#FF6B6B" : "#81C784" }}>
+                      {seerResult.isMafia
+                        ? `${seerResult.targetName} هو مافيا 🔪`
+                        : `${seerResult.targetName} مواطن شريف 🛡️`}
+                    </p>
                   </div>
                 )}
               </div>

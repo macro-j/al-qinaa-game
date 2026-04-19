@@ -167,10 +167,9 @@ function checkWinConditions(code: string): "citizens" | "wolves" | null {
   if (!mainWolfAlive) return "citizens";
 
   // ── Mafia win ───────────────────────────────────────────────────────────────
-  // Mafia wins when alive mafia count reaches or exceeds alive citizen count.
-  const aliveMafiaCount   = alivePlayers.filter((p) =>  isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
+  // Mafia wins ONLY when ALL citizens are dead (safe for small playtests).
   const aliveCitizenCount = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
-  if (aliveMafiaCount >= aliveCitizenCount) return "wolves";
+  if (aliveCitizenCount === 0) return "wolves";
 
   return null;
 }
@@ -608,25 +607,33 @@ io.on("connection", (socket) => {
 
       const isRoleMafia = (lbl: string) => lbl === "الولد" || lbl === "الإكة";
 
+      // Track whether this action was validly recorded (only valid actions auto-advance)
+      let actionRecorded = false;
+
       if (actionType === "kill") {
-        // Wolf cannot kill a fellow wolf-team member (server-enforced)
+        // Wolf cannot kill a fellow wolf-team member (server-enforced).
+        // Note: wolves CAN target themselves via the kill action only if they're
+        // somehow in the list — but الولد is mafia so isRoleMafia would reject it too.
         const targetRoleLabel = room.roles[targetName]?.label ?? "";
         if (isRoleMafia(targetRoleLabel)) {
-          logger.warn({ roomCode, targetName }, "Wolf tried to kill wolf ally — rejected");
-          return;
+          logger.warn({ roomCode, targetName }, "Wolf tried to kill wolf ally — rejected (no auto-advance)");
+          socket.emit("nightActionRejected", { reason: "لا يمكنك استهداف حليفك" });
+          // Do NOT auto-advance: the wolf's turn remains open so they can pick a valid target.
+        } else {
+          room.nightActions.killTarget = targetName;
+          actionRecorded = true;
+          // ── Mafia Synergy: privately notify ALL mafia members ─────────────
+          room.players
+            .filter((p) => isRoleMafia(room.roles[p.name]?.label ?? ""))
+            .forEach((p) => {
+              io.to(p.socketId).emit("mafiaActionSync", { actionType: "kill", targetName });
+            });
         }
-        room.nightActions.killTarget = targetName;
-
-        // ── Mafia Synergy: privately notify ALL mafia members ─────────────
-        room.players
-          .filter((p) => isRoleMafia(room.roles[p.name]?.label ?? ""))
-          .forEach((p) => {
-            io.to(p.socketId).emit("mafiaActionSync", { actionType: "kill", targetName });
-          });
 
       } else if (actionType === "silence") {
+        // الإكة (Shadow) — may silence ANY alive player, including themselves.
         room.nightActions.silenceTarget = targetName;
-
+        actionRecorded = true;
         // ── Mafia Synergy: privately notify ALL mafia members ─────────────
         room.players
           .filter((p) => isRoleMafia(room.roles[p.name]?.label ?? ""))
@@ -635,16 +642,20 @@ io.on("connection", (socket) => {
           });
 
       } else if (actionType === "protect") {
-        // protectTarget is server-only — never emitted anywhere
+        // البنت (Guard) — may protect ANY alive player, including themselves.
         room.nightActions.protectTarget = targetName;
+        actionRecorded = true;
 
       } else if (actionType === "investigate") {
-        // investigateResult goes ONLY to the requesting socket — host-blind by default
-        // Returns a full Arabic verdict sentence with the player's name embedded
+        // Emit seerResult PRIVATELY to the requesting socket BEFORE auto-advancing,
+        // so the result is stored on the client before the phase changes.
         const target = room.players.find((p) => p.name === targetName);
         if (target) {
           const targetRoleLabel = room.roles[target.name]?.label ?? "";
           const isMafiaRole = targetRoleLabel === "الولد" || targetRoleLabel === "الإكة";
+          // New persistent event (replaces investigateResult on the frontend)
+          socket.emit("seerResult", { targetName, isMafia: isMafiaRole });
+          // Keep the legacy event for backward-compat UI segments that still read it
           const verdict = isMafiaRole
             ? `نعم، ${targetName} من المافيا`
             : `لا، ${targetName} بريء`;
@@ -653,11 +664,12 @@ io.on("connection", (socket) => {
             roleLabel: verdict,
             roleColor: isMafiaRole ? "#D32F2F" : "#4CAF50",
           });
-          logger.info({ roomCode, targetName, verdict }, "Investigate verdict sent (private)");
+          logger.info({ roomCode, targetName, isMafiaRole }, "Seer verdict sent (private)");
+          actionRecorded = true;
         }
       }
 
-      // ── Auto-advance: if this action matches the current night phase, skip remaining timer ──
+      // ── Auto-advance: only if the action was validly recorded for the current phase ──
       const ACTION_PHASE_MAP: Record<string, string> = {
         kill:        "night_wolf",
         silence:     "night_shadow",
@@ -666,8 +678,8 @@ io.on("connection", (socket) => {
       };
       const expectedPhase = ACTION_PHASE_MAP[actionType];
       const currentPhase  = NIGHT_SEQUENCE[room.nightPhaseIndex];
-      if (expectedPhase && expectedPhase === currentPhase) {
-        logger.info({ roomCode, actionType, currentPhase }, "Action submitted — advancing to next phase immediately");
+      if (actionRecorded && expectedPhase && expectedPhase === currentPhase) {
+        logger.info({ roomCode, actionType, currentPhase }, "Action recorded — advancing to next phase immediately");
         runNightPhase(roomCode, room.nightPhaseIndex + 1);
       }
     },
