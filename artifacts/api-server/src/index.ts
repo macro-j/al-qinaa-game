@@ -127,10 +127,10 @@ const NIGHT_SEQUENCE = [
 // Duration each phase lasts before auto-advancing to the next (ms)
 const NIGHT_PHASE_DURATIONS: Record<string, number> = {
   night_sleep:  3_000,
-  night_wolf:   10_000,
-  night_shadow: 10_000,
-  night_seer:   10_000,
-  night_guard:  10_000,
+  night_wolf:   20_000,
+  night_shadow: 20_000,
+  night_seer:   20_000,
+  night_guard:  20_000,
 };
 
 /** Clears pending night-advance timers for a room. */
@@ -205,7 +205,7 @@ function startNightPhase(code: string) {
           return;
         }
         io.to(code).emit("phaseUpdate", "day_discussion");
-        io.to(code).emit("phaseTimer", { endsAt: Date.now() + 25_000 });
+        io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
       } else {
         io.to(code).emit("phaseUpdate", toPhase);
         const phaseDuration = NIGHT_PHASE_DURATIONS[toPhase] ?? 10_000;
@@ -570,7 +570,7 @@ io.on("connection", (socket) => {
     room.votes = {};
     const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
     io.to(code).emit("phaseUpdate", "voting");
-    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 30_000 });
+    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 20_000 });
     io.to(code).emit("voteUpdate", { votes: {}, alivePlayerNames, totalAlive: alivePlayerNames.length });
     logger.info({ code }, "Phase → voting");
   });
@@ -648,7 +648,7 @@ io.on("connection", (socket) => {
 
     // No winner — return to day_discussion; host manually starts next night
     io.to(code).emit("phaseUpdate", "day_discussion");
-    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 25_000 });
+    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
     logger.info({ code }, "No winner after execution — waiting for host to start next night");
   });
 
