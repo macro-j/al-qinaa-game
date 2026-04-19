@@ -161,10 +161,10 @@ function checkWinConditions(code: string): "citizens" | "wolves" | null {
   if (!mainWolfAlive) return "citizens";
 
   // ── Mafia win ───────────────────────────────────────────────────────────────
-  // Mafia wins if alive citizens drop to ≤ 2, OR alive mafia ≥ alive citizens.
-  const aliveMafiaCount    = alivePlayers.filter((p) =>  isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
-  const aliveCitizenCount  = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
-  if (aliveCitizenCount <= 2 || aliveMafiaCount >= aliveCitizenCount) return "wolves";
+  // Mafia wins when alive mafia count reaches or exceeds alive citizen count.
+  const aliveMafiaCount   = alivePlayers.filter((p) =>  isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
+  const aliveCitizenCount = alivePlayers.filter((p) => !isMafiaLbl(room.roles[p.name]?.label ?? "")).length;
+  if (aliveMafiaCount >= aliveCitizenCount) return "wolves";
 
   return null;
 }
