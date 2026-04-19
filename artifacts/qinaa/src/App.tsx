@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { io, type Socket } from "socket.io-client";
 import QRCode from "react-qr-code";
 import {
@@ -799,17 +799,19 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
     return "protect";
   };
 
-  // Build filtered target list using the authoritative alive list.
+  // Build filtered target list — recomputed whenever alivePlayerNames or the
+  // active phase changes. Never stored in state; always derived fresh.
   // الولد  (Wolf):      all alive players EXCEPT self — can see/select الإكة
   // الإكة  (Shadow):    ALL alive players — can silence anyone including self or wolf
   // الشايب (Seer):      all alive players EXCEPT self
   // البنت  (Guard):     ALL alive players — can protect anyone including self
-  const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
-  const targetList: string[] =
-    isWolf        ? aliveOthers      // wolf: alive minus self only
-    : isShadow    ? alivePlayerNames // shadow: everyone alive
-    : isProtector ? alivePlayerNames // guard: everyone alive
-    : aliveOthers;                   // seer: alive minus self
+  const targetList = useMemo(() => {
+    const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
+    if (isWolf)         return aliveOthers;      // wolf: alive minus self
+    if (isShadow)       return alivePlayerNames; // shadow: everyone alive
+    if (isProtector)    return alivePlayerNames; // guard: everyone alive
+    return aliveOthers;                          // seer: alive minus self
+  }, [alivePlayerNames, gamePhase, role.myName, isWolf, isShadow, isProtector]);
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);

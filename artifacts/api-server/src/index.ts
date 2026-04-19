@@ -480,6 +480,11 @@ io.on("connection", (socket) => {
 
     room.nightPhaseIndex = -1; // host will manually start first night
 
+    // Broadcast canonical alive list to ALL clients so every player's
+    // targetList is seeded from the same authoritative source, not stale lobby data.
+    const allAliveNames = room.players.map((p) => p.name);
+    io.to(code).emit("alivePlayersSync", { alivePlayerNames: allAliveNames });
+
     logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
     // Night does NOT start automatically — host clicks 'بدء الليلة الأولى'
   });
