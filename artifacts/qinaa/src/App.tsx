@@ -89,6 +89,11 @@ interface MafiaActionSyncPayload {
   targetName: string;
 }
 
+interface ExecutionResultPayload {
+  executedPlayerName: string | null;
+  tally:              Record<string, number>; // targetName → vote count (anonymous)
+}
+
 interface GameOverPayload {
   winner:              "wolves" | "citizens";
   executedPlayerName:  string | null;
@@ -753,11 +758,12 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, executionResult, alivePlayerNames, phaseEndsAt, myDeathReason, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
+  executionResult: ExecutionResultPayload | null;
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
   myDeathReason: "assassinated" | "executed" | null;
@@ -996,11 +1002,41 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
           </div>
         )}
 
-        {gamePhase === "day_discussion" && !morningResults && (
+        {gamePhase === "day_discussion" && !morningResults && !executionResult && (
           <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
             style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
             <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع المدينة</p>
+          </div>
+        )}
+
+        {/* ── Execution Result Banner (strictly separate from morningResults) ── */}
+        {gamePhase === "day_discussion" && executionResult && (
+          <div className="w-full rounded-2xl flex flex-col gap-3 p-4"
+            style={{ backgroundColor: "#1A0D00", border: "1px solid #B71C1C" }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />
+              <p className="text-sm font-bold" style={{ color: "#FF6B6B" }}>
+                {executionResult.executedPlayerName
+                  ? `تم إعدام: ${executionResult.executedPlayerName}`
+                  : "لم يُنفَّذ الإعدام — الأصوات لم تكن كافية أو تعادلت"}
+              </p>
+            </div>
+            {Object.keys(executionResult.tally).length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>نتائج التصويت</p>
+                {Object.entries(executionResult.tally)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, count]) => (
+                    <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                      style={{ backgroundColor: "#120000", border: "1px solid #2A0000" }}>
+                      <span className="text-sm font-semibold text-white">{name}</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1299,11 +1335,12 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, isAudioEnabled, onToggleAudio, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, executionResult, alivePlayerNames, phaseEndsAt, isAudioEnabled, onToggleAudio, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
+  executionResult: ExecutionResultPayload | null;
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
   isAudioEnabled: boolean;
@@ -1682,6 +1719,36 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         )}
 
+        {/* ── Execution Result Banner (strictly separate from morningResults) ── */}
+        {activeGamePhase === "day_discussion" && executionResult && (
+          <div className="rounded-2xl flex flex-col gap-3 p-4"
+            style={{ backgroundColor: "#1A0D00", border: "1px solid #B71C1C" }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />
+              <p className="text-sm font-bold" style={{ color: "#FF6B6B" }}>
+                {executionResult.executedPlayerName
+                  ? `تم إعدام: ${executionResult.executedPlayerName}`
+                  : "لم يُنفَّذ الإعدام — الأصوات لم تكن كافية أو تعادلت"}
+              </p>
+            </div>
+            {Object.keys(executionResult.tally).length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>نتائج التصويت</p>
+                {Object.entries(executionResult.tally)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, count]) => (
+                    <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                      style={{ backgroundColor: "#120000", border: "1px solid #2A0000" }}>
+                      <span className="text-sm font-semibold text-white">{name}</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Voting: host casts their own vote + tally + execute ── */}
         {activeGamePhase === "voting" && (
           <div className="flex flex-col gap-3">
@@ -1873,9 +1940,10 @@ export default function App() {
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
   const [initialJoinCode, setInitialJoinCode] = useState("");
   const [myDeathReason, setMyDeathReason]   = useState<"assassinated" | "executed" | null>(null);
-  const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
-  const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
-  const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
+  const [morningResults, setMorningResults]       = useState<MorningResultsPayload | null>(null);
+  const [voteUpdate, setVoteUpdate]               = useState<VoteUpdatePayload | null>(null);
+  const [executionResult, setExecutionResult]     = useState<ExecutionResultPayload | null>(null);
+  const [gameOver, setGameOver]                   = useState<GameOverPayload | null>(null);
   // Authoritative alive player list — updated from server events, used by both host/player
   const [alivePlayerNames, setAlivePlayerNames] = useState<string[]>([]);
   const [phaseEndsAt, setPhaseEndsAt]           = useState<number | null>(null);
@@ -2034,6 +2102,11 @@ export default function App() {
       if (phase === "night_sleep") {
         setMorningResults(null);
         setVoteUpdate(null);
+        setExecutionResult(null);
+      }
+      // When a new vote round starts, clear any previous execution result
+      if (phase === "voting") {
+        setExecutionResult(null);
       }
     };
 
@@ -2070,12 +2143,13 @@ export default function App() {
       setPhaseEndsAt(endsAt);
     };
 
-    const onExecutionResult = ({ executedPlayerName }: { executedPlayerName: string | null }) => {
-      if (executedPlayerName) {
-        setAlivePlayerNames((prev) => prev.filter((n) => n !== executedPlayerName));
+    const onExecutionResult = (payload: ExecutionResultPayload) => {
+      setExecutionResult(payload);
+      if (payload.executedPlayerName) {
+        setAlivePlayerNames((prev) => prev.filter((n) => n !== payload.executedPlayerName));
         // If I was the one executed, record the death reason
         setPlayerRole((role) => {
-          if (role && role.myName === executedPlayerName) {
+          if (role && role.myName === payload.executedPlayerName) {
             setMyDeathReason("executed");
           }
           return role;
@@ -2090,6 +2164,7 @@ export default function App() {
       setGameOver(null);
       setMorningResults(null);
       setVoteUpdate(null);
+      setExecutionResult(null);
       setAlivePlayerNames([]);
       setMyDeathReason(null);
       setGamePhase("lobby");
@@ -2179,7 +2254,7 @@ export default function App() {
     }
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
-    setMorningResults(null); setVoteUpdate(null); setGameOver(null);
+    setMorningResults(null); setVoteUpdate(null); setExecutionResult(null); setGameOver(null);
     setAlivePlayerNames([]); setMyDeathReason(null);
     setScreen("menu");
   }, [stopCurrentAudio]);
@@ -2251,11 +2326,11 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} executionResult={executionResult} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} executionResult={executionResult} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
