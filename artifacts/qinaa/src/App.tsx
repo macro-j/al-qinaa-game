@@ -800,18 +800,16 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   };
 
   // Build filtered target list using the authoritative alive list.
-  // Wolf:      alive players excluding self and wolf-team allies
-  // Shadow:    ALL alive players (can silence self too)
-  // Protector: ALL alive players (can self-protect)
-  // Seer:      alive players excluding self (cannot investigate self)
+  // الولد  (Wolf):      all alive players EXCEPT self — can see/select الإكة
+  // الإكة  (Shadow):    ALL alive players — can silence anyone including self or wolf
+  // الشايب (Seer):      all alive players EXCEPT self
+  // البنت  (Guard):     ALL alive players — can protect anyone including self
   const aliveOthers = alivePlayerNames.filter((n) => n !== role.myName);
-  const targetList: string[] = isWolf
-    ? aliveOthers.filter((n) => !role.wolfAllies.includes(n))
-    : isShadow
-      ? alivePlayerNames
-      : isProtector
-        ? alivePlayerNames  // guard may target self
-        : aliveOthers;      // seer excludes self
+  const targetList: string[] =
+    isWolf        ? aliveOthers      // wolf: alive minus self only
+    : isShadow    ? alivePlayerNames // shadow: everyone alive
+    : isProtector ? alivePlayerNames // guard: everyone alive
+    : aliveOthers;                   // seer: alive minus self
 
   const handleSelectTarget = (name: string) => {
     setSelected(name);
