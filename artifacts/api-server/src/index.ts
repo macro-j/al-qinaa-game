@@ -46,6 +46,7 @@ interface Room {
   votes:           Record<string, string>; // voterName → targetName
   nightPhaseIndex: number; // index into NIGHT_SEQUENCE; -1 = not started
   nightTimers:     ReturnType<typeof setTimeout>[]; // auto-advance timers
+  phaseAutoTimer:  ReturnType<typeof setTimeout> | null; // day-phase auto-advance timer
 }
 
 const rooms: Record<string, Room> = {};
@@ -139,6 +140,14 @@ function clearNightTimers(room: Room) {
   room.nightTimers = [];
 }
 
+/** Clears the current day-phase auto-advance timer for a room. */
+function clearAutoTimer(room: Room) {
+  if (room.phaseAutoTimer) {
+    clearTimeout(room.phaseAutoTimer);
+    room.phaseAutoTimer = null;
+  }
+}
+
 /** Shared win-condition helper — used after night kill and after vote execution. */
 function checkWinConditions(code: string): "citizens" | "wolves" | null {
   const room = rooms[code];
@@ -206,6 +215,8 @@ function startNightPhase(code: string) {
         }
         io.to(code).emit("phaseUpdate", "day_discussion");
         io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
+        // Auto-advance: if host doesn't click "start voting" within 40s, do it automatically
+        room.phaseAutoTimer = setTimeout(() => doStartVoting(code), 40_000);
       } else {
         io.to(code).emit("phaseUpdate", toPhase);
         const phaseDuration = NIGHT_PHASE_DURATIONS[toPhase] ?? 10_000;
@@ -215,6 +226,69 @@ function startNightPhase(code: string) {
     }, delay);
     room.nightTimers.push(t);
   }
+}
+
+/** Internal: transitions to voting phase + arms 20s auto-advance to tally. */
+function doStartVoting(code: string) {
+  const room = rooms[code];
+  if (!room) return;
+  clearAutoTimer(room);
+  room.votes = {};
+  const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
+  io.to(code).emit("phaseUpdate", "voting");
+  io.to(code).emit("phaseTimer", { endsAt: Date.now() + 20_000 });
+  io.to(code).emit("voteUpdate", { votes: {}, alivePlayerNames, totalAlive: alivePlayerNames.length });
+  room.phaseAutoTimer = setTimeout(() => doTallyVotesAndExecute(code), 20_000);
+  logger.info({ code }, "Phase → voting (auto-advance in 20s)");
+}
+
+/** Internal: tallies votes, executes if rules met, then returns to day_discussion + arms 40s auto-advance. */
+function doTallyVotesAndExecute(code: string) {
+  const room = rooms[code];
+  if (!room) return;
+  clearAutoTimer(room);
+
+  const totalAlive = room.players.filter((p) => p.isAlive).length;
+  const tally: Record<string, number> = {};
+  for (const targetName of Object.values(room.votes)) {
+    tally[targetName] = (tally[targetName] ?? 0) + 1;
+  }
+
+  let executedPlayerName: string | null = null;
+  const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+  if (entries.length > 0) {
+    const [topTarget, topVotes] = entries[0];
+    const hasTie        = entries.length > 1 && entries[1][1] === topVotes;
+    const hasEnoughVotes = topVotes > Math.floor(totalAlive / 2);
+
+    if (!hasTie && hasEnoughVotes) {
+      const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
+      if (victim) {
+        victim.isAlive     = false;
+        victim.deathReason = "executed";
+        executedPlayerName = victim.name;
+        logger.info({ code, executedPlayerName }, "Player executed by vote");
+      }
+    } else {
+      logger.info({ code, hasTie, hasEnoughVotes, topVotes, totalAlive }, "No execution — vote thresholds not met");
+    }
+  }
+
+  room.votes = {};
+  io.to(code).emit("executionResult", { executedPlayerName });
+
+  const winner = checkWinConditions(code);
+  if (winner) {
+    io.to(code).emit("gameOver", { winner, executedPlayerName });
+    logger.info({ code, winner }, "Game over after execution");
+    return;
+  }
+
+  io.to(code).emit("phaseUpdate", "day_discussion");
+  io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
+  room.phaseAutoTimer = setTimeout(() => doStartVoting(code), 40_000);
+  logger.info({ code }, "No winner after execution — day discussion (auto-advance to voting in 40s)");
 }
 
 // ─── HTTP + Socket.io Server ──────────────────────────────────────────────────
@@ -254,6 +328,7 @@ io.on("connection", (socket) => {
         votes:           {},
         nightPhaseIndex: -1,
         nightTimers:     [],
+        phaseAutoTimer:  null,
       };
       rooms[code] = room;
       socket.join(code);
@@ -410,6 +485,7 @@ io.on("connection", (socket) => {
 
     if (wasHost || room.players.length === 0) {
       clearNightTimers(room);
+      clearAutoTimer(room);
       delete rooms[code];
       io.to(code).emit("roomClosed");
       logger.info({ code, reason: wasHost ? "host left" : "empty" }, "Room dissolved on clean leave");
@@ -485,8 +561,11 @@ io.on("connection", (socket) => {
     const allAliveNames = room.players.map((p) => p.name);
     io.to(code).emit("alivePlayersSync", { alivePlayerNames: allAliveNames });
 
-    logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed");
-    // Night does NOT start automatically — host clicks 'بدء الليلة الأولى'
+    // Auto-advance: if host doesn't click 'بدء الليلة الأولى' within 30s, start night automatically
+    clearAutoTimer(room);
+    room.phaseAutoTimer = setTimeout(() => startNightPhase(code), 30_000);
+
+    logger.info({ code, playerCount: assigned.length }, "Game started — roles distributed (auto-night in 30s)");
   });
 
   // ── Submit Night Action ────────────────────────────────────────────────────
@@ -567,12 +646,9 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return;
     if (room.hostId !== socket.id) return;
-    room.votes = {};
-    const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
-    io.to(code).emit("phaseUpdate", "voting");
-    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 20_000 });
-    io.to(code).emit("voteUpdate", { votes: {}, alivePlayerNames, totalAlive: alivePlayerNames.length });
-    logger.info({ code }, "Phase → voting");
+    clearAutoTimer(room); // cancel day_discussion auto-advance before host manually triggers voting
+    doStartVoting(code);
+    logger.info({ code }, "Phase → voting (host triggered)");
   });
 
   // ── Submit Vote ────────────────────────────────────────────────────────────
@@ -602,54 +678,9 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return;
     if (room.hostId !== socket.id) return;
-
-    // Count votes per target
-    const totalAlive = room.players.filter((p) => p.isAlive).length;
-    const tally: Record<string, number> = {};
-    for (const targetName of Object.values(room.votes)) {
-      tally[targetName] = (tally[targetName] ?? 0) + 1;
-    }
-
-    let executedPlayerName: string | null = null;
-    const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-
-    if (entries.length > 0) {
-      const [topTarget, topVotes] = entries[0];
-      // Rule 2: tie → no execution
-      const hasTie = entries.length > 1 && entries[1][1] === topVotes;
-      // Rule 1: must be strictly > half of alive players
-      const hasEnoughVotes = topVotes > Math.floor(totalAlive / 2);
-
-      if (!hasTie && hasEnoughVotes) {
-        const victim = room.players.find((p) => p.name === topTarget && p.isAlive);
-        if (victim) {
-          victim.isAlive     = false;
-          victim.deathReason = "executed";
-          executedPlayerName = victim.name;
-          logger.info({ code, executedPlayerName }, "Player executed by vote");
-        }
-      } else {
-        logger.info({ code, hasTie, hasEnoughVotes, topVotes, totalAlive }, "No execution — vote thresholds not met");
-      }
-    }
-
-    room.votes = {};
-
-    // Emit execution result (null when nobody executed)
-    io.to(code).emit("executionResult", { executedPlayerName });
-
-    // Win condition check (uses shared helper)
-    const winner = checkWinConditions(code);
-    if (winner) {
-      io.to(code).emit("gameOver", { winner, executedPlayerName });
-      logger.info({ code, winner }, "Game over after execution");
-      return;
-    }
-
-    // No winner — return to day_discussion; host manually starts next night
-    io.to(code).emit("phaseUpdate", "day_discussion");
-    io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
-    logger.info({ code }, "No winner after execution — waiting for host to start next night");
+    clearAutoTimer(room); // cancel voting auto-advance before host manually tallies
+    doTallyVotesAndExecute(code);
+    logger.info({ code }, "Tally & execute triggered by host");
   });
 
   // ── Host: Start / Restart Night (goes to night_sleep) ────────────────────
@@ -657,6 +688,7 @@ io.on("connection", (socket) => {
     const room = rooms[code];
     if (!room) return;
     if (room.hostId !== socket.id) return;
+    clearAutoTimer(room); // cancel role_reveal or day_discussion auto-advance
     startNightPhase(code);
     logger.info({ code }, "Night phase started by host button");
   });
@@ -690,8 +722,9 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.hostId !== socket.id) return;
 
-    // Cancel all night timers (if any started)
+    // Cancel all pending timers
     clearNightTimers(room);
+    clearAutoTimer(room);
 
     // Reset game state back to lobby
     room.started         = false;
@@ -728,6 +761,7 @@ io.on("connection", (socket) => {
         const wasHost = room.hostUserId === player.userId;
         if (wasHost || room.players.length === 0) {
           clearNightTimers(room);
+          clearAutoTimer(room);
           delete rooms[code];
           io.to(code).emit("roomClosed");
           logger.info({ code, reason: wasHost ? "host disconnected in lobby" : "empty" }, "Room dissolved in lobby");
@@ -751,6 +785,7 @@ io.on("connection", (socket) => {
         const wasHost = room.hostUserId === player.userId;
         if (wasHost || room.players.length === 0) {
           clearNightTimers(room);
+          clearAutoTimer(room);
           delete rooms[code];
           io.to(code).emit("roomClosed");
           logger.info({ code, reason: wasHost ? "host timed out" : "empty" }, "Room dissolved");
