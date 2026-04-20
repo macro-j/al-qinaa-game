@@ -861,35 +861,6 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
     return () => { socket.off("mafiaActionSync", onSync); };
   }, [isMafia]);
 
-  // Persistent AudioContext ref — created once, reused on every turn alert
-  const alertCtxRef = useRef<AudioContext | null>(null);
-
-  // Alert player when it becomes their turn (beep + vibrate)
-  useEffect(() => {
-    if (!isMyTurn) return;
-    try {
-      if (!alertCtxRef.current || alertCtxRef.current.state === "closed") {
-        alertCtxRef.current = new AudioContext();
-      }
-      const ctx = alertCtxRef.current;
-      const playBeep = (startOffset: number) => {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, ctx.currentTime + startOffset);
-        gain.gain.setValueAtTime(0.7, ctx.currentTime + startOffset);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + 0.35);
-        osc.start(ctx.currentTime + startOffset);
-        osc.stop(ctx.currentTime + startOffset + 0.35);
-      };
-      ctx.resume().then(() => { playBeep(0); playBeep(0.45); });
-    } catch { /* AudioContext not supported */ }
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
-  }, [isMyTurn]);
 
   const reveal  = useCallback(() => setRevealed(true),  []);
   const conceal = useCallback(() => setRevealed(false), []);
