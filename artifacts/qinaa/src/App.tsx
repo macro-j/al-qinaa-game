@@ -753,7 +753,7 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, executionInfo, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
@@ -761,6 +761,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
   myDeathReason: "assassinated" | "executed" | null;
+  executionInfo: { name: string; roleLabel: string; roleColor: string } | null;
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]           = useState(false);
@@ -1143,6 +1144,63 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Live Vote Tally (visible to all during voting) ── */}
+        {gamePhase === "voting" && voteUpdate && (
+          <div className="w-full flex flex-col gap-3 rounded-2xl p-4"
+            style={{ backgroundColor: "#0A0A00", border: "1px solid #3A2A00" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>التصويت الكلي</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "#1A1A1A", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                {Object.keys(voteUpdate.votes).length} / {voteUpdate.totalAlive ?? "..."} صوت
+              </span>
+            </div>
+            {Object.keys(voteUpdate.votes).length > 0 ? (
+              <div className="rounded-xl flex flex-col overflow-hidden"
+                style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+                {Object.entries(
+                  Object.values(voteUpdate.votes).reduce<Record<string, number>>((acc, t) => {
+                    acc[t] = (acc[t] ?? 0) + 1; return acc;
+                  }, {})
+                ).sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => (
+                  <div key={name}
+                    className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
+                    style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                    <span className="text-sm font-semibold text-white">{name}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-center py-2" style={{ color: "#555555" }}>لا توجد أصوات بعد...</p>
+            )}
+          </div>
+        )}
+
+        {/* ── Execution Reveal Banner (day_discussion after a vote) ── */}
+        {gamePhase === "day_discussion" && executionInfo && (
+          <div className="w-full flex flex-col items-center gap-3 rounded-2xl p-5"
+            style={{ backgroundColor: "#0D0000", border: "2px solid #D32F2F" }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "#2A0000", border: "1px solid #D32F2F" }}>
+              <span className="text-xl">⚖️</span>
+            </div>
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>قرار القرية</p>
+            <p className="text-base font-bold text-center text-white">
+              تم إعدام{" "}
+              <span style={{ color: "#D32F2F" }}>{executionInfo.name}</span>
+            </p>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              style={{ backgroundColor: "#1A0000", border: "1px solid #3A0000" }}>
+              <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>دوره كان:</span>
+              <span className="text-sm font-black" style={{ color: executionInfo.roleColor }}>
+                {executionInfo.roleLabel}
+              </span>
+            </div>
           </div>
         )}
 
@@ -1844,6 +1902,7 @@ export default function App() {
   const [gamePhase, setGamePhase]   = useState<string>("lobby");
   const [initialJoinCode, setInitialJoinCode] = useState("");
   const [myDeathReason, setMyDeathReason]   = useState<"assassinated" | "executed" | null>(null);
+  const [executionInfo, setExecutionInfo]   = useState<{ name: string; roleLabel: string; roleColor: string } | null>(null);
   const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
   const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
   const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
@@ -2005,6 +2064,7 @@ export default function App() {
       if (phase === "night_sleep") {
         setMorningResults(null);
         setVoteUpdate(null);
+        setExecutionInfo(null);
       }
     };
 
@@ -2041,9 +2101,19 @@ export default function App() {
       setPhaseEndsAt(endsAt);
     };
 
-    const onExecutionResult = ({ executedPlayerName }: { executedPlayerName: string | null }) => {
+    const onExecutionResult = ({ executedPlayerName, roleLabel, roleColor }: {
+      executedPlayerName: string | null;
+      roleLabel: string | null;
+      roleColor: string | null;
+    }) => {
       if (executedPlayerName) {
         setAlivePlayerNames((prev) => prev.filter((n) => n !== executedPlayerName));
+        // Store for execution banner display (shown in day_discussion)
+        setExecutionInfo({
+          name:      executedPlayerName,
+          roleLabel: roleLabel ?? "مجهول",
+          roleColor: roleColor ?? "#555555",
+        });
         // If I was the one executed, record the death reason
         setPlayerRole((role) => {
           if (role && role.myName === executedPlayerName) {
@@ -2063,6 +2133,7 @@ export default function App() {
       setVoteUpdate(null);
       setAlivePlayerNames([]);
       setMyDeathReason(null);
+      setExecutionInfo(null);
       setGamePhase("lobby");
       setPhaseEndsAt(null);
       // Reconstruct lobby state from current session so UI returns to lobby screen
@@ -2151,7 +2222,7 @@ export default function App() {
     clearSession();
     setLobby(null); setGame(null); setPlayerRole(null);
     setMorningResults(null); setVoteUpdate(null); setGameOver(null);
-    setAlivePlayerNames([]); setMyDeathReason(null);
+    setAlivePlayerNames([]); setMyDeathReason(null); setExecutionInfo(null);
     setScreen("menu");
   }, [stopCurrentAudio]);
 
@@ -2226,7 +2297,7 @@ export default function App() {
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {

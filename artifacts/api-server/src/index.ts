@@ -635,8 +635,13 @@ io.on("connection", (socket) => {
 
     room.votes = {};
 
-    // Emit execution result (null when nobody executed)
-    io.to(code).emit("executionResult", { executedPlayerName });
+    // Emit execution result — include role so all clients can reveal the card
+    const executedRole = executedPlayerName ? room.roles[executedPlayerName] : null;
+    io.to(code).emit("executionResult", {
+      executedPlayerName,
+      roleLabel: executedRole?.label ?? null,
+      roleColor: executedRole?.color ?? null,
+    });
 
     // Win condition check (uses shared helper)
     const winner = checkWinConditions(code);
