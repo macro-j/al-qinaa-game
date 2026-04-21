@@ -1935,7 +1935,8 @@ export default function App() {
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef         = useRef<AudioContext | null>(null);
   const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
-  const cinemaAudioRef      = useRef<HTMLAudioElement | null>(null); // currently-playing cinematic tone
+  const ambientRef          = useRef<HTMLAudioElement | null>(null); // night/day background tone
+  const alertRef            = useRef<HTMLAudioElement | null>(null); // wake/sleep role alert
   const audioRefsMap        = useRef<Record<string, HTMLAudioElement>>({}); // pre-loaded audio pool
   const gamePhaseRef        = useRef("lobby");                       // sync ref — always current phase
   const [isAudioEnabled, setIsAudioEnabled] = useState(true); // always ON — no manual toggle
@@ -1970,22 +1971,37 @@ export default function App() {
     audio.play().catch(() => {});
   }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Cinematic MP3 playback — uses pre-loaded pool for zero-latency play ─
-  const playCinemaAudio = useCallback((src: string) => {
+  // ── Helper: stop a single audio ref in-place ────────────────────────────
+  const stopRef = useCallback((ref: React.MutableRefObject<HTMLAudioElement | null>) => {
+    if (ref.current) {
+      ref.current.pause();
+      ref.current.currentTime = 0;
+    }
+  }, []);
+
+  // ── Ambient layer — night.mp3 / day.mp3 (background mood) ───────────────
+  const playAmbient = useCallback((src: string) => {
     try {
-      // Stop whatever cinematic sound is currently playing
-      if (cinemaAudioRef.current) {
-        cinemaAudioRef.current.pause();
-        cinemaAudioRef.current.currentTime = 0;
-      }
-      // Look up the pre-loaded Audio object; fall back to a fresh one if missing
+      stopRef(ambientRef);
       const audio = audioRefsMap.current[src] ?? new Audio(src);
       audio.currentTime = 0;
       audio.volume = 1;
-      cinemaAudioRef.current = audio;
+      ambientRef.current = audio;
       audio.play().catch(() => {});
     } catch { /* silently ignore */ }
-  }, []);
+  }, [stopRef]);
+
+  // ── Alert layer — wake.mp3 / sleep.mp3 (role cues, higher priority) ─────
+  const playAlert = useCallback((src: string) => {
+    try {
+      stopRef(alertRef);
+      const audio = audioRefsMap.current[src] ?? new Audio(src);
+      audio.currentTime = 0;
+      audio.volume = 1;
+      alertRef.current = audio;
+      audio.play().catch(() => {});
+    } catch { /* silently ignore */ }
+  }, [stopRef]);
 
   // ── Audio + WakeLock initializer — must be called from a user-gesture ───
   const initAudioSystem = useCallback(() => {
@@ -2253,20 +2269,26 @@ export default function App() {
 
     const onPlayTone = ({ type }: { type: string }) => {
       // gamePhaseRef.current is already updated by onPhaseUpdate (emitted just before play_tone)
+      // NOTE: only audio calls are timed here — all UI/state updates happen instantly via separate events.
       switch (type) {
         case "global_phase":
-          // Distinguish night (village sleeps) from morning (sun rises)
-          playCinemaAudio(
+          // Immediate: set the night or morning mood on the ambient layer
+          playAmbient(
             gamePhaseRef.current === "day_discussion"
               ? "/sounds/day.mp3"
               : "/sounds/night.mp3"
           );
           break;
         case "role_wake":
-          setTimeout(() => playCinemaAudio("/sounds/wake.mp3"),  4000);
+          // After 1 s: cut the ambient layer, then fire the role alert
+          setTimeout(() => {
+            stopRef(ambientRef); // silence night.mp3 cleanly
+            playAlert("/sounds/wake.mp3");
+          }, 1000);
           break;
         case "role_sleep":
-          setTimeout(() => playCinemaAudio("/sounds/sleep.mp3"), 4000);
+          // Immediate: role is done, play the sleep cue on the alert layer
+          playAlert("/sounds/sleep.mp3");
           break;
       }
     };
@@ -2322,7 +2344,7 @@ export default function App() {
       socket.off("gameAborted",      onGameAborted);
       socket.off("play_tone",        onPlayTone);
     };
-  }, [playPhaseAudio, playCinemaAudio]);
+  }, [playPhaseAudio, playAmbient, playAlert, stopRef]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
