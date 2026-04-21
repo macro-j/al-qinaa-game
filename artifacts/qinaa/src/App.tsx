@@ -9,8 +9,6 @@ import {
   BookOpen,
   Copy,
   Check,
-  Volume2,
-  VolumeX,
   ArrowRight,
   Users,
   Shuffle,
@@ -478,12 +476,9 @@ function LobbyScreen({
   const [players, setPlayers] = useState<SocketPlayer[]>(lobby.players);
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(false);
   const [closed, setClosed] = useState(false);
   const [starting, setStarting] = useState(false);
   const [kicked, setKicked] = useState(false);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
 
   const canStart = lobby.isHost && players.length >= 2;
 
@@ -535,22 +530,6 @@ function LobbyScreen({
     }
   }, [lobby.code]);
 
-  const toggleAudio = useCallback(async () => {
-    if (!audioEnabled) {
-      try { audioCtxRef.current = new AudioContext(); await audioCtxRef.current.resume(); } catch {}
-      try { if ("wakeLock" in navigator) wakeLockRef.current = await navigator.wakeLock.request("screen"); } catch {}
-      setAudioEnabled(true);
-    } else {
-      try { await audioCtxRef.current?.close(); audioCtxRef.current = null; } catch {}
-      try { await wakeLockRef.current?.release(); wakeLockRef.current = null; } catch {}
-      setAudioEnabled(false);
-    }
-  }, [audioEnabled]);
-
-  useEffect(() => () => {
-    wakeLockRef.current?.release().catch(() => {});
-    audioCtxRef.current?.close().catch(() => {});
-  }, []);
 
   if (kicked) {
     return (
@@ -731,18 +710,6 @@ function LobbyScreen({
             <span className="text-sm" style={{ color: "#9E9E9E" }}>في انتظار بدء اللعبة...</span>
           </div>
         )}
-
-        {/* Audio Toggle */}
-        <button onClick={toggleAudio}
-          className="flex flex-row-reverse items-center gap-3 w-full px-4 py-3 rounded-xl border text-sm font-medium transition-all duration-200 hover:brightness-125"
-          style={{
-            backgroundColor: audioEnabled ? "#0D1F0D" : "#1A1A1A",
-            borderColor:     audioEnabled ? "#4CAF50" : "#333333",
-            color:           audioEnabled ? "#4CAF50" : "#9E9E9E",
-          }}>
-          {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-          <span>{audioEnabled ? "الراوي الصوتي مفعّل — الشاشة ستبقى مضاءة" : "تفعيل الراوي الصوتي"}</span>
-        </button>
 
         <LeaveButton onLeave={onLeave} />
         <Footer />
@@ -1339,15 +1306,13 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, isAudioEnabled, onToggleAudio, executionInfo, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, executionInfo, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
   voteUpdate: VoteUpdatePayload | null;
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
-  isAudioEnabled: boolean;
-  onToggleAudio: () => void;
   executionInfo: { name: string; roleLabel: string; roleColor: string } | null;
   onLeave: () => void;
 }) {
@@ -1477,20 +1442,6 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
             <span className="font-bold text-white text-base">{game.myName}</span>
             <span className="text-xs px-1.5 py-0.5 rounded"
               style={{ backgroundColor: "#3A0000", color: "#FF6B6B", fontSize: "0.65rem" }}>مضيف + لاعب</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Audio mute toggle */}
-            <button
-              onClick={onToggleAudio}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200"
-              style={{
-                backgroundColor: isAudioEnabled ? "#0D1F0D" : "#1A1A1A",
-                border: `1px solid ${isAudioEnabled ? "#4CAF50" : "#333333"}`,
-                color:  isAudioEnabled ? "#4CAF50" : "#555555",
-              }}>
-              {isAudioEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-              <span>{isAudioEnabled ? "صوت" : "كتم"}</span>
-            </button>
           </div>
         </div>
 
@@ -1979,12 +1930,13 @@ export default function App() {
   const lobbyRef = useRef<LobbyState | null>(null);
   lobbyRef.current = lobby;
 
-  // ── Host-only MP3 audio engine ───────────────────────────────────────────
+  // ── Audio + Wake Lock system (auto-initialized on join/create) ──────────
   const isHostRef           = useRef(false);
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef         = useRef<AudioContext | null>(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-  const isAudioEnabledRef   = useRef(false);
+  const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true); // always ON — no manual toggle
+  const isAudioEnabledRef   = useRef(true);
   isAudioEnabledRef.current = isAudioEnabled;
 
   const PHASE_AUDIO: Record<string, string> = {
@@ -2043,6 +1995,39 @@ export default function App() {
       }
     } catch { /* AudioContext not supported — silently ignore */ }
   }, []); // uses only refs — always stable
+
+  // ── Audio + WakeLock initializer — must be called from a user-gesture ───
+  const initAudioSystem = useCallback(() => {
+    // Create / resume Web Audio Context (required before any tone can play)
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      if (audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    } catch {}
+    // Request screen wake lock so the device stays awake during the game
+    if ("wakeLock" in navigator && !wakeLockRef.current) {
+      (navigator as unknown as { wakeLock: { request(t: string): Promise<WakeLockSentinel> } })
+        .wakeLock.request("screen")
+        .then((s) => { wakeLockRef.current = s; })
+        .catch(() => {});
+    }
+    setIsAudioEnabled(true);
+  }, []); // only uses stable refs + setState setter
+
+  // ── Task 3: Persistence — re-init on first interaction after page refresh ─
+  useEffect(() => {
+    const reinit = () => initAudioSystem();
+    document.addEventListener("click",      reinit, { once: true });
+    document.addEventListener("touchstart", reinit, { once: true, passive: true });
+    return () => {
+      document.removeEventListener("click",      reinit);
+      document.removeEventListener("touchstart", reinit);
+    };
+  }, [initAudioSystem]);
 
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
@@ -2346,6 +2331,7 @@ export default function App() {
 
   // ── Create room ──────────────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
+    initAudioSystem(); // user-gesture: init AudioContext + wake lock
     const uid    = getOrCreateUserId();
     const socket = getSocket();
     socket.emit("createRoom", { name, userId: uid }, (res: { code: string; players: { socketId: string; name: string }[] } | { error: string }) => {
@@ -2359,6 +2345,7 @@ export default function App() {
 
   // ── Join room ────────────────────────────────────────────────────────────
   const handleJoinRoom = useCallback((name: string, code: string, onError: (msg: string) => void) => {
+    initAudioSystem(); // user-gesture: init AudioContext + wake lock
     const uid    = getOrCreateUserId();
     const socket = getSocket();
     socket.emit(
@@ -2411,15 +2398,7 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => {
-        // iOS: AudioContext must be created/resumed from a user gesture
-        if (!audioCtxRef.current) {
-          try { audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(); } catch { /* ignore */ }
-        } else if (audioCtxRef.current.state === "suspended") {
-          audioCtxRef.current.resume().catch(() => {});
-        }
-        setIsAudioEnabled((v) => !v);
-      }} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
