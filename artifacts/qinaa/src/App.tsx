@@ -946,7 +946,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
         </div>
 
         {/* ── Morning Results Banner ── */}
-        {gamePhase === "day_discussion" && morningResults && (
+        {gamePhase === "day_discussion" && morningResults && !executionInfo && (
           <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
             style={{ backgroundColor: morningResults.killedPlayerName ? "#1A0000" : "#001A0A", border: `1px solid ${morningResults.killedPlayerName ? "#D32F2F" : "#33691E"}` }}>
             <div className="flex items-center gap-2">
@@ -968,7 +968,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
           </div>
         )}
 
-        {gamePhase === "day_discussion" && !morningResults && (
+        {gamePhase === "day_discussion" && !morningResults && !executionInfo && (
           <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
             style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
@@ -1328,7 +1328,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, isAudioEnabled, onToggleAudio, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, isAudioEnabled, onToggleAudio, executionInfo, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
@@ -1337,6 +1337,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   phaseEndsAt: number | null;
   isAudioEnabled: boolean;
   onToggleAudio: () => void;
+  executionInfo: { name: string; roleLabel: string; roleColor: string } | null;
   onLeave: () => void;
 }) {
   const [myRoleRevealed, setMyRoleRevealed] = useState(false);
@@ -1688,8 +1689,8 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         )}
 
-        {/* ── Morning Results Banner ── */}
-        {activeGamePhase === "day_discussion" && morningResults && (
+        {/* ── Morning Results Banner — hidden once execution info is available ── */}
+        {activeGamePhase === "day_discussion" && morningResults && !executionInfo && (
           <div className="rounded-2xl flex flex-col gap-2 p-4"
             style={{ backgroundColor: morningResults.killedPlayerName ? "#1A0000" : "#001A0A", border: `1px solid ${morningResults.killedPlayerName ? "#D32F2F" : "#33691E"}` }}>
             <div className="flex items-center gap-2">
@@ -1708,6 +1709,59 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 والساكت: {morningResults.silencedPlayerName}
               </p>
             )}
+          </div>
+        )}
+
+        {/* ── Execution Reveal Banner (post-execution day_discussion) ── */}
+        {activeGamePhase === "day_discussion" && executionInfo && (
+          <div className="w-full flex flex-col items-center gap-3 rounded-2xl p-5"
+            style={{ backgroundColor: "#0D0000", border: "2px solid #D32F2F" }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: "#2A0000", border: "1px solid #D32F2F" }}>
+              <span className="text-xl">⚖️</span>
+            </div>
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>قرار القرية</p>
+            <p className="text-base font-bold text-center text-white">
+              تم إعدام{" "}
+              <span style={{ color: "#D32F2F" }}>{executionInfo.name}</span>
+            </p>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              style={{ backgroundColor: "#1A0000", border: "1px solid #3A0000" }}>
+              <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>دوره كان:</span>
+              <span className="text-sm font-black" style={{ color: executionInfo.roleColor }}>
+                {executionInfo.roleLabel}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Post-execution final tally (day_discussion, after vote) ── */}
+        {activeGamePhase === "day_discussion" && executionInfo && voteUpdate && Object.keys(voteUpdate.votes).length > 0 && (
+          <div className="w-full flex flex-col gap-3 rounded-2xl p-4"
+            style={{ backgroundColor: "#0A0A00", border: "1px solid #3A2A00" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>نتيجة التصويت النهائية</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "#1A1A1A", color: "#FF8F00", border: "1px solid #FF8F00" }}>
+                {Object.keys(voteUpdate.votes).length} / {voteUpdate.totalAlive ?? "..."} صوت
+              </span>
+            </div>
+            <div className="rounded-xl flex flex-col overflow-hidden"
+              style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+              {Object.entries(
+                Object.values(voteUpdate.votes).reduce<Record<string, number>>((acc, t) => {
+                  acc[t] = (acc[t] ?? 0) + 1; return acc;
+                }, {})
+              ).sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => (
+                <div key={name}
+                  className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
+                  style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
+                  <span className="text-sm font-semibold" style={{ color: name === executionInfo.name ? "#FF6B6B" : "#fff" }}>{name}</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -2293,7 +2347,7 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
