@@ -1935,7 +1935,8 @@ export default function App() {
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef         = useRef<AudioContext | null>(null);
   const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
-  const cinemaAudioRef      = useRef<HTMLAudioElement | null>(null); // cinematic MP3 tones
+  const cinemaAudioRef      = useRef<HTMLAudioElement | null>(null); // currently-playing cinematic tone
+  const audioRefsMap        = useRef<Record<string, HTMLAudioElement>>({}); // pre-loaded audio pool
   const gamePhaseRef        = useRef("lobby");                       // sync ref — always current phase
   const [isAudioEnabled, setIsAudioEnabled] = useState(true); // always ON — no manual toggle
   const isAudioEnabledRef   = useRef(true);
@@ -1969,15 +1970,18 @@ export default function App() {
     audio.play().catch(() => {});
   }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Cinematic MP3 playback — plays on ALL clients via play_tone events ──
+  // ── Cinematic MP3 playback — uses pre-loaded pool for zero-latency play ─
   const playCinemaAudio = useCallback((src: string) => {
     try {
+      // Stop whatever cinematic sound is currently playing
       if (cinemaAudioRef.current) {
         cinemaAudioRef.current.pause();
-        cinemaAudioRef.current = null;
+        cinemaAudioRef.current.currentTime = 0;
       }
-      const audio = new Audio(src);
+      // Look up the pre-loaded Audio object; fall back to a fresh one if missing
+      const audio = audioRefsMap.current[src] ?? new Audio(src);
       audio.currentTime = 0;
+      audio.volume = 1;
       cinemaAudioRef.current = audio;
       audio.play().catch(() => {});
     } catch { /* silently ignore */ }
@@ -2004,6 +2008,48 @@ export default function App() {
     }
     setIsAudioEnabled(true);
   }, []); // only uses stable refs + setState setter
+
+  // ── Warm-up: play each cinematic sound at volume=0 for 100ms to unlock ──
+  // Must be called from a real user gesture (Join / Create click)
+  const warmUpAudio = useCallback(() => {
+    const CINEMA_SRCS = [
+      "/sounds/night.mp3",
+      "/sounds/day.mp3",
+      "/sounds/wake.mp3",
+      "/sounds/sleep.mp3",
+    ];
+    for (const src of CINEMA_SRCS) {
+      const audio = audioRefsMap.current[src];
+      if (!audio) continue;
+      audio.volume = 0;
+      audio.currentTime = 0;
+      const p = audio.play();
+      if (p !== undefined) {
+        p.then(() => {
+          setTimeout(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 1;
+          }, 100);
+        }).catch(() => {});
+      }
+    }
+  }, []); // uses only stable ref
+
+  // ── Pre-load all 4 cinematic Audio objects once on mount ─────────────────
+  useEffect(() => {
+    const CINEMA_SRCS = [
+      "/sounds/night.mp3",
+      "/sounds/day.mp3",
+      "/sounds/wake.mp3",
+      "/sounds/sleep.mp3",
+    ];
+    for (const src of CINEMA_SRCS) {
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      audioRefsMap.current[src] = audio;
+    }
+  }, []);
 
   // ── Task 3: Persistence — re-init on first interaction after page refresh ─
   useEffect(() => {
@@ -2328,6 +2374,7 @@ export default function App() {
   // ── Create room ──────────────────────────────────────────────────────────
   const handleCreateName = useCallback((name: string) => {
     initAudioSystem(); // user-gesture: init AudioContext + wake lock
+    warmUpAudio();     // pre-warm all 4 cinematic sounds at volume=0
     const uid    = getOrCreateUserId();
     const socket = getSocket();
     socket.emit("createRoom", { name, userId: uid }, (res: { code: string; players: { socketId: string; name: string }[] } | { error: string }) => {
@@ -2342,6 +2389,7 @@ export default function App() {
   // ── Join room ────────────────────────────────────────────────────────────
   const handleJoinRoom = useCallback((name: string, code: string, onError: (msg: string) => void) => {
     initAudioSystem(); // user-gesture: init AudioContext + wake lock
+    warmUpAudio();     // pre-warm all 4 cinematic sounds at volume=0
     const uid    = getOrCreateUserId();
     const socket = getSocket();
     socket.emit(
