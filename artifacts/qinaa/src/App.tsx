@@ -2262,8 +2262,12 @@ export default function App() {
               : "/sounds/night.mp3"
           );
           break;
-        case "role_wake":  playCinemaAudio("/sounds/wake.mp3");  break;
-        case "role_sleep": playCinemaAudio("/sounds/sleep.mp3"); break;
+        case "role_wake":
+          setTimeout(() => playCinemaAudio("/sounds/wake.mp3"),  2500);
+          break;
+        case "role_sleep":
+          setTimeout(() => playCinemaAudio("/sounds/sleep.mp3"), 2500);
+          break;
       }
     };
 
