@@ -1935,6 +1935,8 @@ export default function App() {
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef         = useRef<AudioContext | null>(null);
   const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
+  const cinemaAudioRef      = useRef<HTMLAudioElement | null>(null); // cinematic MP3 tones
+  const gamePhaseRef        = useRef("lobby");                       // sync ref — always current phase
   const [isAudioEnabled, setIsAudioEnabled] = useState(true); // always ON — no manual toggle
   const isAudioEnabledRef   = useRef(true);
   isAudioEnabledRef.current = isAudioEnabled;
@@ -1967,34 +1969,19 @@ export default function App() {
     audio.play().catch(() => {});
   }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Synthesized tone engine (Web Audio API) — plays on ALL clients ──────
-  // host gates on isAudioEnabled toggle; players always play (no toggle UI)
-  const playBeep = useCallback((frequency: number, duration: number, repetitions: number) => {
-    if (isHostRef.current && !isAudioEnabledRef.current) return;
+  // ── Cinematic MP3 playback — plays on ALL clients via play_tone events ──
+  const playCinemaAudio = useCallback((src: string) => {
     try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      if (cinemaAudioRef.current) {
+        cinemaAudioRef.current.pause();
+        cinemaAudioRef.current = null;
       }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === "suspended") ctx.resume();
-      const gap = 0.12; // 120ms silence between repetitions
-      const now = ctx.currentTime;
-      for (let i = 0; i < repetitions; i++) {
-        const t    = now + i * (duration + gap);
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(frequency, t);
-        gain.gain.setValueAtTime(0.4, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + Math.max(duration - 0.01, 0.01));
-        osc.start(t);
-        osc.stop(t + duration);
-      }
-    } catch { /* AudioContext not supported — silently ignore */ }
-  }, []); // uses only refs — always stable
+      const audio = new Audio(src);
+      audio.currentTime = 0;
+      cinemaAudioRef.current = audio;
+      audio.play().catch(() => {});
+    } catch { /* silently ignore */ }
+  }, []);
 
   // ── Audio + WakeLock initializer — must be called from a user-gesture ───
   const initAudioSystem = useCallback(() => {
@@ -2151,6 +2138,7 @@ export default function App() {
     };
 
     const onPhaseUpdate = (phase: string) => {
+      gamePhaseRef.current = phase; // sync immediately so onPlayTone can read it
       setGamePhase(phase);
       playPhaseAudio(phase);
       // At the start of a new night, clear stale day-phase state
@@ -2218,10 +2206,18 @@ export default function App() {
     };
 
     const onPlayTone = ({ type }: { type: string }) => {
+      // gamePhaseRef.current is already updated by onPhaseUpdate (emitted just before play_tone)
       switch (type) {
-        case "global_phase": playBeep(440, 0.5, 3); break; // 3× deep 440Hz — village sleeps/wakes
-        case "role_wake":    playBeep(880, 0.2, 1); break; // 1× high 880Hz — role wakes
-        case "role_sleep":   playBeep(220, 0.2, 1); break; // 1× low 220Hz  — role sleeps
+        case "global_phase":
+          // Distinguish night (village sleeps) from morning (sun rises)
+          playCinemaAudio(
+            gamePhaseRef.current === "day_discussion"
+              ? "/sounds/day.mp3"
+              : "/sounds/night.mp3"
+          );
+          break;
+        case "role_wake":  playCinemaAudio("/sounds/wake.mp3");  break;
+        case "role_sleep": playCinemaAudio("/sounds/sleep.mp3"); break;
       }
     };
 
@@ -2276,7 +2272,7 @@ export default function App() {
       socket.off("gameAborted",      onGameAborted);
       socket.off("play_tone",        onPlayTone);
     };
-  }, [playPhaseAudio, playBeep]);
+  }, [playPhaseAudio, playCinemaAudio]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
