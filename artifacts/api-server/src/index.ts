@@ -184,6 +184,7 @@ function startNightPhase(code: string) {
   room.currentPhase = "night_sleep";
   io.to(code).emit("phaseUpdate", "night_sleep");
   io.to(code).emit("phaseTimer", { endsAt: Date.now() + sleepDuration });
+  io.to(code).emit("play_tone", { type: "global_phase" }); // whole village sleeps
   logger.info({ code, phase: "night_sleep" }, "Night phase started (auto-timer)");
 
   // Schedule each subsequent phase
@@ -197,7 +198,12 @@ function startNightPhase(code: string) {
       if (!rooms[code]) return; // room was dissolved
       room.nightPhaseIndex = i + 1;
 
+      // Helper: night role phases (NOT night_sleep)
+      const isRolePhase = (p: string) => p !== "night_sleep" && p.startsWith("night_");
+
       if (toPhase === "day_discussion") {
+        // Previous role phase ends → role sleeps
+        if (isRolePhase(fromPhase)) io.to(code).emit("play_tone", { type: "role_sleep" });
         resolveMorning(code); // applies kill/silence, emits morningResults
         // Immediate win check after night kill
         const winner = checkWinConditions(code);
@@ -209,11 +215,15 @@ function startNightPhase(code: string) {
         room.currentPhase = "day_discussion";
         io.to(code).emit("phaseUpdate", "day_discussion");
         io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
+        io.to(code).emit("play_tone", { type: "global_phase" }); // sun rises
       } else {
+        // Previous role phase ends → role sleeps; next role phase starts → role wakes
+        if (isRolePhase(fromPhase)) io.to(code).emit("play_tone", { type: "role_sleep" });
         room.currentPhase = toPhase;
         io.to(code).emit("phaseUpdate", toPhase);
         const phaseDuration = NIGHT_PHASE_DURATIONS[toPhase] ?? 10_000;
         io.to(code).emit("phaseTimer", { endsAt: Date.now() + phaseDuration });
+        if (isRolePhase(toPhase)) io.to(code).emit("play_tone", { type: "role_wake" });
       }
       logger.info({ code, phase: toPhase, index: i + 1 }, "Night phase auto-advanced");
     }, delay);

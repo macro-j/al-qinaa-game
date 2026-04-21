@@ -1982,6 +1982,7 @@ export default function App() {
   // ── Host-only MP3 audio engine ───────────────────────────────────────────
   const isHostRef           = useRef(false);
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef         = useRef<AudioContext | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const isAudioEnabledRef   = useRef(false);
   isAudioEnabledRef.current = isAudioEnabled;
@@ -2013,6 +2014,35 @@ export default function App() {
     currentAudioRef.current = audio;
     audio.play().catch(() => {});
   }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Synthesized tone engine (Web Audio API) — plays on ALL clients ──────
+  // host gates on isAudioEnabled toggle; players always play (no toggle UI)
+  const playBeep = useCallback((frequency: number, duration: number, repetitions: number) => {
+    if (isHostRef.current && !isAudioEnabledRef.current) return;
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      const gap = 0.12; // 120ms silence between repetitions
+      const now = ctx.currentTime;
+      for (let i = 0; i < repetitions; i++) {
+        const t    = now + i * (duration + gap);
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(frequency, t);
+        gain.gain.setValueAtTime(0.4, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + Math.max(duration - 0.01, 0.01));
+        osc.start(t);
+        osc.stop(t + duration);
+      }
+    } catch { /* AudioContext not supported — silently ignore */ }
+  }, []); // uses only refs — always stable
 
   // ── On mount: restore session from localStorage ──────────────────────────
   useEffect(() => {
@@ -2202,6 +2232,14 @@ export default function App() {
       }
     };
 
+    const onPlayTone = ({ type }: { type: string }) => {
+      switch (type) {
+        case "global_phase": playBeep(440, 0.5, 3); break; // 3× deep 440Hz — village sleeps/wakes
+        case "role_wake":    playBeep(880, 0.2, 1); break; // 1× high 880Hz — role wakes
+        case "role_sleep":   playBeep(220, 0.2, 1); break; // 1× low 220Hz  — role sleeps
+      }
+    };
+
     const onGameAborted = ({ players: updatedPlayers }: { players: SocketPlayer[] }) => {
       // Reset all game state
       setGame(null);
@@ -2238,6 +2276,7 @@ export default function App() {
     socket.on("phaseTimer",       onPhaseTimer);
     socket.on("executionResult",  onExecutionResult);
     socket.on("gameAborted",      onGameAborted);
+    socket.on("play_tone",        onPlayTone);
     return () => {
       socket.off("connect",          onConnect);
       socket.off("disconnect",       onDisconnect);
@@ -2250,8 +2289,9 @@ export default function App() {
       socket.off("phaseTimer",       onPhaseTimer);
       socket.off("executionResult",  onExecutionResult);
       socket.off("gameAborted",      onGameAborted);
+      socket.off("play_tone",        onPlayTone);
     };
-  }, [playPhaseAudio]);
+  }, [playPhaseAudio, playBeep]);
 
   // ── Shared game-started handler ─────────────────────────────────────────
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
@@ -2371,7 +2411,15 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => setIsAudioEnabled((v) => !v)} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} isAudioEnabled={isAudioEnabled} onToggleAudio={() => {
+        // iOS: AudioContext must be created/resumed from a user gesture
+        if (!audioCtxRef.current) {
+          try { audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(); } catch { /* ignore */ }
+        } else if (audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume().catch(() => {});
+        }
+        setIsAudioEnabled((v) => !v);
+      }} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
