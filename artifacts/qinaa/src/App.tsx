@@ -2263,10 +2263,10 @@ export default function App() {
           );
           break;
         case "role_wake":
-          setTimeout(() => playCinemaAudio("/sounds/wake.mp3"),  2500);
+          setTimeout(() => playCinemaAudio("/sounds/wake.mp3"),  4000);
           break;
         case "role_sleep":
-          setTimeout(() => playCinemaAudio("/sounds/sleep.mp3"), 2500);
+          setTimeout(() => playCinemaAudio("/sounds/sleep.mp3"), 4000);
           break;
       }
     };
