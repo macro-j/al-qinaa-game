@@ -771,6 +771,17 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   const [votedFor, setVotedFor]           = useState<string | null>(null);
   const [mafiaSync, setMafiaSync]         = useState<{ killTarget: string | null; silenceTarget: string | null }>({ killTarget: null, silenceTarget: null });
 
+  // On reconnect during voting phase, restore any vote already cast by this player
+  useEffect(() => {
+    if (gamePhase === "voting" && voteUpdate?.votes[role.myName]) {
+      setVotedFor(voteUpdate.votes[role.myName]);
+    }
+    // Reset votedFor when voting phase ends so it's clean for next round
+    if (gamePhase !== "voting") {
+      setVotedFor(null);
+    }
+  }, [gamePhase, voteUpdate, role.myName]);
+
   const isWolf         = role.label === "الولد";
   const isShadow       = role.label === "الإكة";
   const isMafia        = isWolf || isShadow;
@@ -2034,7 +2045,9 @@ export default function App() {
         (res:
           | { code: string; players: { socketId: string; name: string }[]; started: false }
           | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
-          | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
+          | { code: string; started: true; isHost: false; myRole: { label: string; color: string };
+              activeGamePhase: string; myVote: string | null; isAlive: boolean;
+              deathReason: "assassinated" | "executed" | null }
           | { error: string }
         ) => {
           if ("error" in res) {
@@ -2056,6 +2069,11 @@ export default function App() {
           } else {
             setLobby({ code: res.code, isHost: false, myName: session.myName, players: [] });
             setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: session.myName, players: [], wolfAllies: [] });
+            // Restore game phase and death state from server sync
+            setGamePhase(res.activeGamePhase ?? "role_reveal");
+            if (!res.isAlive || res.deathReason) {
+              setMyDeathReason(res.deathReason ?? "executed");
+            }
             setScreen("player-screen");
           }
         },
@@ -2090,7 +2108,9 @@ export default function App() {
         (res:
           | { code: string; players: { socketId: string; name: string }[]; started: false }
           | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
-          | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
+          | { code: string; started: true; isHost: false; myRole: { label: string; color: string };
+              activeGamePhase: string; myVote: string | null; isAlive: boolean;
+              deathReason: "assassinated" | "executed" | null }
           | { error: string }
         ) => {
           if ("error" in res) { clearSession(); setLobby(null); setGame(null); setPlayerRole(null); setScreen("menu"); return; }
@@ -2104,7 +2124,11 @@ export default function App() {
             setScreen("dashboard");
           } else {
             setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: current.myName, players: [], wolfAllies: [] });
-            // Player rejoins: alive list will sync on next voteUpdate/morningResults
+            // Restore game phase and death state from server sync
+            setGamePhase(res.activeGamePhase ?? "role_reveal");
+            if (!res.isAlive || res.deathReason) {
+              setMyDeathReason(res.deathReason ?? "executed");
+            }
             setScreen("player-screen");
           }
         },

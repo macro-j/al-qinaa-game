@@ -46,6 +46,7 @@ interface Room {
   votes:           Record<string, string>; // voterName → targetName
   nightPhaseIndex: number; // index into NIGHT_SEQUENCE; -1 = not started
   nightTimers:     ReturnType<typeof setTimeout>[]; // auto-advance timers
+  currentPhase:    string; // latest phaseUpdate value — used for reconnect sync
 }
 
 const rooms: Record<string, Room> = {};
@@ -180,6 +181,7 @@ function startNightPhase(code: string) {
   for (const p of room.players) p.isSilenced = false;
 
   const sleepDuration = NIGHT_PHASE_DURATIONS["night_sleep"] ?? 3_000;
+  room.currentPhase = "night_sleep";
   io.to(code).emit("phaseUpdate", "night_sleep");
   io.to(code).emit("phaseTimer", { endsAt: Date.now() + sleepDuration });
   logger.info({ code, phase: "night_sleep" }, "Night phase started (auto-timer)");
@@ -204,9 +206,11 @@ function startNightPhase(code: string) {
           logger.info({ code, winner }, "Game over after night kill");
           return;
         }
+        room.currentPhase = "day_discussion";
         io.to(code).emit("phaseUpdate", "day_discussion");
         io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
       } else {
+        room.currentPhase = toPhase;
         io.to(code).emit("phaseUpdate", toPhase);
         const phaseDuration = NIGHT_PHASE_DURATIONS[toPhase] ?? 10_000;
         io.to(code).emit("phaseTimer", { endsAt: Date.now() + phaseDuration });
@@ -254,6 +258,7 @@ io.on("connection", (socket) => {
         votes:           {},
         nightPhaseIndex: -1,
         nightTimers:     [],
+        currentPhase:    "lobby",
       };
       rooms[code] = room;
       socket.join(code);
@@ -298,7 +303,12 @@ io.on("connection", (socket) => {
             callback({ code, started: true, isHost: true, players: allPlayers(room) });
           } else {
             const myRole = room.roles[byUid.name] ?? { label: "المواطن", color: "#555555" };
-            callback({ code, started: true, isHost: false, myRole });
+            callback({ code, started: true, isHost: false, myRole,
+              activeGamePhase: room.currentPhase,
+              myVote:          room.votes[byUid.name] ?? null,
+              isAlive:         byUid.isAlive,
+              deathReason:     byUid.deathReason,
+            });
           }
         }
         return;
@@ -320,7 +330,12 @@ io.on("connection", (socket) => {
           const alive = room.players.filter((p) => p.isAlive).map((p) => p.name);
           socket.emit("alivePlayersSync", { alivePlayerNames: alive });
           const myRole = room.roles[ghostByName.name] ?? { label: "المواطن", color: "#555555" };
-          callback({ code, started: true, isHost: false, myRole });
+          callback({ code, started: true, isHost: false, myRole,
+            activeGamePhase: room.currentPhase,
+            myVote:          room.votes[ghostByName.name] ?? null,
+            isAlive:         ghostByName.isAlive,
+            deathReason:     ghostByName.deathReason,
+          });
         }
         return;
       }
@@ -387,7 +402,12 @@ io.on("connection", (socket) => {
         callback({ code, started: true, isHost: true, players: allPlayers(room) });
       } else {
         const myRole = room.roles[player.name] ?? { label: "المواطن", color: "#555555" };
-        callback({ code, started: true, isHost: false, myRole });
+        callback({ code, started: true, isHost: false, myRole,
+          activeGamePhase: room.currentPhase,
+          myVote:          room.votes[player.name] ?? null,
+          isAlive:         player.isAlive,
+          deathReason:     player.deathReason,
+        });
       }
     },
   );
@@ -479,6 +499,7 @@ io.on("connection", (socket) => {
     });
 
     room.nightPhaseIndex = -1; // host will manually start first night
+    room.currentPhase    = "role_reveal";
 
     // Broadcast canonical alive list to ALL clients so every player's
     // targetList is seeded from the same authoritative source, not stale lobby data.
@@ -568,6 +589,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.hostId !== socket.id) return;
     room.votes = {};
+    room.currentPhase = "voting";
     const alivePlayerNames = room.players.filter((p) => p.isAlive).map((p) => p.name);
     io.to(code).emit("phaseUpdate", "voting");
     io.to(code).emit("phaseTimer", { endsAt: Date.now() + 20_000 });
@@ -652,6 +674,7 @@ io.on("connection", (socket) => {
     }
 
     // No winner — return to day_discussion; host manually starts next night
+    room.currentPhase = "day_discussion";
     io.to(code).emit("phaseUpdate", "day_discussion");
     io.to(code).emit("phaseTimer", { endsAt: Date.now() + 40_000 });
     logger.info({ code }, "No winner after execution — waiting for host to start next night");
@@ -704,6 +727,7 @@ io.on("connection", (socket) => {
     room.nightActions    = freshNightActions();
     room.nightPhaseIndex = -1;
     room.votes           = {};
+    room.currentPhase    = "lobby";
 
     // Reset every player to alive/un-silenced (clean slate)
     for (const p of room.players) {
