@@ -2280,11 +2280,11 @@ export default function App() {
           );
           break;
         case "role_wake":
-          // After 1 s: cut the ambient layer, then fire the role alert
+          // After 2.5 s: cut the ambient layer, then fire the role alert
           setTimeout(() => {
             stopRef(ambientRef); // silence night.mp3 cleanly
             playAlert("/sounds/wake.mp3");
-          }, 1000);
+          }, 2500);
           break;
         case "role_sleep":
           // Immediate: role is done, play the sleep cue on the alert layer
