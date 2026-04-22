@@ -1403,6 +1403,27 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
     return () => { socket.off("mafiaActionSync", onSync); };
   }, [hostIsMafia]);
 
+  // ── Auto-advance: trigger voting when day_discussion timer expires ────────
+  // Fires at most once per phaseEndsAt window; skips post-execution rounds.
+  const autoVoteFiredRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (activeGamePhase !== "day_discussion") return;
+    if (!phaseEndsAt)  return;
+    if (executionInfo) return; // post-execution — let host decide manually
+
+    const fire = () => {
+      if (autoVoteFiredRef.current === phaseEndsAt) return; // guard: fire once
+      autoVoteFiredRef.current = phaseEndsAt;
+      getSocket().emit("startVoting", { code: game.code });
+    };
+
+    const msLeft = phaseEndsAt - Date.now();
+    if (msLeft <= 0) { fire(); return; }
+
+    const timer = setTimeout(fire, msLeft);
+    return () => clearTimeout(timer);
+  }, [activeGamePhase, phaseEndsAt, executionInfo, game.code]);
+
   const handleSubmitHostAction = () => {
     if (!selectedTarget) return;
     getSocket().emit("submitNightAction", {
