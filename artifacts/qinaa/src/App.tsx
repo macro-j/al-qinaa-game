@@ -1081,7 +1081,9 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
               <div className="flex flex-col items-center gap-3 py-6 px-4">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#FF8F00" }} />
                 <p className="text-sm font-bold" style={{ color: "#FF8F00" }}>
-                  صوّتت ضد: <span style={{ color: "#FFFFFF" }}>{votedFor}</span>
+                  {votedFor === "SKIP_VOTE"
+                    ? "اخترت تخطي التصويت"
+                    : <> صوّتت ضد: <span style={{ color: "#FFFFFF" }}>{votedFor}</span></>}
                 </p>
                 <p className="text-xs text-center" style={{ color: "#555555" }}>في انتظار باقي اللاعبين...</p>
               </div>
@@ -1119,6 +1121,16 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                         </button>
                       );
                     })}
+                  {/* Skip vote — no one is executed if this wins majority */}
+                  <button
+                    onClick={() => {
+                      setVotedFor("SKIP_VOTE");
+                      getSocket().emit("submitVote", { targetName: "SKIP_VOTE", roomCode: role.code });
+                    }}
+                    className="w-full flex items-center justify-center px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95 mt-1"
+                    style={{ backgroundColor: "transparent", border: "1px dashed #444444", color: "#666666" }}>
+                    تخطي التصويت
+                  </button>
                 </div>
               </div>
             )}
@@ -1147,7 +1159,9 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                   <div key={name}
                     className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
                     style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
-                    <span className="text-sm font-semibold text-white">{name}</span>
+                    <span className="text-sm font-semibold" style={{ color: name === "SKIP_VOTE" ? "#666666" : "#FFFFFF" }}>
+                      {name === "SKIP_VOTE" ? "تخطي التصويت" : name}
+                    </span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
                   </div>
@@ -1758,7 +1772,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 <div className="flex flex-col items-center gap-2 py-4 px-4">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#FF8F00" }} />
                   <p className="text-sm font-bold" style={{ color: "#FF8F00" }}>
-                    صوّتت ضد: <span style={{ color: "#fff" }}>{votedFor}</span>
+                    {votedFor === "SKIP_VOTE"
+                      ? "اخترت تخطي التصويت"
+                      : <> صوّتت ضد: <span style={{ color: "#fff" }}>{votedFor}</span></>}
                   </p>
                 </div>
               ) : (
@@ -1785,6 +1801,16 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                           </span>
                         </button>
                       ))}
+                    {/* Skip vote — no one is executed if this wins majority */}
+                    <button
+                      onClick={() => {
+                        setVotedFor("SKIP_VOTE");
+                        getSocket().emit("submitVote", { targetName: "SKIP_VOTE", roomCode: game.code });
+                      }}
+                      className="w-full flex items-center justify-center px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 active:scale-95 mt-1"
+                      style={{ backgroundColor: "transparent", border: "1px dashed #444444", color: "#666666" }}>
+                      تخطي التصويت
+                    </button>
                   </div>
                 </div>
               )}
@@ -1808,7 +1834,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 ).sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => (
                   <div key={name} className="flex flex-row-reverse items-center justify-between px-3 py-2.5"
                     style={{ borderBottom: i < arr.length - 1 ? "1px solid #1E1E1E" : "none" }}>
-                    <span className="text-sm font-semibold text-white">{name}</span>
+                    <span className="text-sm font-semibold" style={{ color: name === "SKIP_VOTE" ? "#666666" : "#FFFFFF" }}>
+                      {name === "SKIP_VOTE" ? "تخطي التصويت" : name}
+                    </span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: "#2A0000", color: "#D32F2F" }}>{count} أصوات</span>
                   </div>
