@@ -720,7 +720,7 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
-function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, executionInfo, onLeave }: {
+function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, executionInfo, trialState, accusedPlayer, onLeave }: {
   role: MyRole;
   gamePhase: string;
   morningResults: MorningResultsPayload | null;
@@ -729,6 +729,8 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   phaseEndsAt: number | null;
   myDeathReason: "assassinated" | "executed" | null;
   executionInfo: { name: string; roleLabel: string; roleColor: string } | null;
+  trialState: "none" | "accused" | "revoting";
+  accusedPlayer: string | null;
   onLeave: () => void;
 }) {
   const [revealed, setRevealed]           = useState(false);
@@ -1093,11 +1095,16 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                   <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#FF8F00" }}>التصويت</span>
                   <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#FF8F00" }} />
                 </div>
-                <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>من تعتقد أنه المجرم؟</p>
+                <p className="text-sm font-semibold" style={{ color: "#CCCCCC" }}>
+                  {trialState === "revoting" && accusedPlayer
+                    ? `إعادة التصويت على: ${accusedPlayer}`
+                    : "من تعتقد أنه المجرم؟"}
+                </p>
                 <div className="flex flex-col gap-2">
-                  {alivePlayerNames
-                    .filter((n) => n !== role.myName)
-                    .map((name) => {
+                  {(trialState === "revoting" && accusedPlayer
+                    ? [accusedPlayer]
+                    : alivePlayerNames.filter((n) => n !== role.myName)
+                  ).map((name) => {
                       const isAlly = role.wolfAllies.includes(name);
                       return (
                         <button
@@ -1320,7 +1327,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
 // ─── Host Dashboard ───────────────────────────────────────────────────────────
 
-function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, executionInfo, onLeave }: {
+function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, executionInfo, accusedPlayer, trialState, onStartTrialVote, onLeave }: {
   game: GameState;
   activeGamePhase: string;
   morningResults: MorningResultsPayload | null;
@@ -1328,6 +1335,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   alivePlayerNames: string[];
   phaseEndsAt: number | null;
   executionInfo: { name: string; roleLabel: string; roleColor: string } | null;
+  accusedPlayer: string | null;
+  trialState: "none" | "accused" | "revoting";
+  onStartTrialVote: () => void;
   onLeave: () => void;
 }) {
   const [myRoleRevealed, setMyRoleRevealed] = useState(false);
@@ -1424,6 +1434,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
     if (activeGamePhase !== "day_discussion") return;
     if (!phaseEndsAt)  return;
     if (executionInfo) return; // post-execution — let host decide manually
+    if (trialState !== "none") return; // accused/revoting — host drives next action
 
     const fire = () => {
       if (autoVoteFiredRef.current === phaseEndsAt) return; // guard: fire once
@@ -1436,7 +1447,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
 
     const timer = setTimeout(fire, msLeft);
     return () => clearTimeout(timer);
-  }, [activeGamePhase, phaseEndsAt, executionInfo, game.code]);
+  }, [activeGamePhase, phaseEndsAt, executionInfo, trialState, game.code]);
 
   const handleSubmitHostAction = () => {
     if (!selectedTarget) return;
@@ -1844,12 +1855,16 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
               </div>
             )}
 
-            {/* Execute button */}
+            {/* Execute button — label adapts to trial context */}
             <button onClick={handleTallyAndExecute}
               className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", border: "1px solid #FF6B6B" }}>
               <Skull size={20} strokeWidth={2} />
-              <span>إنهاء التصويت وإعدام المتهم</span>
+              <span>
+                {trialState === "revoting" && accusedPlayer
+                  ? `إعدام ${accusedPlayer} أو إبراءه`
+                  : "إنهاء التصويت وإعدام المتهم"}
+              </span>
             </button>
           </div>
         )}
@@ -1885,24 +1900,46 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
           </div>
         )}
 
-        {/* ── HOST CONTROLS: day — next night (primary) + voting (secondary) ── */}
+        {/* ── HOST CONTROLS: day — varies by trial state ── */}
         {activeGamePhase === "day_discussion" && (
           <div className="flex flex-col gap-3">
             <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>تحكم المضيف</span>
-            {/* PRIMARY: start next night — host must tap this to advance */}
-            <button onClick={handleStartNightPhase}
-              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 shadow-lg"
-              style={{ backgroundColor: "#D32F2F", color: "#FFFFFF", border: "none" }}>
-              <Moon size={20} strokeWidth={2.5} />
-              <span>بدء الليلة التالية</span>
-            </button>
-            {/* SECONDARY: open voting */}
-            <button onClick={handleStartVoting}
-              className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#1A1A1A", borderColor: "#555555", color: "#999999" }}>
-              <Sun size={20} strokeWidth={2} />
-              <span>بدء التصويت</span>
-            </button>
+            {trialState === "none" && (
+              <>
+                {/* PRIMARY: start next night */}
+                <button onClick={handleStartNightPhase}
+                  className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 shadow-lg"
+                  style={{ backgroundColor: "#D32F2F", color: "#FFFFFF", border: "none" }}>
+                  <Moon size={20} strokeWidth={2.5} />
+                  <span>بدء الليلة التالية</span>
+                </button>
+                {/* SECONDARY: open voting */}
+                <button onClick={handleStartVoting}
+                  className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl border font-bold text-base transition-all duration-200 active:scale-95"
+                  style={{ backgroundColor: "#1A1A1A", borderColor: "#555555", color: "#999999" }}>
+                  <Sun size={20} strokeWidth={2} />
+                  <span>بدء التصويت</span>
+                </button>
+              </>
+            )}
+            {trialState === "accused" && accusedPlayer && (
+              <>
+                {/* Accused banner */}
+                <div className="flex flex-col items-center gap-1 p-3 rounded-xl"
+                  style={{ backgroundColor: "#1A0505", border: "1px solid #7A1A1A" }}>
+                  <span className="text-xs font-semibold" style={{ color: "#AA4444" }}>المتهم الرئيسي</span>
+                  <span className="text-lg font-black text-white">{accusedPlayer}</span>
+                  <span className="text-xs" style={{ color: "#666666" }}>لم تثبت أغلبية — تصويت إعادة النظر</span>
+                </div>
+                {/* ONLY action: start revote */}
+                <button onClick={onStartTrialVote}
+                  className="flex flex-row-reverse items-center justify-center gap-3 w-full px-5 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 shadow-lg"
+                  style={{ backgroundColor: "#D32F2F", color: "#FFFFFF", border: "none" }}>
+                  <Sun size={20} strokeWidth={2.5} />
+                  <span>إعادة التصويت على {accusedPlayer}</span>
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -1971,6 +2008,15 @@ export default function App() {
   const [morningResults, setMorningResults] = useState<MorningResultsPayload | null>(null);
   const [voteUpdate, setVoteUpdate]         = useState<VoteUpdatePayload | null>(null);
   const [gameOver, setGameOver]             = useState<GameOverPayload | null>(null);
+  // ── Trial state — purely frontend, no backend changes ────────────────────
+  const [accusedPlayer, setAccusedPlayer]   = useState<string | null>(null);
+  const [trialState, setTrialState]         = useState<"none" | "accused" | "revoting">("none");
+  // Refs so socket handlers (closed-over) always see current values
+  const accusedPlayerRef = useRef<string | null>(null);
+  const trialStateRef    = useRef<"none" | "accused" | "revoting">("none");
+  accusedPlayerRef.current = accusedPlayer;
+  trialStateRef.current    = trialState;
+  const voteUpdateRef    = useRef<VoteUpdatePayload | null>(null);
   // Authoritative alive player list — updated from server events, used by both host/player
   const [alivePlayerNames, setAlivePlayerNames] = useState<string[]>([]);
   const [phaseEndsAt, setPhaseEndsAt]           = useState<number | null>(null);
@@ -2252,11 +2298,16 @@ export default function App() {
       gamePhaseRef.current = phase; // sync immediately so onPlayTone can read it
       setGamePhase(phase);
       playPhaseAudio(phase);
-      // At the start of a new night, clear stale day-phase state
+      // At the start of a new night, clear stale day-phase state + trial state (Task 4)
       if (phase === "night_sleep") {
         setMorningResults(null);
         setVoteUpdate(null);
         setExecutionInfo(null);
+        voteUpdateRef.current = null;
+        setAccusedPlayer(null);
+        setTrialState("none");
+        accusedPlayerRef.current = null;
+        trialStateRef.current    = "none";
       }
     };
 
@@ -2277,6 +2328,7 @@ export default function App() {
 
     const onVoteUpdate = (payload: VoteUpdatePayload) => {
       setVoteUpdate(payload);
+      voteUpdateRef.current = payload; // keep ref in sync for use in onExecutionResult
       // Sync alive list with server's authoritative list
       setAlivePlayerNames(payload.alivePlayerNames);
     };
@@ -2313,6 +2365,36 @@ export default function App() {
           }
           return role;
         });
+        // Execution happened — clear trial state entirely
+        setAccusedPlayer(null);
+        setTrialState("none");
+        accusedPlayerRef.current = null;
+        trialStateRef.current    = "none";
+      } else {
+        // No execution — determine trial state based on vote results
+        if (trialStateRef.current === "none") {
+          // First round: find the top vote-getter (no tie) to set as accused
+          const votes = voteUpdateRef.current?.votes ?? {};
+          const tally: Record<string, number> = {};
+          for (const t of Object.values(votes)) {
+            if (t !== "SKIP_VOTE") tally[t] = (tally[t] ?? 0) + 1;
+          }
+          const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+          // Only accuse if there's a clear unique leader (no tie for first place)
+          if (entries.length > 0 && (entries.length < 2 || entries[0][1] > entries[1][1])) {
+            const accused = entries[0][0];
+            setAccusedPlayer(accused);
+            setTrialState("accused");
+            accusedPlayerRef.current = accused;
+            trialStateRef.current    = "accused";
+          }
+        } else if (trialStateRef.current === "revoting") {
+          // Revote ended with no execution — player is pardoned, clear trial
+          setAccusedPlayer(null);
+          setTrialState("none");
+          accusedPlayerRef.current = null;
+          trialStateRef.current    = "none";
+        }
       }
     };
 
@@ -2429,6 +2511,14 @@ export default function App() {
     }
   }, [stopCurrentAudio]);
 
+  // ── Start trial (revote) for accused player ──────────────────────────────
+  const handleStartTrialVote = useCallback(() => {
+    if (!accusedPlayerRef.current || !game) return;
+    setTrialState("revoting");
+    trialStateRef.current = "revoting";
+    getSocket().emit("startVoting", { code: game.code });
+  }, [game]);
+
   // ── Explicit leave — emits to server + clears localStorage ──────────────
   const handleLeaveRoom = useCallback(() => {
     isHostRef.current = false;
@@ -2517,11 +2607,11 @@ export default function App() {
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} executionInfo={executionInfo} accusedPlayer={accusedPlayer} trialState={trialState} onStartTrialVote={handleStartTrialVote} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} executionInfo={executionInfo} onLeave={handleLeaveRoom} /></>;
+    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} executionInfo={executionInfo} trialState={trialState} accusedPlayer={accusedPlayer} onLeave={handleLeaveRoom} /></>;
   }
 
   if (screen === "lobby" && lobby) {
