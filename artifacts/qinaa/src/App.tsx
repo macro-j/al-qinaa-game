@@ -743,12 +743,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {p.name}
                     </span>
 
-                    {/* Mafia ally badge — always shown to الولد / الإكة */}
+                    {/* Mafia ally badge — pixel-perfect clone of Online Mode */}
                     {showAllyBadge && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: "#FF8F0018", color: "#FF8F00", border: "1px solid #FF8F0044" }}>
-                        حليف 🤝
-                      </span>
+                      <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
                     )}
 
                     {/* Seer result badge — ONLY after locking target */}
