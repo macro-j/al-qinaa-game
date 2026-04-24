@@ -427,7 +427,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "distribution" | "night" | "day">("setup");
+  const [phase, setPhase]                   = useState<"setup" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>([]);
   const [currentIndex, setCurrentIndex]     = useState(0);
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
@@ -446,11 +446,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "justification" | "final_vote">("results");
 
   // ── Night cinematic transitions ──
-  const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_sleeps" | "city_wakes">("none");
+  const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">("none");
   const [nightTransitionLabel, setNightTransitionLabel] = useState<string>("");
   const nightTransitionNextRef                         = useRef<(() => void) | null>(null);
+  const postRevealRef                                  = useRef<(() => void) | null>(null);
 
-  // ── Day timer — local epoch ms passed to <Countdown /> ──
+  // ── Day/night timers — local epoch ms passed to <Countdown /> ──
   const [timerEndsAt, setTimerEndsAt]   = useState<number | null>(null);
 
   // ── Smart voting engine ──
@@ -459,10 +460,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [finalVoteFor, setFinalVoteFor]     = useState(0);
   const [finalVoteAgainst, setFinalVoteAgainst] = useState(0);
 
+  // ── Win condition + post-execution screens ──
+  const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia"; killerName: string | null } | null>(null);
+  const [executionReveal, setExecutionReveal] = useState<{ name: string; role: string; color: string } | null>(null);
+
+  // ── Night 15-second action timer ──
+  const [nightTimerExpired, setNightTimerExpired] = useState(false);
+
   // ── Auto-advance night transitions after delay ──
   useEffect(() => {
     if (nightTransition === "none") return;
-    const delay = nightTransition === "city_sleeps" ? 3000 : 2500;
+    const delay =
+      nightTransition === "city_sleeps" ? 3000 :
+      nightTransition === "role_wakes"  ? 2000 :
+      2500; // role_sleeps / city_wakes
     const t = setTimeout(() => {
       const next = nightTransitionNextRef.current;
       nightTransitionNextRef.current = null;
@@ -471,6 +482,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }, delay);
     return () => clearTimeout(t);
   }, [nightTransition]);
+
+  // ── 15-second night action timer — resets when role changes ──
+  useEffect(() => {
+    if (phase !== "night" || nightTransition !== "none") return;
+    setNightTimerExpired(false);
+    setTimerEndsAt(Date.now() + 15_000);
+    const t = setTimeout(() => setNightTimerExpired(true), 15_000);
+    return () => clearTimeout(t);
+  }, [nightStep, nightTransition, phase]);
 
   const addPlayer = () => {
     const trimmed = newPlayer.trim();
@@ -501,6 +521,29 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const getNightOrder = (lp: LivePlayer[]) =>
     (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r => lp.some(p => p.role === r && p.isAlive));
 
+  // ── Win condition checker — called after every death ──
+  const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
+    const killerAlive = players.find(p => p.role === "الولد")?.isAlive ?? false;
+    if (!killerAlive) return "town";
+    const alive      = players.filter(p => p.isAlive);
+    const aliveMafia = alive.filter(p => p.role === "الولد" || p.role === "الإكة").length;
+    const aliveTown  = alive.filter(p => p.role !== "الولد" && p.role !== "الإكة").length;
+    if (aliveMafia >= aliveTown) return "mafia";
+    return null;
+  };
+
+  // ── Helper: launch city_sleeps → role_wakes → night action ──
+  const startNightWithTransition = (order: string[]) => {
+    const firstRole = order[0] ?? "الولد";
+    nightTransitionNextRef.current = () => {
+      setNightTransitionLabel(`${firstRole} يصحى`);
+      nightTransitionNextRef.current = null;
+      setNightTransition("role_wakes");
+    };
+    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
+    setNightTransition("city_sleeps");
+  };
+
   const handleNext = () => {
     const isLast = currentIndex === assignedRoles.length - 1;
     if (isLast) {
@@ -513,8 +556,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightCount(1);
-      setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
-      setNightTransition("city_sleeps");
+      startNightWithTransition(order);
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
@@ -534,31 +576,47 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const idx   = order.indexOf(nightStep as "الولد" | "الإكة" | "الشايب" | "البنت");
 
     if (idx < order.length - 1) {
-      // ── Cinematic: role sleeping → next role wakes ──
+      // ── role_sleeps → role_wakes → next action ──
       const nextRole = order[idx + 1];
       nightTransitionNextRef.current = () => {
         setNightActions(newActions);
         setNightStep(nextRole);
         setSelectedTarget(null);
         setInvestigatedTarget(null);
+        setNightTransitionLabel(`${nextRole} يصحى`);
+        nightTransitionNextRef.current = null;
+        setNightTransition("role_wakes");
       };
       setNightTransitionLabel(`${nightStep} ينام..`);
       setNightTransition("role_sleeps");
     } else {
-      // ── Cinematic: city wakes → go to day ──
+      // ── city_wakes → compute results → win check ──
       nightTransitionNextRef.current = () => {
         const { killTarget, protectTarget, silenceTarget } = newActions;
         const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
-        setLivePlayers(prev => prev.map(p => ({
+        const updated = livePlayers.map(p => ({
           ...p,
           isAlive:    p.name === died ? false : p.isAlive,
           isSilenced: p.name === silenceTarget,
-        })));
+        }));
+        setLivePlayers(updated);
         setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
         setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
         setSelectedTarget(null);
-        setDaySubPhase("results");
-        setPhase("day");
+        const winner = checkWinCondition(updated);
+        if (winner) {
+          const killerName = updated.find(p => p.role === "الولد")?.name ?? null;
+          setGameOver({ winner, killerName });
+          setPhase("game_over");
+        } else if (died) {
+          const dp = updated.find(p => p.name === died)!;
+          setExecutionReveal({ name: died, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
+          postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
+          setPhase("reveal");
+        } else {
+          setDaySubPhase("results");
+          setPhase("day");
+        }
       };
       setNightTransitionLabel("الصباح.. يستيقظ الجميع");
       setNightTransition("city_wakes");
@@ -584,28 +642,36 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setDaySubPhase("results");
     setNightCount(n => n + 1);
     resetVotingState();
-    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
-    setNightTransition("city_sleeps");
+    startNightWithTransition(order);
     setPhase("night");
   };
 
   const handleExecute = (name: string) => {
     const updatedPlayers = livePlayers.map(p =>
-      p.name === name
-        ? { ...p, isAlive: false }
-        : { ...p, isSilenced: false }
+      p.name === name ? { ...p, isAlive: false } : { ...p, isSilenced: false }
     );
     setLivePlayers(updatedPlayers);
-    const firstStep = getNightOrder(updatedPlayers)[0] ?? "الولد";
-    setNightStep(firstStep);
-    setSelectedTarget(null);
-    setInvestigatedTarget(null);
-    setDaySubPhase("results");
-    setNightCount(n => n + 1);
+    const winner = checkWinCondition(updatedPlayers);
     resetVotingState();
-    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
-    setNightTransition("city_sleeps");
-    setPhase("night");
+    if (winner) {
+      const killerName = updatedPlayers.find(p => p.role === "الولد")?.name ?? null;
+      setGameOver({ winner, killerName });
+      setPhase("game_over");
+    } else {
+      const dp = updatedPlayers.find(p => p.name === name)!;
+      setExecutionReveal({ name, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
+      const order = getNightOrder(updatedPlayers);
+      const firstStep = order[0] ?? "الولد";
+      postRevealRef.current = () => {
+        setNightStep(firstStep);
+        setSelectedTarget(null);
+        setInvestigatedTarget(null);
+        setNightCount(n => n + 1);
+        startNightWithTransition(order);
+        setPhase("night");
+      };
+      setPhase("reveal");
+    }
   };
 
   const remaining     = Math.max(0, MIN_PLAYERS - players.length);
@@ -729,14 +795,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     // ── Cinematic interstitial — fullscreen dark/dawn screen ──────────────
     if (nightTransition !== "none") {
-      const isDawn = nightTransition === "city_wakes";
+      const isDawn    = nightTransition === "city_wakes";
+      const isWaking  = nightTransition === "role_wakes";
+      const wakeMeta  = isWaking ? (ROLE_META[nightStep] ?? ROLE_META["المواطن"]) : null;
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center gap-8 px-8" style={ROOT_STYLE}>
           {isDawn
-            ? <Sun  size={56} color="#FFB300" strokeWidth={1} style={{ opacity: 0.85 }} />
-            : <Moon size={56} color="#1E1E3A" strokeWidth={1} style={{ opacity: 0.6  }} />}
+            ? <Sun size={56} color="#FFB300" strokeWidth={1} style={{ opacity: 0.85 }} />
+            : isWaking
+            ? <VenetianMask size={56} color={wakeMeta!.color} strokeWidth={1} style={{ opacity: 0.8 }} />
+            : <Moon size={56} color="#1E1E3A" strokeWidth={1} style={{ opacity: 0.6 }} />}
           <p className="text-2xl font-black text-center leading-relaxed"
-            style={{ color: isDawn ? "#FFB300" : "#2A2A4A" }}>
+            style={{ color: isDawn ? "#FFB300" : isWaking ? wakeMeta!.color : "#2A2A4A" }}>
             {nightTransitionLabel}
           </p>
         </div>
@@ -763,6 +833,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <Moon size={18} color="#444" strokeWidth={1.5} />
             <h1 className="text-xl font-black text-white mt-1">الليل يخيم على المدينة</h1>
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightCount} · الجميع ينام..</p>
+            <div className="mt-1.5 flex items-center gap-2 px-3 py-1 rounded-xl"
+              style={{ backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D", border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}` }}>
+              <Timer size={12} color={nightTimerExpired ? "#D32F2F" : "#444"} />
+              <Countdown endsAt={timerEndsAt} />
+            </div>
           </div>
 
           {/* ── Who's awake — mirrors night action panel header ── */}
@@ -895,22 +970,145 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Sleep button ── */}
+          {/* ── Sleep button — enabled when target chosen OR timer expired ── */}
           <button
             onClick={handleNightStep}
-            disabled={!selectedTarget}
+            disabled={!selectedTarget && !nightTimerExpired}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{
-              backgroundColor: selectedTarget ? meta.color : "#1A1A1A",
-              color:           selectedTarget ? "#ffffff" : "#333",
-              border:          selectedTarget ? "none" : "1px solid #222",
+              backgroundColor: selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
+              color:           selectedTarget ? "#ffffff"  : nightTimerExpired ? "#888888" : "#333",
+              border:          selectedTarget ? "none"     : nightTimerExpired ? "1px solid #444" : "1px solid #222",
               boxShadow:       selectedTarget ? `0 0 28px ${meta.glow}` : "none",
             }}>
             <Moon size={20} strokeWidth={2} />
-            <span>ينام {nightStep}</span>
+            <span>{selectedTarget ? `ينام ${nightStep}` : nightTimerExpired ? `تخطي دور ${nightStep}` : `ينام ${nightStep}`}</span>
           </button>
 
         </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: reveal — cinematic reveal of eliminated player's role
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "reveal" && executionReveal) {
+    const revealMeta = ROLE_META[executionReveal.role] ?? ROLE_META["المواطن"];
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
+          <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#D32F2F" }}>تم الاستبعاد</span>
+        </div>
+        <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+          <div className="w-full flex flex-col items-center gap-4 py-8 px-6 rounded-2xl"
+            style={{ backgroundColor: "#0D0000", border: `1px solid ${revealMeta.color}66`, boxShadow: `0 0 40px ${revealMeta.color}22` }}>
+            <VenetianMask size={56} color={revealMeta.color} strokeWidth={1.2} />
+            <div className="flex flex-col items-center gap-2 text-center">
+              <span className="text-3xl font-black text-white">{executionReveal.name}</span>
+              <span className="text-xs tracking-widest font-semibold" style={{ color: "#555" }}>كان دوره</span>
+              <span className="text-2xl font-black" style={{ color: revealMeta.color, fontFamily: "serif" }}>
+                {executionReveal.role}
+              </span>
+              <span className="text-xs text-center px-4 leading-relaxed" style={{ color: "#444" }}>
+                {revealMeta.desc}
+              </span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            const cb = postRevealRef.current;
+            postRevealRef.current = null;
+            setExecutionReveal(null);
+            cb?.();
+          }}
+          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+          style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
+          <ChevronRight size={20} strokeWidth={2} />
+          <span>متابعة</span>
+        </button>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: game_over — final win/loss screen
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "game_over" && gameOver) {
+    const isTownWin = gameOver.winner === "town";
+    const accent    = isTownWin ? "#1565C0" : "#D32F2F";
+    const bgColor   = isTownWin ? "#000D1A" : "#0D0000";
+    const borderCol = isTownWin ? "#1565C066" : "#D32F2F66";
+    const glowCol   = isTownWin ? "#1565C022" : "#D32F2F22";
+    const headLabel = isTownWin ? "انتصار المدينة" : "انتصار المافيا";
+    const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
+
+    const fullReset = () => {
+      setPhase("setup");
+      setAssignedRoles([]);
+      setLivePlayers([]);
+      setCurrentIndex(0);
+      setIsPressing(false);
+      setHasRevealedOnce(false);
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+      setDayResult({ died: false, name: null, silenced: null });
+      setNightCount(1);
+      setInvestigatedTarget(null);
+      setDaySubPhase("results");
+      setNightTransition("none");
+      setGameOver(null);
+      setExecutionReveal(null);
+      setNightTimerExpired(false);
+      resetVotingState();
+    };
+
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
+        <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+          <div className="w-full flex flex-col items-center gap-5 py-10 px-6 rounded-2xl"
+            style={{ backgroundColor: bgColor, border: `1px solid ${borderCol}`, boxShadow: `0 0 60px ${glowCol}` }}>
+            {headIcon}
+            <div className="flex flex-col items-center gap-2 text-center">
+              <span className="text-3xl font-black" style={{ color: accent, fontFamily: "serif" }}>{headLabel}</span>
+              {isTownWin && gameOver.killerName && (
+                <p className="text-sm font-semibold text-center leading-relaxed" style={{ color: "#AAAAAA" }}>
+                  تم القبض على القاتل: <span className="font-black" style={{ color: accent }}>{gameOver.killerName}</span>
+                </p>
+              )}
+              {!isTownWin && (
+                <p className="text-sm font-semibold text-center" style={{ color: "#888" }}>
+                  المافيا تسيطر على المدينة
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 w-full pt-2">
+            <p className="text-xs text-center font-semibold" style={{ color: "#333" }}>الأدوار النهائية</p>
+            {livePlayers.map(p => {
+              const pm = ROLE_META[p.role] ?? ROLE_META["المواطن"];
+              return (
+                <div key={p.name}
+                  className="flex items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ backgroundColor: "#111", border: `1px solid ${p.isAlive ? "#222" : "#1A1A1A"}`, opacity: p.isAlive ? 1 : 0.45 }}>
+                  <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#444" }}>{p.name}</span>
+                    {!p.isAlive && <Skull size={12} color="#444" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          onClick={fullReset}
+          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+          style={{ backgroundColor: accent, color: "#fff", boxShadow: `0 0 32px ${accent}55` }}>
+          <Shuffle size={20} strokeWidth={2} />
+          <span>العودة للقائمة</span>
+        </button>
       </div>
     );
   }
@@ -934,6 +1132,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setInvestigatedTarget(null);
       setDaySubPhase("results");
       setNightTransition("none");
+      setGameOver(null);
+      setExecutionReveal(null);
+      setNightTimerExpired(false);
       resetVotingState();
     };
 
@@ -1060,11 +1261,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // SUB-PHASE 3: voting_tally — host counts raised hands
     // ════════════════════════════════════════════
     if (daySubPhase === "voting_tally") {
+      const totalVoters   = alivePlayers.length;
+      const totalAssigned = alivePlayers.reduce((s, p) => s + (voteCounts[p.name] ?? 0), 0);
+      const tallyCapReached = totalAssigned >= totalVoters;
+
       const handleCountVotes = () => {
         const maxVotes = Math.max(...alivePlayers.map(p => voteCounts[p.name] ?? 0));
         const nominees = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
         if (nominees.length !== 1) {
-          // Tie or zero votes → skip to next night
           handleStartNextNight();
         } else {
           setAccusedPlayer(nominees[0].name);
@@ -1078,10 +1282,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
+              <span className="text-xs tabular-nums mt-1" style={{ color: tallyCapReached ? "#D32F2F" : "#444" }}>
+                {totalAssigned} / {totalVoters}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               {alivePlayers.map((p) => {
-                const count = voteCounts[p.name] ?? 0;
+                const count  = voteCounts[p.name] ?? 0;
+                const canAdd = !tallyCapReached;
                 return (
                   <div key={p.name}
                     className="flex items-center justify-between px-3 py-2.5 rounded-xl"
@@ -1089,7 +1297,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
-                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center"
+                        disabled={count === 0}
+                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                         style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
                         −
                       </button>
@@ -1099,7 +1308,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       </span>
                       <button
                         onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: (prev[p.name] ?? 0) + 1 }))}
-                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center"
+                        disabled={!canAdd}
+                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                         style={{ backgroundColor: "#001A00", color: "#8BC34A", border: "1px solid #8BC34A44" }}>
                         +
                       </button>
@@ -1165,6 +1375,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict
     // ════════════════════════════════════════════
+    const finalTotalVoters = alivePlayers.length;
+    const finalTotalCast   = finalVoteFor + finalVoteAgainst;
+    const finalCapReached  = finalTotalCast >= finalTotalVoters;
+
     const handleFinalVerdict = () => {
       if (finalVoteFor > finalVoteAgainst) {
         handleExecute(accusedPlayer!);
@@ -1178,6 +1392,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
             <h1 className="text-2xl font-black text-white">هل يُعدَم {accusedPlayer}؟</h1>
+            <span className="text-xs tabular-nums mt-1" style={{ color: finalCapReached ? "#D32F2F" : "#444" }}>
+              {finalTotalCast} / {finalTotalVoters}
+            </span>
           </div>
           <div className="flex gap-3">
             {/* Agree counter */}
@@ -1189,13 +1406,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => setFinalVoteFor(n => Math.max(0, n - 1))}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  disabled={finalVoteFor === 0}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#0A2A0A", color: "#8BC34A", border: "1px solid #4CAF5044" }}>
                   −
                 </button>
                 <button
                   onClick={() => setFinalVoteFor(n => n + 1)}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  disabled={finalCapReached}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#1A3A1A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
                   +
                 </button>
@@ -1210,13 +1429,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => setFinalVoteAgainst(n => Math.max(0, n - 1))}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  disabled={finalVoteAgainst === 0}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
                   −
                 </button>
                 <button
                   onClick={() => setFinalVoteAgainst(n => n + 1)}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  disabled={finalCapReached}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#3A0000", color: "#D32F2F", border: "1px solid #D32F2F66" }}>
                   +
                 </button>
