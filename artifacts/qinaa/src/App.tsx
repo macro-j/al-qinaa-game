@@ -175,7 +175,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
         </button>
       ) : <div />}
       <div className="flex items-center gap-2">
-        <img src="/mask-logo.png" alt="" style={{ width: 44, height: 44, objectFit: "contain" }} />
+        <VenetianMask size={26} color="#D32F2F" strokeWidth={1.5} />
         <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
           {label ?? "القناع"}
         </span>
@@ -221,7 +221,9 @@ function ConnectionBanner({ connected }: { connected: boolean }) {
 function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
-      <img src="/mask-logo.png" alt="القناع" style={{ width: 110, height: 110, objectFit: "contain" }} />
+      <div style={{ filter: "drop-shadow(0 0 20px #D32F2F44)" }}>
+        <VenetianMask size={80} color="#D32F2F" strokeWidth={1} />
+      </div>
       <div className="flex flex-col items-center gap-2">
         <Loader2 size={28} color="#D32F2F" className="animate-spin" />
         <p className="text-white font-bold text-lg">جاري استئناف الجلسة...</p>
@@ -255,7 +257,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
         {/* Logo + Title */}
         <div className="flex flex-col items-center gap-3">
-          <img src="/mask-logo.png" alt="القناع" style={{ width: 200, height: 200, objectFit: "contain" }} />
+          <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
+            <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
+          </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#666666" }}>اختر طريقة اللعب</p>
         </div>
@@ -443,7 +447,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>({ died: false, name: null, silenced: null });
   const [nightCount, setNightCount]             = useState(1);
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
-  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "justification" | "final_vote">("results");
+  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">("results");
 
   // ── Night cinematic transitions ──
   const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">("none");
@@ -491,6 +495,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const t = setTimeout(() => setNightTimerExpired(true), 15_000);
     return () => clearTimeout(t);
   }, [nightStep, nightTransition, phase]);
+
+  // ── Tie-vote cinematic — 4 s display then auto-advance to night ──
+  useEffect(() => {
+    if (phase !== "day" || daySubPhase !== "vote_tie") return;
+    const t = setTimeout(() => handleStartNextNight(), 4000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daySubPhase, phase]);
 
   // ── Screen Wake Lock — keeps host device awake during the session ──
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -1311,18 +1323,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 3: voting_tally — host counts raised hands
+    // SUB-PHASE 3: voting_tally — host counts raised hands (individual cap per player)
     // ════════════════════════════════════════════
     if (daySubPhase === "voting_tally") {
-      const totalVoters   = alivePlayers.length;
-      const totalAssigned = alivePlayers.reduce((s, p) => s + (voteCounts[p.name] ?? 0), 0);
-      const tallyCapReached = totalAssigned >= totalVoters;
+      const perPlayerCap = alivePlayers.length;
 
       const handleCountVotes = () => {
         const maxVotes = Math.max(...alivePlayers.map(p => voteCounts[p.name] ?? 0));
         const nominees = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
         if (nominees.length !== 1) {
-          handleStartNextNight();
+          // Tie (or no votes) → cinematic, then night
+          setDaySubPhase("vote_tie");
         } else {
           setAccusedPlayer(nominees[0].name);
           setTimerEndsAt(Date.now() + 60_000);
@@ -1335,14 +1346,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
-              <span className="text-xs tabular-nums mt-1" style={{ color: tallyCapReached ? "#D32F2F" : "#444" }}>
-                {totalAssigned} / {totalVoters}
-              </span>
+              <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
             </div>
             <div className="flex flex-col gap-2">
               {alivePlayers.map((p) => {
                 const count  = voteCounts[p.name] ?? 0;
-                const canAdd = !tallyCapReached;
+                const canAdd = count < perPlayerCap;
                 return (
                   <div key={p.name}
                     className="flex items-center justify-between px-3 py-2.5 rounded-xl"
@@ -1391,6 +1400,33 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
+    // SUB-PHASE 3b: vote_tie — cinematic tie screen (4 s, then auto-night)
+    // ════════════════════════════════════════════
+    if (daySubPhase === "vote_tie") {
+      return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+          <div className="flex flex-col items-center gap-6 w-full max-w-sm text-center">
+            <div style={{ filter: "drop-shadow(0 0 32px #FF8F0066)" }}>
+              <VenetianMask size={72} color="#FF8F00" strokeWidth={1} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#FF8F00" }}>تعادل</span>
+              <h1 className="text-2xl font-black text-white leading-snug">
+                تعادل في الأصوات..
+              </h1>
+              <p className="text-base font-semibold" style={{ color: "#AAAAAA" }}>
+                لن يتم إعدام أحد اليوم
+              </p>
+            </div>
+            <div className="mt-2 px-6 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid #FF8F0033" }}>
+              <p className="text-xs" style={{ color: "#555" }}>المدينة تستعد للنوم...</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════
     // SUB-PHASE 4: justification — accused defends, 1-min timer
     // ════════════════════════════════════════════
     if (daySubPhase === "justification") {
@@ -1426,15 +1462,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict
+    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict (individual cap per side)
     // ════════════════════════════════════════════
     const finalTotalVoters = alivePlayers.length;
-    const finalTotalCast   = finalVoteFor + finalVoteAgainst;
-    const finalCapReached  = finalTotalCast >= finalTotalVoters;
 
     const handleFinalVerdict = () => {
       if (finalVoteFor > finalVoteAgainst) {
         handleExecute(accusedPlayer!);
+      } else if (finalVoteFor === finalVoteAgainst) {
+        // Tied final vote → cinematic then night
+        setDaySubPhase("vote_tie");
       } else {
         handleStartNextNight();
       }
@@ -1445,9 +1482,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
             <h1 className="text-2xl font-black text-white">هل يُعدَم {accusedPlayer}؟</h1>
-            <span className="text-xs tabular-nums mt-1" style={{ color: finalCapReached ? "#D32F2F" : "#444" }}>
-              {finalTotalCast} / {finalTotalVoters}
-            </span>
           </div>
           <div className="flex gap-3">
             {/* Agree counter */}
@@ -1466,7 +1500,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </button>
                 <button
                   onClick={() => setFinalVoteFor(n => n + 1)}
-                  disabled={finalCapReached}
+                  disabled={finalVoteFor >= finalTotalVoters}
                   className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#1A3A1A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
                   +
@@ -1489,7 +1523,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </button>
                 <button
                   onClick={() => setFinalVoteAgainst(n => n + 1)}
-                  disabled={finalCapReached}
+                  disabled={finalVoteAgainst >= finalTotalVoters}
                   className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#3A0000", color: "#D32F2F", border: "1px solid #D32F2F66" }}>
                   +
@@ -1647,7 +1681,9 @@ function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => vo
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
         <div className="flex flex-col items-center gap-3">
-          <img src="/mask-logo.png" alt="القناع" style={{ width: 210, height: 210, objectFit: "contain" }} />
+          <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
+            <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
+          </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
         </div>
@@ -2633,17 +2669,13 @@ function GameOverScreen({ result, isHost, onEnd }: {
 
       {/* Main result card */}
       <div className="w-full max-w-sm flex flex-col items-center gap-6">
-        <img
-          src="/mask-logo.png"
-          alt="القناع"
-          style={{
-            width: 160, height: 160,
-            objectFit: "contain",
-            filter: wolvesWon
-              ? "drop-shadow(0 0 30px #D32F2F)"
-              : "drop-shadow(0 0 30px #4CAF50)",
-          }}
-        />
+        <div style={{ filter: `drop-shadow(0 0 36px ${wolvesWon ? "#D32F2F" : "#4CAF50"})` }}>
+          <VenetianMask
+            size={100}
+            color={wolvesWon ? "#D32F2F" : "#4CAF50"}
+            strokeWidth={0.9}
+          />
+        </div>
 
         <div className="flex flex-col items-center gap-3 text-center">
           <span

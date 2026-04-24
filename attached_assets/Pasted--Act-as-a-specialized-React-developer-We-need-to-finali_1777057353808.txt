@@ -1,0 +1,18 @@
+"Act as a specialized React developer. We need to finalize the <NarratorMode /> voting logic and unify the brand identity across the entire application.
+> **STRICT CONSTRAINTS:** Do not invent UI. Use existing components. Logic must be strictly local.
+> **TASK 1: Independent Voting Counters (Show of Hands Logic)**
+>  1. In voting_tally, REMOVE the global sum limit that was preventing the total votes from exceeding the player count.
+>  2. Implement an **Individual Cap**: Each player row's + button should only disable when THAT specific player's count reaches the total number of livePlayers.length.
+>  3. This allows multiple players to receive the maximum possible votes (e.g., if there are 5 players, both Player A and Player B can have 5 votes simultaneously).
+>  4. Apply this same individual cap logic to the final_vote (Agree/Disagree) counters.
+> **TASK 2: Tie-Vote Handling & Transitions**
+>  1. In handleCountVotes (or the tally logic), if there is a **Tie** for the highest number of votes:
+>    * Do not move to the 'justification' phase.
+>    * Instead, set a transition state to show a cinematic screen: **'تعادل في الأصوات.. لن يتم إعدام أحد اليوم'**.
+>    * Wait 4 seconds, then automatically transition to the **Night Phase** (starting with 'الجميع ينام').
+> **TASK 3: Global Branding Unification (The Icon)**
+>  1. Identify the exact VenetianMask icon configuration (size, color, glow) used as the logo in the Narrator Mode.
+>  2. Search through the entire project (OnlineMode.tsx, Home.tsx, Lobby.tsx, etc.) and replace any placeholder logos or old icons with this exact VenetianMask branding to ensure a unified 'Al-Qina' identity everywhere.
+> **TASK 4: Night Reveal Fix**
+>  1. Ensure that during the night, when the **Detective (الشايب)** investigates someone, the result (مافيا/بريء) only shows up AFTER the Host clicks on the player, and it should stay visible until the Host clicks 'ينام الشايب'.
+> **GOAL:** Ensure voting mirrors a real-life council where everyone can vote for every candidate, handle ties gracefully, and make the 'VenetianMask' the official face of the app."
