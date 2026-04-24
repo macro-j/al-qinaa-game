@@ -22,6 +22,9 @@ import {
   Unlock,
   Share2,
   Timer,
+  Smartphone,
+  Monitor,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -233,6 +236,96 @@ const GUIDE_ROLES = [
   { label: "الشايب", color: "#FF8F00", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
   { label: "البنت",  color: "#1565C0", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
 ];
+
+// ─── Game Mode Selector (top-level entry point) ───────────────────────────────
+
+function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator") => void }) {
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+      <div className="flex flex-col items-center gap-10 w-full max-w-sm">
+
+        {/* Logo + Title */}
+        <div className="flex flex-col items-center gap-3">
+          <img src="/mask-logo.png" alt="القناع" style={{ width: 200, height: 200, objectFit: "contain" }} />
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
+          <p className="text-sm text-center" style={{ color: "#666666" }}>اختر طريقة اللعب</p>
+        </div>
+
+        {/* Mode buttons */}
+        <div className="flex flex-col gap-4 w-full">
+
+          {/* Online Mode */}
+          <button
+            onClick={() => onSelect("online")}
+            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #D32F2F" }}>
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
+              style={{ backgroundColor: "#1A0505" }}>
+              <Smartphone size={24} color="#D32F2F" strokeWidth={1.8} />
+            </div>
+            <div className="flex flex-col items-end gap-1 flex-1 mx-4">
+              <span className="text-lg font-black text-white">لعب أونلاين</span>
+              <span className="text-xs" style={{ color: "#666666" }}>كل لاعب بجواله</span>
+            </div>
+            <ChevronRight size={18} color="#D32F2F" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+          </button>
+
+          {/* Narrator Mode */}
+          <button
+            onClick={() => onSelect("narrator")}
+            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #333333" }}>
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
+              style={{ backgroundColor: "#111111" }}>
+              <Monitor size={24} color="#666666" strokeWidth={1.8} />
+            </div>
+            <div className="flex flex-col items-end gap-1 flex-1 mx-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: "#1A1A00", color: "#888800", border: "1px solid #444400" }}>قريباً</span>
+                <span className="text-lg font-black text-white">لعب المجلس</span>
+              </div>
+              <span className="text-xs" style={{ color: "#555555" }}>شاشة عرض وراوي</span>
+            </div>
+            <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+          </button>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Narrator Mode (placeholder) ──────────────────────────────────────────────
+
+function NarratorMode({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
+      <div className="flex flex-col items-center gap-4 w-full max-w-sm text-center">
+        <div className="flex items-center justify-center w-20 h-20 rounded-2xl"
+          style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+          <Monitor size={36} color="#444444" strokeWidth={1.5} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-black text-white">لعب المجلس</h2>
+          <p className="text-base font-bold" style={{ color: "#D32F2F" }}>قريباً - قيد التطوير</p>
+          <p className="text-sm leading-relaxed" style={{ color: "#555555" }}>
+            وضع الراوي — شاشة عرض موحدة يتحكم بها الراوي لإدارة اللعبة بصوت عالٍ في المجلس.
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={onBack}
+        className="flex flex-row-reverse items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", color: "#999999" }}>
+        <ArrowRight size={16} strokeWidth={2} />
+        <span>العودة للقائمة</span>
+      </button>
+    </div>
+  );
+}
+
+// ─── In-game Main Menu (Online mode lobby) ────────────────────────────────────
 
 function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
   const [showGuide, setShowGuide] = useState(false);
@@ -1996,6 +2089,9 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // ── Top-level mode gate — null = mode selector, "online" / "narrator" = game mode
+  const [selectedMode, setSelectedMode] = useState<"online" | "narrator" | null>(null);
+
   const [screen, setScreen]         = useState<Screen>("rejoining");
   const [lobby, setLobby]           = useState<LobbyState | null>(null);
   const [game, setGame]             = useState<GameState | null>(null);
@@ -2594,7 +2690,15 @@ export default function App() {
     );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Screen rendering ─────────────────────────────────────────────────────
+  // ── Top-level mode gate — shown before any game screen ───────────────────
+  if (selectedMode === null) {
+    return <GameModeSelector onSelect={setSelectedMode} />;
+  }
+  if (selectedMode === "narrator") {
+    return <NarratorMode onBack={() => setSelectedMode(null)} />;
+  }
+
+  // ── Online Mode: all existing screen rendering below (untouched) ──────────
   const banner = <ConnectionBanner connected={isConnected} />;
 
   if (screen === "rejoining") {
