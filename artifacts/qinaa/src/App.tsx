@@ -390,7 +390,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         className="flex flex-row-reverse items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
         style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", color: "#999999" }}>
         <ArrowRight size={16} strokeWidth={2} />
-        <span>العودة للقائمة</span>
+        <span>العودة لاختيار الطور</span>
       </button>
     </div>
   );
