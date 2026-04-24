@@ -1,0 +1,47 @@
+"Act as a specialized React developer. We are building the 'Role Distribution' engine (الليلة التعريفية) for the <NarratorMode />.
+
+STRICT CONSTRAINTS:
+
+DO NOT modify <OnlineMode /> or the backend server. All logic must be local state within the Narrator components.
+
+Maintain the cinematic, Apple-like dark aesthetic.
+
+TASK: Build Local Role Distribution & UI
+
+State: In <NarratorMode />, add a phase state ('setup' | 'distribution' | 'playing', default 'setup'). Add assignedRoles array state (type: {name: string, role: string, iconType: string}). Add currentIndex state (default 0). Add isRoleRevealed state (boolean, default false).
+
+Role Logic (The Local Engine): Create a function generateAndShuffleRoles(playerNames).
+
+Role scaling:
+
+4 players: 1 'الولد' (Killer), 1 'الشايب' (Doctor), 2 'بريء' (Town).
+
+5 players: 1 'الولد', 1 'الشايب', 1 'الآكة' (Detective), 2 'بريء'.
+
+6+ players: 2 'الولد', 1 'الشايب', 1 'الآكة', rest 'بريء'.
+
+CRITICAL DOUBLE SHUFFLE: >      a) Shuffle the generated roles array.
+b) Map them to the player names.
+c) Shuffle the final assigned array so the physical call order is completely randomized.
+
+Trigger: Update the 'توزيع الأقنعة' button. On click, run the logic, set assignedRoles, and switch phase to 'distribution'.
+
+Distribution UI (phase === 'distribution'):
+
+Top Header: 'الليلة التعريفية' and a muted subtext 'الجميع ينام..'.
+
+Big highlighted text for the Host to call out: نداء إلى: ${assignedRoles[currentIndex].name}.
+
+The Secret Card: A beautifully styled interactive card.
+
+If !isRoleRevealed: Show a mysterious placeholder with a closed eye/mask icon and text 'اضغط لكشف الدور' (Tap to reveal).
+
+If isRoleRevealed: Reveal the Role Name, a corresponding Lucide icon (e.g., Skull for الولد, Shield/Cross for الشايب, Search for الآكة, User for بريء), with a subtle glow based on the role.
+
+Controls: >      - A button to toggle isRoleRevealed.
+
+A primary button below: 'اللاعب التالي' (Next Player) - disabled if role hasn't been revealed yet to prevent skipping.
+
+If it's the last player, the button should say 'إنهاء الليلة التعريفية' (End Intro Night) which updates phase to 'playing'.
+
+GOAL: A secure, suspenseful, randomized distribution system that runs entirely on the Host's device."

@@ -27,6 +27,11 @@ import {
   ChevronRight,
   Trash2,
   UserPlus,
+  Search,
+  Shield,
+  Eye,
+  EyeOff,
+  User,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -369,15 +374,54 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   );
 }
 
-// ─── Narrator Mode — Setup Dashboard ─────────────────────────────────────────
+// ─── Narrator Mode — role engine constants ────────────────────────────────────
 
 const MIN_PLAYERS = 4;
 
+type AssignedRole = { name: string; role: string };
+
+const ROLE_META: Record<string, { color: string; glow: string; Icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }> }> = {
+  "الولد":  { color: "#D32F2F", glow: "#D32F2F55", Icon: Skull   },
+  "الشايب": { color: "#1565C0", glow: "#1565C055", Icon: Shield  },
+  "الآكة":  { color: "#FF8F00", glow: "#FF8F0055", Icon: Search  },
+  "بريء":   { color: "#555555", glow: "#55555533", Icon: User    },
+};
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
+  const n = playerNames.length;
+  let roleList: string[];
+  if (n === 4)      roleList = ["الولد", "الشايب", "بريء", "بريء"];
+  else if (n === 5) roleList = ["الولد", "الشايب", "الآكة", "بريء", "بريء"];
+  else              roleList = ["الولد", "الولد", "الشايب", "الآكة", ...Array(n - 4).fill("بريء")];
+  // a) shuffle roles, b) map to players, c) shuffle final order
+  const shuffledRoles = shuffle(roleList);
+  const mapped = playerNames.map((name, i) => ({ name, role: shuffledRoles[i] }));
+  return shuffle(mapped);
+}
+
+// ─── Narrator Mode — component ────────────────────────────────────────────────
+
 function NarratorMode({ onBack }: { onBack: () => void }) {
+  // ── Setup phase state ──
   const [players, setPlayers]       = useState<string[]>([]);
   const [newPlayer, setNewPlayer]   = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const inputRef                    = useRef<HTMLInputElement>(null);
+
+  // ── Distribution phase state ──
+  const [phase, setPhase]               = useState<"setup" | "distribution" | "playing">("setup");
+  const [assignedRoles, setAssignedRoles] = useState<AssignedRole[]>([]);
+  const [currentIndex, setCurrentIndex]   = useState(0);
+  const [isRoleRevealed, setIsRoleRevealed] = useState(false);
 
   const addPlayer = () => {
     const trimmed = newPlayer.trim();
@@ -395,9 +439,175 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const removePlayer = (name: string) =>
     setPlayers((prev) => prev.filter((p) => p !== name));
 
-  const remaining  = Math.max(0, MIN_PLAYERS - players.length);
+  const handleDistribute = () => {
+    const roles = generateAndShuffleRoles(players);
+    setAssignedRoles(roles);
+    setCurrentIndex(0);
+    setIsRoleRevealed(false);
+    setPhase("distribution");
+  };
+
+  const handleNext = () => {
+    const isLast = currentIndex === assignedRoles.length - 1;
+    if (isLast) {
+      setPhase("playing");
+    } else {
+      setCurrentIndex((i) => i + 1);
+      setIsRoleRevealed(false);
+    }
+  };
+
+  const remaining     = Math.max(0, MIN_PLAYERS - players.length);
   const canDistribute = players.length >= MIN_PLAYERS;
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: distribution
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "distribution" && assignedRoles.length > 0) {
+    const current  = assignedRoles[currentIndex];
+    const meta     = ROLE_META[current.role] ?? ROLE_META["بريء"];
+    const isLast   = currentIndex === assignedRoles.length - 1;
+    const { Icon } = meta;
+
+    return (
+      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
+
+          {/* ── Header ── */}
+          <div className="flex flex-col items-center gap-1 text-center">
+            <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>
+              الليلة التعريفية
+            </span>
+            <h1 className="text-2xl font-black text-white">الجميع ينام..</h1>
+            <p className="text-xs" style={{ color: "#333333" }}>
+              {currentIndex + 1} / {assignedRoles.length}
+            </p>
+          </div>
+
+          {/* ── Call-out ── */}
+          <div className="flex flex-col items-center gap-2 py-4 rounded-2xl"
+            style={{ backgroundColor: "#0A0A0A", border: "1px solid #1E1E1E" }}>
+            <span className="text-sm font-semibold" style={{ color: "#555555" }}>نداء إلى</span>
+            <span className="text-3xl font-black text-white">{current.name}</span>
+          </div>
+
+          {/* ── Secret card ── */}
+          <button
+            onClick={() => setIsRoleRevealed((v) => !v)}
+            className="w-full flex flex-col items-center justify-center gap-4 py-10 rounded-2xl transition-all duration-300 active:scale-95"
+            style={{
+              backgroundColor: isRoleRevealed ? "#0D0D0D" : "#080808",
+              border: `1px solid ${isRoleRevealed ? meta.color + "55" : "#1A1A1A"}`,
+              boxShadow: isRoleRevealed ? `0 0 32px ${meta.glow}` : "none",
+            }}>
+            {isRoleRevealed ? (
+              <>
+                <div className="flex items-center justify-center w-16 h-16 rounded-2xl"
+                  style={{ backgroundColor: meta.color + "18", border: `1px solid ${meta.color}44` }}>
+                  <Icon size={32} color={meta.color} strokeWidth={1.8} />
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-3xl font-black" style={{ color: meta.color, fontFamily: "serif" }}>
+                    {current.role}
+                  </span>
+                  <span className="text-xs font-semibold" style={{ color: meta.color + "99" }}>
+                    تذكّر دورك جيداً
+                  </span>
+                </div>
+                <span className="text-xs" style={{ color: "#2A2A2A" }}>اضغط للإخفاء</span>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-center w-16 h-16 rounded-2xl"
+                  style={{ backgroundColor: "#111111", border: "1px solid #1E1E1E" }}>
+                  <EyeOff size={28} color="#2A2A2A" strokeWidth={1.5} />
+                </div>
+                <span className="text-base font-bold" style={{ color: "#333333" }}>اضغط لكشف الدور</span>
+              </>
+            )}
+          </button>
+
+          {/* ── Spacer ── */}
+          <div className="flex-1" />
+
+          {/* ── Controls ── */}
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleNext}
+              disabled={!isRoleRevealed}
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              style={{
+                backgroundColor: isRoleRevealed ? "#D32F2F" : "#1A1A1A",
+                color: isRoleRevealed ? "#ffffff" : "#333333",
+                border: isRoleRevealed ? "none" : "1px solid #222222",
+                boxShadow: isRoleRevealed ? "0 0 24px #D32F2F44" : "none",
+              }}>
+              <VenetianMask size={20} strokeWidth={2} />
+              <span>{isLast ? "إنهاء الليلة التعريفية" : "اللاعب التالي"}</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: playing
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "playing") {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+        <div className="flex flex-col items-center gap-5 w-full max-w-sm text-center">
+          <div className="flex items-center justify-center w-20 h-20 rounded-2xl"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #D32F2F44", boxShadow: "0 0 32px #D32F2F22" }}>
+            <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <h2 className="text-2xl font-black text-white">الأقنعة وُزِّعت</h2>
+            <p className="text-sm leading-relaxed" style={{ color: "#555555" }}>
+              الجميع يعرف دوره — يمكن البدء باللعبة
+            </p>
+          </div>
+          <div className="flex flex-col rounded-2xl overflow-hidden w-full"
+            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
+            {assignedRoles.map((ar, i) => {
+              const m = ROLE_META[ar.role] ?? ROLE_META["بريء"];
+              const { Icon: RoleIcon } = m;
+              return (
+                <div key={ar.name} className="flex flex-row-reverse items-center justify-between px-4 py-3"
+                  style={{ borderBottom: i < assignedRoles.length - 1 ? "1px solid #141414" : "none" }}>
+                  <span className="text-sm font-semibold text-white">{ar.name}</span>
+                  <div className="flex flex-row-reverse items-center gap-2">
+                    <RoleIcon size={14} color={m.color} strokeWidth={2} />
+                    <span className="text-sm font-bold" style={{ color: m.color }}>{ar.role}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          onClick={() => { setPhase("setup"); setAssignedRoles([]); setCurrentIndex(0); setIsRoleRevealed(false); }}
+          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+          style={{ backgroundColor: "#D32F2F", color: "#fff", border: "none", boxShadow: "0 0 24px #D32F2F44" }}>
+          <Shuffle size={20} strokeWidth={2} />
+          <span>إعادة التوزيع</span>
+        </button>
+        <button
+          onClick={onBack}
+          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+          style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
+          <ArrowRight size={16} strokeWidth={2} />
+          <span>العودة لاختيار الطور</span>
+        </button>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: setup (default)
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
       <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
@@ -455,9 +665,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex flex-col rounded-2xl overflow-hidden"
             style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
             {players.map((name, idx) => (
-              <div
-                key={name}
-                className="flex flex-row-reverse items-center justify-between px-4 py-3.5"
+              <div key={name} className="flex flex-row-reverse items-center justify-between px-4 py-3.5"
                 style={{ borderBottom: idx < players.length - 1 ? "1px solid #141414" : "none" }}>
                 <div className="flex flex-row-reverse items-center gap-3">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
@@ -466,8 +674,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   </div>
                   <span className="text-sm font-semibold text-white">{name}</span>
                 </div>
-                <button
-                  onClick={() => removePlayer(name)}
+                <button onClick={() => removePlayer(name)}
                   className="flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150 active:scale-90"
                   style={{ backgroundColor: "transparent" }}>
                   <Trash2 size={15} color="#3A3A3A" strokeWidth={2} />
@@ -493,8 +700,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               أضف {remaining} {remaining === 1 ? "لاعباً" : "لاعبين"} على الأقل للبدء
             </p>
           )}
-
           <button
+            onClick={handleDistribute}
             disabled={!canDistribute}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{
@@ -506,7 +713,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <VenetianMask size={20} strokeWidth={2} />
             <span>توزيع الأقنعة</span>
           </button>
-
           <button
             onClick={onBack}
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
