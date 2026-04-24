@@ -25,6 +25,8 @@ import {
   Smartphone,
   Monitor,
   ChevronRight,
+  Trash2,
+  UserPlus,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -367,31 +369,139 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   );
 }
 
-// ─── Narrator Mode (placeholder) ──────────────────────────────────────────────
+// ─── Narrator Mode — Setup Dashboard ─────────────────────────────────────────
+
+const MIN_PLAYERS = 4;
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
+  const [players, setPlayers]       = useState<string[]>([]);
+  const [newPlayer, setNewPlayer]   = useState("");
+  const inputRef                    = useRef<HTMLInputElement>(null);
+
+  const addPlayer = () => {
+    const trimmed = newPlayer.trim();
+    if (!trimmed || players.includes(trimmed)) return;
+    setPlayers((prev) => [...prev, trimmed]);
+    setNewPlayer("");
+    inputRef.current?.focus();
+  };
+
+  const removePlayer = (name: string) =>
+    setPlayers((prev) => prev.filter((p) => p !== name));
+
+  const remaining  = Math.max(0, MIN_PLAYERS - players.length);
+  const canDistribute = players.length >= MIN_PLAYERS;
+
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
-      <div className="flex flex-col items-center gap-4 w-full max-w-sm text-center">
-        <div className="flex items-center justify-center w-20 h-20 rounded-2xl"
-          style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
-          <Monitor size={36} color="#444444" strokeWidth={1.5} />
+    <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
+
+        {/* ── Header ── */}
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-row-reverse items-center gap-2">
+            <Monitor size={18} color="#D32F2F" strokeWidth={1.8} />
+            <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>طور المجلس</span>
+          </div>
+          <h1 className="text-2xl font-black text-white text-right">إعداد اللاعبين</h1>
+          <p className="text-sm text-right" style={{ color: "#555555" }}>أضف أسماء الحاضرين في المجلس</p>
         </div>
-        <div className="flex flex-col gap-2">
-          <h2 className="text-2xl font-black text-white">لعب المجلس</h2>
-          <p className="text-base font-bold" style={{ color: "#D32F2F" }}>قريباً - قيد التطوير</p>
-          <p className="text-sm leading-relaxed" style={{ color: "#555555" }}>
-            وضع الراوي — شاشة عرض موحدة يتحكم بها الراوي لإدارة اللعبة بصوت عالٍ في المجلس.
-          </p>
+
+        {/* ── Add Player Input ── */}
+        <div className="flex flex-row-reverse gap-2">
+          <input
+            ref={inputRef}
+            value={newPlayer}
+            onChange={(e) => setNewPlayer(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addPlayer()}
+            placeholder="اسم اللاعب (مثال: أحمد)"
+            maxLength={20}
+            className="flex-1 rounded-2xl text-white text-sm outline-none placeholder-neutral-600"
+            style={{
+              backgroundColor: "#0D0D0D",
+              border: "1px solid #2A2A2A",
+              direction: "rtl",
+              padding: "13px 16px",
+            }}
+          />
+          <button
+            onClick={addPlayer}
+            disabled={!newPlayer.trim() || players.includes(newPlayer.trim())}
+            className="flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-150 active:scale-95"
+            style={{
+              backgroundColor: newPlayer.trim() && !players.includes(newPlayer.trim()) ? "#D32F2F" : "#1A1A1A",
+              border: "1px solid transparent",
+            }}>
+            <Plus size={20} color={newPlayer.trim() && !players.includes(newPlayer.trim()) ? "#fff" : "#333"} strokeWidth={2.5} />
+          </button>
         </div>
+
+        {/* ── Players List ── */}
+        {players.length > 0 ? (
+          <div className="flex flex-col rounded-2xl overflow-hidden"
+            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
+            {players.map((name, idx) => (
+              <div
+                key={name}
+                className="flex flex-row-reverse items-center justify-between px-4 py-3.5"
+                style={{ borderBottom: idx < players.length - 1 ? "1px solid #141414" : "none" }}>
+                <div className="flex flex-row-reverse items-center gap-3">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
+                    style={{ backgroundColor: "#1A1A1A", color: "#D32F2F" }}>
+                    {idx + 1}
+                  </div>
+                  <span className="text-sm font-semibold text-white">{name}</span>
+                </div>
+                <button
+                  onClick={() => removePlayer(name)}
+                  className="flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150 active:scale-90"
+                  style={{ backgroundColor: "transparent" }}>
+                  <Trash2 size={15} color="#3A3A3A" strokeWidth={2} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-2xl"
+            style={{ border: "1px dashed #1E1E1E" }}>
+            <UserPlus size={28} color="#2A2A2A" strokeWidth={1.5} />
+            <span className="text-sm" style={{ color: "#333333" }}>لا يوجد لاعبون بعد</span>
+          </div>
+        )}
+
+        {/* ── Spacer ── */}
+        <div className="flex-1" />
+
+        {/* ── Bottom: helper text + CTA + back ── */}
+        <div className="flex flex-col gap-3">
+          {!canDistribute && (
+            <p className="text-xs text-center font-semibold" style={{ color: "#444444" }}>
+              أضف {remaining} {remaining === 1 ? "لاعباً" : "لاعبين"} على الأقل للبدء
+            </p>
+          )}
+
+          <button
+            disabled={!canDistribute}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{
+              backgroundColor: canDistribute ? "#D32F2F" : "#1A1A1A",
+              color: canDistribute ? "#ffffff" : "#333333",
+              border: canDistribute ? "none" : "1px solid #222222",
+              boxShadow: canDistribute ? "0 0 24px #D32F2F44" : "none",
+            }}>
+            <VenetianMask size={20} strokeWidth={2} />
+            <span>توزيع الأقنعة</span>
+          </button>
+
+          <button
+            onClick={onBack}
+            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
+            <ArrowRight size={16} strokeWidth={2} />
+            <span>العودة لاختيار الطور</span>
+          </button>
+        </div>
+
       </div>
-      <button
-        onClick={onBack}
-        className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
-        style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
-        <ArrowRight size={16} strokeWidth={2} />
-        <span>العودة لاختيار الطور</span>
-      </button>
     </div>
   );
 }
