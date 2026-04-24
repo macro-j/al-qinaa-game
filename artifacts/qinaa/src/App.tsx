@@ -283,20 +283,20 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           <button
             onClick={() => onSelect("narrator")}
             className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#0D0D0D", border: "1px solid #333333" }}>
+            style={{ backgroundColor: "#061210", border: "1px solid #10B98133", boxShadow: "0 0 24px #10B98111" }}>
             <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
-              style={{ backgroundColor: "#111111" }}>
-              <Monitor size={24} color="#666666" strokeWidth={1.8} />
+              style={{ backgroundColor: "#0A1F1C", border: "1px solid #10B98122" }}>
+              <Monitor size={24} color="#10B981" strokeWidth={1.8} />
             </div>
             <div className="flex flex-col items-end gap-1 flex-1 mx-4">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: "#1A1A00", color: "#888800", border: "1px solid #444400" }}>قريباً</span>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-md"
+                  style={{ backgroundColor: "#10B98110", color: "#34D399", border: "1px solid #10B98120" }}>جديد ✨</span>
                 <span className="text-lg font-black text-white">لعب المجلس</span>
               </div>
-              <span className="text-xs" style={{ color: "#555555" }}>شاشة عرض وراوي</span>
+              <span className="text-xs" style={{ color: "#6EE7B7" }}>شاشة عرض وراوي</span>
             </div>
-            <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+            <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
           {/* Rules — ghost/outline style, visually subordinate */}
