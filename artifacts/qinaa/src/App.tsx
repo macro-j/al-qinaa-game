@@ -387,8 +387,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       </div>
       <button
         onClick={onBack}
-        className="flex flex-row-reverse items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
-        style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", color: "#999999" }}>
+        className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
         <ArrowRight size={16} strokeWidth={2} />
         <span>العودة لاختيار الطور</span>
       </button>
@@ -415,10 +415,10 @@ function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => vo
             <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
           </button>
           <button onClick={onBack}
-            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "transparent", border: "1px solid #1E1E1E", color: "#444444" }}>
+            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
             <ArrowRight size={16} strokeWidth={2} />
-            <span className="text-sm font-semibold">العودة لاختيار الطور</span>
+            <span>العودة لاختيار الطور</span>
           </button>
         </div>
       </div>
