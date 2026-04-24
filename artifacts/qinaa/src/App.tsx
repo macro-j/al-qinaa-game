@@ -240,6 +240,8 @@ const GUIDE_ROLES = [
 // ─── Game Mode Selector (top-level entry point) ───────────────────────────────
 
 function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator") => void }) {
+  const [showGuide, setShowGuide] = useState(false);
+
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-10 w-full max-w-sm">
@@ -290,64 +292,15 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Narrator Mode (placeholder) ──────────────────────────────────────────────
-
-function NarratorMode({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
-      <div className="flex flex-col items-center gap-4 w-full max-w-sm text-center">
-        <div className="flex items-center justify-center w-20 h-20 rounded-2xl"
-          style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
-          <Monitor size={36} color="#444444" strokeWidth={1.5} />
-        </div>
-        <div className="flex flex-col gap-2">
-          <h2 className="text-2xl font-black text-white">لعب المجلس</h2>
-          <p className="text-base font-bold" style={{ color: "#D32F2F" }}>قريباً - قيد التطوير</p>
-          <p className="text-sm leading-relaxed" style={{ color: "#555555" }}>
-            وضع الراوي — شاشة عرض موحدة يتحكم بها الراوي لإدارة اللعبة بصوت عالٍ في المجلس.
-          </p>
-        </div>
-      </div>
-      <button
-        onClick={onBack}
-        className="flex flex-row-reverse items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
-        style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", color: "#999999" }}>
-        <ArrowRight size={16} strokeWidth={2} />
-        <span>العودة للقائمة</span>
-      </button>
-    </div>
-  );
-}
-
-// ─── In-game Main Menu (Online mode lobby) ────────────────────────────────────
-
-function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
-  const [showGuide, setShowGuide] = useState(false);
-
-  return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
-      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
-        <div className="flex flex-col items-center gap-3">
-          <img src="/mask-logo.png" alt="القناع" style={{ width: 210, height: 210, objectFit: "contain" }} />
-          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
-          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
-        </div>
-        <div className="flex flex-col gap-5 w-full">
-          <button onClick={onCreateRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <Plus size={22} color="#D32F2F" strokeWidth={2.5} /><span>إنشاء غرفة</span>
+          {/* Rules — ghost/outline style, visually subordinate */}
+          <button
+            onClick={() => setShowGuide(true)}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#666666" }}>
+            <BookOpen size={18} strokeWidth={1.8} />
+            <span className="text-sm font-semibold">شرح اللعبة</span>
           </button>
-          <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
-          </button>
-          <button onClick={() => setShowGuide(true)} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
-            <BookOpen size={22} color="#D32F2F" strokeWidth={2.5} /><span>شرح اللعبة</span>
-          </button>
+
         </div>
       </div>
 
@@ -410,6 +363,59 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Narrator Mode (placeholder) ──────────────────────────────────────────────
+
+function NarratorMode({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
+      <div className="flex flex-col items-center gap-4 w-full max-w-sm text-center">
+        <div className="flex items-center justify-center w-20 h-20 rounded-2xl"
+          style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
+          <Monitor size={36} color="#444444" strokeWidth={1.5} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-black text-white">لعب المجلس</h2>
+          <p className="text-base font-bold" style={{ color: "#D32F2F" }}>قريباً - قيد التطوير</p>
+          <p className="text-sm leading-relaxed" style={{ color: "#555555" }}>
+            وضع الراوي — شاشة عرض موحدة يتحكم بها الراوي لإدارة اللعبة بصوت عالٍ في المجلس.
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={onBack}
+        className="flex flex-row-reverse items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "#1A1A1A", border: "1px solid #333333", color: "#999999" }}>
+        <ArrowRight size={16} strokeWidth={2} />
+        <span>العودة للقائمة</span>
+      </button>
+    </div>
+  );
+}
+
+// ─── In-game Main Menu (Online mode lobby) ────────────────────────────────────
+
+function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
+        <div className="flex flex-col items-center gap-3">
+          <img src="/mask-logo.png" alt="القناع" style={{ width: 210, height: 210, objectFit: "contain" }} />
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
+          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
+        </div>
+        <div className="flex flex-col gap-5 w-full">
+          <button onClick={onCreateRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <Plus size={22} color="#D32F2F" strokeWidth={2.5} /><span>إنشاء غرفة</span>
+          </button>
+          <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
+            <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
