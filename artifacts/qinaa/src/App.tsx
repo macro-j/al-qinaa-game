@@ -378,14 +378,15 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
 const MIN_PLAYERS = 4;
 
-type AssignedRole = { name: string; role: string };
-type LivePlayer   = { name: string; role: string; isAlive: boolean };
+type AssignedRole = { name: string; role: string; color: string };
+type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean };
 
-const ROLE_META: Record<string, { color: string; glow: string; Icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }> }> = {
-  "الولد":  { color: "#D32F2F", glow: "#D32F2F55", Icon: Skull   },
-  "الشايب": { color: "#1565C0", glow: "#1565C055", Icon: Shield  },
-  "الآكة":  { color: "#FF8F00", glow: "#FF8F0055", Icon: Search  },
-  "بريء":   { color: "#555555", glow: "#55555533", Icon: User    },
+const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
+  "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
+  "الإكة":   { color: "#B71C1C", glow: "#B71C1C33", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
+  "الشايب":  { color: "#FF8F00", glow: "#FF8F0033", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
+  "البنت":   { color: "#1565C0", glow: "#1565C033", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
+  "المواطن": { color: "#555555", glow: "#55555522", desc: "من الشعب — ابحث عن المافيا وصوّت ضدهم." },
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -398,15 +399,22 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
-  const n = playerNames.length;
-  let roleList: string[];
-  if (n === 4)      roleList = ["الولد", "الشايب", "بريء", "بريء"];
-  else if (n === 5) roleList = ["الولد", "الشايب", "الآكة", "بريء", "بريء"];
-  else              roleList = ["الولد", "الولد", "الشايب", "الآكة", ...Array(n - 4).fill("بريء")];
-  // a) shuffle roles, b) map to players, c) shuffle final order
-  const shuffledRoles = shuffle(roleList);
-  const mapped = playerNames.map((name, i) => ({ name, role: shuffledRoles[i] }));
-  return shuffle(mapped);
+  // Exact same role priority order as the server's roleDefs
+  const defs: { role: string; color: string }[] = [
+    { role: "الولد",   color: "#D32F2F" },
+    { role: "الإكة",   color: "#B71C1C" },
+    { role: "الشايب",  color: "#FF8F00" },
+    { role: "البنت",   color: "#1565C0" },
+  ];
+  // Mirror server: shuffle players, assign special roles in order, rest get المواطن
+  const shuffledPlayers = shuffle(playerNames);
+  const assigned = shuffledPlayers.map((name, i) =>
+    i < defs.length
+      ? { name, role: defs[i].role, color: defs[i].color }
+      : { name, role: "المواطن", color: "#555555" }
+  );
+  // Shuffle call order so intro night sequence is unpredictable
+  return shuffle(assigned);
 }
 
 // ─── Narrator Mode — component ────────────────────────────────────────────────
@@ -422,16 +430,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [phase, setPhase]                   = useState<"setup" | "distribution" | "night" | "day">("setup");
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>([]);
   const [currentIndex, setCurrentIndex]     = useState(0);
-  const [isRoleRevealed, setIsRoleRevealed] = useState(false);
+  // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
+  const [isPressing, setIsPressing]             = useState(false);
+  const [hasRevealedOnce, setHasRevealedOnce]   = useState(false);
 
   // ── Game loop state ──
-  const [livePlayers, setLivePlayers]       = useState<LivePlayer[]>([]);
-  const [nightStep, setNightStep]           = useState<string>("الولد");
-  const [nightActions, setNightActions]     = useState<{ killTarget: string | null; protectTarget: string | null; investigateTarget: string | null }>({ killTarget: null, protectTarget: null, investigateTarget: null });
-  const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
-  const [dayResult, setDayResult]           = useState<{ died: boolean; name: string | null }>({ died: false, name: null });
-  const [nightCount, setNightCount]         = useState(1);
-  const [confirmExecute, setConfirmExecute] = useState<string | null>(null);
+  const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>([]);
+  const [nightStep, setNightStep]               = useState<string>("الولد");
+  const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null }>({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+  const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
+  const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>({ died: false, name: null, silenced: null });
+  const [nightCount, setNightCount]             = useState(1);
+  const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
 
   const addPlayer = () => {
     const trimmed = newPlayer.trim();
@@ -453,58 +463,68 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const roles = generateAndShuffleRoles(players);
     setAssignedRoles(roles);
     setCurrentIndex(0);
-    setIsRoleRevealed(false);
+    setIsPressing(false);
+    setHasRevealedOnce(false);
     setPhase("distribution");
   };
 
+  // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
   const getNightOrder = (lp: LivePlayer[]) =>
-    (["الولد", "الشايب", "الآكة"] as const).filter(r => lp.some(p => p.role === r && p.isAlive));
+    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r => lp.some(p => p.role === r && p.isAlive));
 
   const handleNext = () => {
     const isLast = currentIndex === assignedRoles.length - 1;
     if (isLast) {
-      const lp: LivePlayer[] = assignedRoles.map(ar => ({ name: ar.name, role: ar.role, isAlive: true }));
+      const lp: LivePlayer[] = assignedRoles.map(ar => ({ name: ar.name, role: ar.role, color: ar.color, isAlive: true, isSilenced: false }));
       const order = getNightOrder(lp);
       setLivePlayers(lp);
       setNightStep(order[0] ?? "الولد");
-      setNightActions({ killTarget: null, protectTarget: null, investigateTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
       setSelectedTarget(null);
+      setIsPressing(false);
+      setHasRevealedOnce(false);
       setNightCount(1);
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
-      setIsRoleRevealed(false);
+      setIsPressing(false);
+      setHasRevealedOnce(false);
     }
   };
 
   const handleNightStep = () => {
     const newActions = { ...nightActions };
     if (nightStep === "الولد")  newActions.killTarget        = selectedTarget;
-    if (nightStep === "الشايب") newActions.protectTarget     = selectedTarget;
-    if (nightStep === "الآكة")  newActions.investigateTarget = selectedTarget;
+    if (nightStep === "الإكة")  newActions.silenceTarget     = selectedTarget;
+    if (nightStep === "الشايب") newActions.investigateTarget = selectedTarget;
+    if (nightStep === "البنت")  newActions.protectTarget     = selectedTarget;
 
     const order = getNightOrder(livePlayers);
-    const idx   = order.indexOf(nightStep as "الولد" | "الشايب" | "الآكة");
+    const idx   = order.indexOf(nightStep as "الولد" | "الإكة" | "الشايب" | "البنت");
 
     if (idx < order.length - 1) {
       setNightActions(newActions);
       setNightStep(order[idx + 1]);
       setSelectedTarget(null);
     } else {
-      const { killTarget, protectTarget } = newActions;
-      let died: string | null = null;
-      if (killTarget && killTarget !== protectTarget) {
-        died = killTarget;
-        setLivePlayers(prev => prev.map(p => p.name === killTarget ? { ...p, isAlive: false } : p));
-      }
-      setDayResult({ died: died !== null, name: died });
-      setNightActions({ killTarget: null, protectTarget: null, investigateTarget: null });
+      // Mirror server's resolveMorning logic
+      const { killTarget, protectTarget, silenceTarget } = newActions;
+      const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
+      setLivePlayers(prev => prev.map(p => ({
+        ...p,
+        isAlive:    p.name === died ? false : p.isAlive,
+        isSilenced: p.name === silenceTarget,
+      })));
+      setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
       setSelectedTarget(null);
       setPhase("day");
     }
   };
 
   const handleStartNextNight = () => {
+    // Clear silenced status before next night starts
+    setLivePlayers(prev => prev.map(p => ({ ...p, isSilenced: false })));
     const order = getNightOrder(livePlayers);
     setNightStep(order[0] ?? "الولد");
     setSelectedTarget(null);
@@ -525,14 +545,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: distribution
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "distribution" && assignedRoles.length > 0) {
-    const current  = assignedRoles[currentIndex];
-    const meta     = ROLE_META[current.role] ?? ROLE_META["بريء"];
-    const isLast   = currentIndex === assignedRoles.length - 1;
-    const { Icon } = meta;
+    const current = assignedRoles[currentIndex];
+    const meta    = ROLE_META[current.role] ?? ROLE_META["المواطن"];
+    const isLast  = currentIndex === assignedRoles.length - 1;
 
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
-        <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
+        <div className="flex flex-col flex-1 w-full max-w-sm mx-auto gap-6">
 
           {/* ── Header ── */}
           <div className="flex flex-col items-center gap-1 text-center">
@@ -552,61 +571,81 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span className="text-3xl font-black text-white">{current.name}</span>
           </div>
 
-          {/* ── Secret card ── */}
-          <button
-            onClick={() => setIsRoleRevealed((v) => !v)}
-            className="w-full flex flex-col items-center justify-center gap-4 py-10 rounded-2xl transition-all duration-300 active:scale-95"
+          {/* ── Secret card — EXACT clone of Online Mode PlayerScreen role card ── */}
+          <div
+            onPointerDown={() => { setIsPressing(true); setHasRevealedOnce(true); }}
+            onPointerUp={() => setIsPressing(false)}
+            onPointerLeave={() => setIsPressing(false)}
+            onPointerCancel={() => setIsPressing(false)}
+            className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none touch-none transition-all duration-300"
             style={{
-              backgroundColor: isRoleRevealed ? "#0D0D0D" : "#080808",
-              border: `1px solid ${isRoleRevealed ? meta.color + "55" : "#1A1A1A"}`,
-              boxShadow: isRoleRevealed ? `0 0 32px ${meta.glow}` : "none",
+              backgroundColor: isPressing ? "#0A0000" : "#111111",
+              borderColor:     isPressing ? meta.color : "#2A2A2A",
+              boxShadow:       isPressing ? `0 0 40px ${meta.color}33` : "none",
+              cursor: "pointer",
+              touchAction: "none",
+              userSelect: "none",
+              WebkitUserSelect: "none",
             }}>
-            {isRoleRevealed ? (
+            {isPressing ? (
               <>
-                <div className="flex items-center justify-center w-16 h-16 rounded-2xl"
-                  style={{ backgroundColor: meta.color + "18", border: `1px solid ${meta.color}44` }}>
-                  <Icon size={32} color={meta.color} strokeWidth={1.8} />
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-3xl font-black" style={{ color: meta.color, fontFamily: "serif" }}>
+                <VenetianMask size={64} color={meta.color} strokeWidth={1.2} />
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
+                  <span className="text-3xl font-black text-center leading-tight"
+                    style={{ color: meta.color, fontFamily: "serif", direction: "rtl" }}>
                     {current.role}
                   </span>
-                  <span className="text-xs font-semibold" style={{ color: meta.color + "99" }}>
-                    تذكّر دورك جيداً
+                  <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
+                    {meta.desc}
                   </span>
                 </div>
-                <span className="text-xs" style={{ color: "#2A2A2A" }}>اضغط للإخفاء</span>
+                <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
+                  <Unlock size={14} /><span className="text-xs">أنت ترى قناعك</span>
+                </div>
               </>
             ) : (
               <>
-                <div className="flex items-center justify-center w-16 h-16 rounded-2xl"
-                  style={{ backgroundColor: "#111111", border: "1px solid #1E1E1E" }}>
-                  <EyeOff size={28} color="#2A2A2A" strokeWidth={1.5} />
+                <div className="relative">
+                  <VenetianMask size={64} color="#2A2A2A" strokeWidth={1.2} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Lock size={22} color="#555555" />
+                  </div>
                 </div>
-                <span className="text-base font-bold" style={{ color: "#333333" }}>اضغط لكشف الدور</span>
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xl font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
+                  <span className="text-sm text-center" style={{ color: "#333333" }}>اضغط وامسك للكشف عن قناعك</span>
+                </div>
+                <div className="flex items-center gap-2" style={{ color: "#333333" }}>
+                  <Lock size={14} /><span className="text-xs">مخفي عن الجميع</span>
+                </div>
               </>
             )}
-          </button>
+          </div>
+
+          <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
+            {isPressing
+              ? "ارفع إصبعك لإخفاء القناع مجدداً"
+              : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
+          </p>
 
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Controls ── */}
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={handleNext}
-              disabled={!isRoleRevealed}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-              style={{
-                backgroundColor: isRoleRevealed ? "#D32F2F" : "#1A1A1A",
-                color: isRoleRevealed ? "#ffffff" : "#333333",
-                border: isRoleRevealed ? "none" : "1px solid #222222",
-                boxShadow: isRoleRevealed ? "0 0 24px #D32F2F44" : "none",
-              }}>
-              <VenetianMask size={20} strokeWidth={2} />
-              <span>{isLast ? "إنهاء الليلة التعريفية" : "اللاعب التالي"}</span>
-            </button>
-          </div>
+          {/* ── Next player button ── */}
+          <button
+            onClick={handleNext}
+            disabled={!hasRevealedOnce}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{
+              backgroundColor: hasRevealedOnce ? "#D32F2F" : "#1A1A1A",
+              color:           hasRevealedOnce ? "#ffffff" : "#333333",
+              border:          hasRevealedOnce ? "none" : "1px solid #222222",
+              boxShadow:       hasRevealedOnce ? "0 0 24px #D32F2F44" : "none",
+            }}>
+            <VenetianMask size={20} strokeWidth={2} />
+            <span>{isLast ? "إنهاء الليلة التعريفية" : "اللاعب التالي"}</span>
+          </button>
 
         </div>
       </div>
@@ -617,15 +656,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: night
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "night") {
-    const aliveTargets   = livePlayers.filter(p => p.isAlive);
-    const meta           = ROLE_META[nightStep] ?? ROLE_META["بريء"];
-    const { Icon }       = meta;
-    const isDetectiveStep = nightStep === "الآكة";
+    const aliveTargets = livePlayers.filter(p => p.isAlive);
+    const meta         = ROLE_META[nightStep] ?? ROLE_META["المواطن"];
+    // Seer (الشايب) step: reveal مافيا vs بريء for each player
+    const isSeerStep   = nightStep === "الشايب";
 
     const stepHint =
-      nightStep === "الولد"  ? "اختر ضحيتك الليلة" :
-      nightStep === "الشايب" ? "اختر من ستحمي الليلة" :
-                               "اختر من ستتحقق من دوره";
+      nightStep === "الولد"  ? "تذبح مين هذي الليلة يا ولد؟" :
+      nightStep === "الإكة"  ? "تسكتين مين يا إكة الليلة؟" :
+      nightStep === "الشايب" ? "تسأل عن مين يا شايب؟" :
+                               "تحمين مين يا بنت؟";
 
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
@@ -638,53 +678,53 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightCount} · الجميع ينام..</p>
           </div>
 
-          {/* ── Who's awake ── */}
+          {/* ── Who's awake — mirrors night action panel header ── */}
           <div className="flex flex-col items-center gap-3 py-5 rounded-2xl"
-            style={{ backgroundColor: "#0A0A0A", border: `1px solid ${meta.color}33`, boxShadow: `0 0 20px ${meta.glow}` }}>
+            style={{ backgroundColor: "#0D0000", border: `1px solid ${meta.color}`, boxShadow: `0 0 20px ${meta.glow}` }}>
             <div className="flex items-center justify-center w-12 h-12 rounded-xl"
               style={{ backgroundColor: meta.color + "18", border: `1px solid ${meta.color}44` }}>
-              <Icon size={22} color={meta.color} strokeWidth={1.8} />
+              <VenetianMask size={22} color={meta.color} strokeWidth={1.5} />
             </div>
-            <div className="flex flex-col items-center gap-0.5 text-center">
-              <span className="text-xs font-semibold" style={{ color: meta.color + "99" }}>يستيقظ الآن</span>
+            <div className="flex flex-col items-center gap-1 text-center">
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: meta.color }}>دورك الآن</span>
               <span className="text-2xl font-black" style={{ color: meta.color }}>{nightStep}</span>
-              <span className="text-xs mt-1" style={{ color: "#444" }}>{stepHint}</span>
+              <span className="text-sm font-semibold mt-1" style={{ color: "#CCCCCC" }}>{stepHint}</span>
             </div>
           </div>
 
-          {/* ── Target player list ── */}
-          <div className="flex flex-col rounded-2xl overflow-hidden"
-            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
-            {aliveTargets.map((p, i) => {
+          {/* ── Target player list — EXACT Online Mode row style ── */}
+          <div className="flex flex-col gap-2">
+            {aliveTargets.map((p) => {
               const isSelected = selectedTarget === p.name;
-              const isKiller   = p.role === "الولد";
+              const isMafia    = p.role === "الولد" || p.role === "الإكة";
+              const rowBg      = isSelected ? "#2A0000" : "#141414";
+              const rowBorder  = isSelected ? "#D32F2F" : "#222222";
               return (
-                <button key={p.name}
-                  onClick={() => setSelectedTarget(p.name)}
-                  className="flex flex-row-reverse items-center justify-between px-4 py-4 transition-all duration-150 w-full"
-                  style={{
-                    backgroundColor: isSelected ? meta.color + "15" : "transparent",
-                    borderBottom: i < aliveTargets.length - 1 ? "1px solid #141414" : "none",
-                    outline: isSelected ? `1px solid ${meta.color}44` : "none",
-                  }}>
-                  <span className="text-sm font-semibold text-white">{p.name}</span>
-                  <div className="flex flex-row-reverse items-center gap-2">
-                    {isDetectiveStep && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                        style={{
-                          backgroundColor: isKiller ? "#D32F2F18" : "#16a34a18",
-                          color:           isKiller ? "#D32F2F"   : "#16a34a",
-                          border: `1px solid ${isKiller ? "#D32F2F44" : "#16a34a44"}`,
-                        }}>
-                        {isKiller ? "مشتبه" : "حليف"}
+                <div key={p.name}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                  style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+                  <button
+                    onClick={() => setSelectedTarget(p.name)}
+                    className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
+                    style={{
+                      backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
+                      color:           isSelected ? "#ffffff" : "#888888",
+                      border: `1px solid ${isSelected ? "#D32F2F" : "#333333"}`,
+                    }}>
+                    {isSelected ? "تم الاختيار" : "اختر"}
+                  </button>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                      {p.name}
+                    </span>
+                    {isSeerStep && (
+                      <span className="text-xs font-bold"
+                        style={{ color: isMafia ? "#FF4040" : "#8BC34A" }}>
+                        {isMafia ? "مافيا 🐺" : "بريء ✓"}
                       </span>
                     )}
-                    {isSelected && (
-                      <div className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: meta.color }} />
-                    )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -728,67 +768,71 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <h1 className="text-2xl font-black text-white">يستيقظ الجميع</h1>
           </div>
 
-          {/* ── Night result card ── */}
-          {dayResult.died ? (
-            <div className="flex flex-col items-center gap-3 py-6 rounded-2xl"
-              style={{ backgroundColor: "#0D0D0D", border: "1px solid #D32F2F44", boxShadow: "0 0 28px #D32F2F22" }}>
-              <Skull size={30} color="#D32F2F" strokeWidth={1.5} />
-              <div className="flex flex-col items-center gap-1 text-center">
-                <span className="text-base font-black text-white">محاولة الاغتيال ناجحة</span>
-                <span className="text-sm font-bold" style={{ color: "#D32F2F" }}>
-                  مات {dayResult.name}
-                </span>
-              </div>
+          {/* ── Night result card — mirrors Online Mode morningResults banner ── */}
+          <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
+            style={{
+              backgroundColor: dayResult.died ? "#1A0000" : "#001A0A",
+              border: `1px solid ${dayResult.died ? "#D32F2F" : "#33691E"}`,
+            }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
+                style={{ backgroundColor: dayResult.died ? "#D32F2F" : "#4CAF50" }} />
+              <p className="text-sm font-bold" style={{ color: dayResult.died ? "#FF6B6B" : "#8BC34A" }}>
+                {dayResult.died
+                  ? `اكتشفنا جثة المقتول: ${dayResult.name}`
+                  : "مرت الليلة بسلام.. لم يمت أحد."}
+              </p>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 py-6 rounded-2xl"
-              style={{ backgroundColor: "#0D0D0D", border: "1px solid #1565C044", boxShadow: "0 0 28px #1565C022" }}>
-              <Shield size={30} color="#1565C0" strokeWidth={1.5} />
-              <div className="flex flex-col items-center gap-1 text-center">
-                <span className="text-base font-black text-white">محاولة الاغتيال فاشلة</span>
-                <span className="text-sm" style={{ color: "#1565C0" }}>تدخّل الطبيب في الوقت المناسب</span>
-              </div>
-            </div>
-          )}
+            {dayResult.silenced && (
+              <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
+                والساكت: {dayResult.silenced}
+              </p>
+            )}
+          </div>
 
-          {/* ── Alive players with execute ── */}
-          <div className="flex flex-col rounded-2xl overflow-hidden"
-            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
+          {/* ── Alive players with execute — mirrors day_discussion player list ── */}
+          <div className="flex flex-col gap-2">
             {alivePlayers.length === 0 ? (
-              <div className="flex items-center justify-center py-6">
+              <div className="flex items-center justify-center py-6 rounded-2xl"
+                style={{ border: "1px solid #1E1E1E" }}>
                 <span className="text-sm" style={{ color: "#333" }}>لا يوجد لاعبون أحياء</span>
               </div>
-            ) : alivePlayers.map((p, i) => (
+            ) : alivePlayers.map((p) => (
               <div key={p.name}
-                className="flex flex-row-reverse items-center justify-between px-4 py-3"
-                style={{ borderBottom: i < alivePlayers.length - 1 ? "1px solid #141414" : "none" }}>
+                className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
                 {confirmExecute === p.name ? (
                   <>
-                    <span className="text-sm font-semibold text-white">{p.name}</span>
-                    <div className="flex flex-row-reverse gap-2">
+                    <div className="flex gap-2">
                       <button
                         onClick={() => handleExecute(p.name)}
-                        className="text-xs font-black px-3 py-1.5 rounded-xl transition-all active:scale-95"
+                        className="text-xs font-black px-3 py-1.5 rounded-lg transition-all active:scale-95"
                         style={{ backgroundColor: "#D32F2F", color: "#fff" }}>
                         تأكيد
                       </button>
                       <button
                         onClick={() => setConfirmExecute(null)}
-                        className="text-xs font-bold px-3 py-1.5 rounded-xl transition-all active:scale-95"
+                        className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
                         style={{ backgroundColor: "#1A1A1A", color: "#555", border: "1px solid #2A2A2A" }}>
                         إلغاء
                       </button>
                     </div>
+                    <span className="text-sm font-semibold text-white">{p.name}</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-sm font-semibold text-white">{p.name}</span>
                     <button
                       onClick={() => setConfirmExecute(p.name)}
-                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl transition-all active:scale-95"
+                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
                       style={{ backgroundColor: "#1A0000", color: "#D32F2F", border: "1px solid #D32F2F33" }}>
                       ⚖️ إعدام
                     </button>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
+                      {p.isSilenced && (
+                        <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -809,7 +853,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
           {/* ── Restart game ── */}
           <button
-            onClick={() => { setPhase("setup"); setAssignedRoles([]); setLivePlayers([]); setCurrentIndex(0); setIsRoleRevealed(false); }}
+            onClick={() => {
+              setPhase("setup");
+              setAssignedRoles([]);
+              setLivePlayers([]);
+              setCurrentIndex(0);
+              setIsPressing(false);
+              setHasRevealedOnce(false);
+              setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+              setDayResult({ died: false, name: null, silenced: null });
+              setNightCount(1);
+              setConfirmExecute(null);
+            }}
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
             <Shuffle size={16} strokeWidth={2} />
