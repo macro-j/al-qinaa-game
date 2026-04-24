@@ -439,6 +439,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [nightStep, setNightStep]               = useState<string>("الولد");
   const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null }>({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
   const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
+  const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(null);
   const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>({ died: false, name: null, silenced: null });
   const [nightCount, setNightCount]             = useState(1);
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
@@ -506,6 +507,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightActions(newActions);
       setNightStep(order[idx + 1]);
       setSelectedTarget(null);
+      setInvestigatedTarget(null);
     } else {
       // Mirror server's resolveMorning logic
       const { killTarget, protectTarget, silenceTarget } = newActions;
@@ -528,6 +530,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const order = getNightOrder(livePlayers);
     setNightStep(order[0] ?? "الولد");
     setSelectedTarget(null);
+    setInvestigatedTarget(null);
     setConfirmExecute(null);
     setNightCount(n => n + 1);
     setPhase("night");
@@ -693,19 +696,39 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* ── Target player list — EXACT Online Mode row style ── */}
+          {/* Fog-of-war: seer reveals only after picking; mafia sees allies instantly */}
           <div className="flex flex-col gap-2">
             {aliveTargets.map((p) => {
-              const isSelected = selectedTarget === p.name;
-              const isMafia    = p.role === "الولد" || p.role === "الإكة";
-              const rowBg      = isSelected ? "#2A0000" : "#141414";
-              const rowBorder  = isSelected ? "#D32F2F" : "#222222";
+              const isSelected   = selectedTarget === p.name;
+              const isMafiaRole  = p.role === "الولد" || p.role === "الإكة";
+              const isMafiaStep  = nightStep === "الولد" || nightStep === "الإكة";
+
+              // ── Ally badge: visible immediately during mafia steps ──
+              const showAllyBadge = isMafiaStep && isMafiaRole;
+
+              // ── Seer result badge: ONLY after investigatedTarget is locked ──
+              const isInvestigated = isSeerStep && investigatedTarget === p.name;
+              const showSeerBadge  = isInvestigated;
+
+              // ── Seer rows: lock after a choice is made (can't re-pick) ──
+              const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
+
+              const rowBg     = isSelected ? "#2A0000" : "#141414";
+              const rowBorder = isSelected ? "#D32F2F" : "#222222";
+
               return (
                 <div key={p.name}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
                   style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+
+                  {/* ── Reveal/select button ── */}
                   <button
-                    onClick={() => setSelectedTarget(p.name)}
-                    className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95"
+                    disabled={seerLocked || (isSeerStep && isInvestigated)}
+                    onClick={() => {
+                      setSelectedTarget(p.name);
+                      if (isSeerStep) setInvestigatedTarget(p.name);
+                    }}
+                    className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                     style={{
                       backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
                       color:           isSelected ? "#ffffff" : "#888888",
@@ -713,14 +736,30 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     }}>
                     {isSelected ? "تم الاختيار" : "اختر"}
                   </button>
-                  <div className="flex flex-col items-end gap-0.5">
+
+                  {/* ── Player name + badges ── */}
+                  <div className="flex flex-col items-end gap-1">
                     <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
                       {p.name}
                     </span>
-                    {isSeerStep && (
-                      <span className="text-xs font-bold"
-                        style={{ color: isMafia ? "#FF4040" : "#8BC34A" }}>
-                        {isMafia ? "مافيا 🐺" : "بريء ✓"}
+
+                    {/* Mafia ally badge — always shown to الولد / الإكة */}
+                    {showAllyBadge && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: "#FF8F0018", color: "#FF8F00", border: "1px solid #FF8F0044" }}>
+                        حليف 🤝
+                      </span>
+                    )}
+
+                    {/* Seer result badge — ONLY after locking target */}
+                    {showSeerBadge && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
+                          color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
+                          border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                        }}>
+                        {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
                       </span>
                     )}
                   </div>
@@ -864,6 +903,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               setDayResult({ died: false, name: null, silenced: null });
               setNightCount(1);
               setConfirmExecute(null);
+              setInvestigatedTarget(null);
             }}
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
