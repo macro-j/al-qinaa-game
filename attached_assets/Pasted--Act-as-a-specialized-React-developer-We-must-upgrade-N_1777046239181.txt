@@ -1,0 +1,26 @@
+"Act as a specialized React developer. We must upgrade <NarratorMode /> from a manual tracker into a full **Cinematic Game Engine & Smart Voting Arbiter** that mirrors the Online Mode perfectly.
+> **STRICT CONSTRAINTS:** All logic is local. Do not invent UI; reuse existing Tailwind classes from the project.
+> **TASK 1: Cinematic Transitions (The Interstitials)**
+>  1. Add a nightTransition state (e.g., 'everyone_sleeps' | 'role_waking' | 'role_sleeping' | 'everyone_wakes').
+>  2. Implement auto-advancing cinematic screens (use setTimeout for 3-4 seconds, or a 'Next' button if simpler, but keep it immersive).
+>    * Start of Night: Show a full dark screen with **'المدينة تنام.. الجميع يغمض عينيه'**.
+>    * After a role acts and host clicks submit: Show **'[اسم الدور] ينام..'** (e.g., 'الولد ينام..') before moving to the next role.
+>    * Start of Day: Show **'الصباح.. يستيقظ الجميع'** before showing the results.
+> **TASK 2: Mafia Ally Visibility (Fixing the Killer's view)**
+>  1. Since 'الإكة' (Silencer) is filtered out of the Killer's target list to prevent friendly fire, the Killer can't see who their ally is.
+>  2. **FIX:** When nightStep === 'الولد', render a distinct, elegant banner ABOVE the target list stating: **'حليفك (الإكة) هو: [اسم اللاعب]'** so the Host knows exactly who to point out to the Killer.
+> **TASK 3: Timers Integration**
+>  1. Bring the exact Timer UI component/logic from the Online Mode into Narrator Mode.
+>  2. Use it for the Day Phase Discussion and the Justification phase.
+> **TASK 4: The Smart Voting Engine (Replacing the manual 'Execute' buttons)**
+>  1. Upgrade daySubPhase to cycle through: 'results' -> 'discussion' -> 'voting_tally' -> 'justification' -> 'final_vote'.
+>  2. **'discussion' Phase:** Show active players and a **2-minute Timer**. Button: 'بدء التصويت'.
+>  3. **'voting_tally' Phase:** >    - The Host counts raised hands in the physical room.
+>    * For each player row, render a + and - button to input their vote count.
+>    * Button: 'فرز الأصوات' (Count Votes).
+>    * Logic: Find the player with the highest votes. If tied -> no one dies, auto-transition to next night. If clear highest -> move to justification.
+>  4. **'justification' Phase:** Show **'[اسم اللاعب] يدافع عن نفسه'** with a **1-minute Timer**. Button: 'بدء التصويت النهائي'.
+>  5. **'final_vote' Phase:** >    - Show two input counters for the Host: **'أوافق على الإعدام 👍'** vs **'أعارض الإعدام 👎'**.
+>    * Button: 'تنفيذ الحكم'.
+>    * Logic: If Agree > Disagree -> Execute (dies). Else -> Survives. Transition to night.
+> **GOAL:** The Host should never manually calculate max votes. The app MUST act as the exact game engine, providing timers, counting inputs, handling ties, and displaying cinematic sleep/wake screens."

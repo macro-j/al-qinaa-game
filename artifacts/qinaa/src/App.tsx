@@ -443,7 +443,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>({ died: false, name: null, silenced: null });
   const [nightCount, setNightCount]             = useState(1);
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
-  const [daySubPhase, setDaySubPhase]           = useState<"results" | "voting">("results");
+  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "justification" | "final_vote">("results");
+
+  // ── Night cinematic transitions ──
+  const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_sleeps" | "city_wakes">("none");
+  const [nightTransitionLabel, setNightTransitionLabel] = useState<string>("");
+  const nightTransitionNextRef                         = useRef<(() => void) | null>(null);
+
+  // ── Day timer — local epoch ms passed to <Countdown /> ──
+  const [timerEndsAt, setTimerEndsAt]   = useState<number | null>(null);
+
+  // ── Smart voting engine ──
+  const [voteCounts, setVoteCounts]         = useState<Record<string, number>>({});
+  const [accusedPlayer, setAccusedPlayer]   = useState<string | null>(null);
+  const [finalVoteFor, setFinalVoteFor]     = useState(0);
+  const [finalVoteAgainst, setFinalVoteAgainst] = useState(0);
+
+  // ── Auto-advance night transitions after delay ──
+  useEffect(() => {
+    if (nightTransition === "none") return;
+    const delay = nightTransition === "city_sleeps" ? 3000 : 2500;
+    const t = setTimeout(() => {
+      const next = nightTransitionNextRef.current;
+      nightTransitionNextRef.current = null;
+      setNightTransition("none");
+      next?.();
+    }, delay);
+    return () => clearTimeout(t);
+  }, [nightTransition]);
 
   const addPlayer = () => {
     const trimmed = newPlayer.trim();
@@ -486,6 +513,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightCount(1);
+      setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
+      setNightTransition("city_sleeps");
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
@@ -505,55 +534,77 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const idx   = order.indexOf(nightStep as "الولد" | "الإكة" | "الشايب" | "البنت");
 
     if (idx < order.length - 1) {
-      setNightActions(newActions);
-      setNightStep(order[idx + 1]);
-      setSelectedTarget(null);
-      setInvestigatedTarget(null);
+      // ── Cinematic: role sleeping → next role wakes ──
+      const nextRole = order[idx + 1];
+      nightTransitionNextRef.current = () => {
+        setNightActions(newActions);
+        setNightStep(nextRole);
+        setSelectedTarget(null);
+        setInvestigatedTarget(null);
+      };
+      setNightTransitionLabel(`${nightStep} ينام..`);
+      setNightTransition("role_sleeps");
     } else {
-      // Mirror server's resolveMorning logic
-      const { killTarget, protectTarget, silenceTarget } = newActions;
-      const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
-      setLivePlayers(prev => prev.map(p => ({
-        ...p,
-        isAlive:    p.name === died ? false : p.isAlive,
-        isSilenced: p.name === silenceTarget,
-      })));
-      setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
-      setSelectedTarget(null);
-      setPhase("day");
+      // ── Cinematic: city wakes → go to day ──
+      nightTransitionNextRef.current = () => {
+        const { killTarget, protectTarget, silenceTarget } = newActions;
+        const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
+        setLivePlayers(prev => prev.map(p => ({
+          ...p,
+          isAlive:    p.name === died ? false : p.isAlive,
+          isSilenced: p.name === silenceTarget,
+        })));
+        setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
+        setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+        setSelectedTarget(null);
+        setDaySubPhase("results");
+        setPhase("day");
+      };
+      setNightTransitionLabel("الصباح.. يستيقظ الجميع");
+      setNightTransition("city_wakes");
     }
   };
 
+  const resetVotingState = () => {
+    setTimerEndsAt(null);
+    setVoteCounts({});
+    setAccusedPlayer(null);
+    setFinalVoteFor(0);
+    setFinalVoteAgainst(0);
+    setConfirmExecute(null);
+  };
+
   const handleStartNextNight = () => {
-    // Clear silenced status before next night starts
-    setLivePlayers(prev => prev.map(p => ({ ...p, isSilenced: false })));
-    const order = getNightOrder(livePlayers);
+    const updatedPlayers = livePlayers.map(p => ({ ...p, isSilenced: false }));
+    setLivePlayers(updatedPlayers);
+    const order = getNightOrder(updatedPlayers);
     setNightStep(order[0] ?? "الولد");
     setSelectedTarget(null);
     setInvestigatedTarget(null);
-    setConfirmExecute(null);
     setDaySubPhase("results");
     setNightCount(n => n + 1);
+    resetVotingState();
+    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
+    setNightTransition("city_sleeps");
     setPhase("night");
   };
 
   const handleExecute = (name: string) => {
-    // Compute updated roster synchronously so we can derive the correct night order
     const updatedPlayers = livePlayers.map(p =>
       p.name === name
         ? { ...p, isAlive: false }
-        : { ...p, isSilenced: false }   // clear previous night's silence
+        : { ...p, isSilenced: false }
     );
     setLivePlayers(updatedPlayers);
-    setConfirmExecute(null);
-    // Derive first night step from the updated alive roles
     const firstStep = getNightOrder(updatedPlayers)[0] ?? "الولد";
     setNightStep(firstStep);
     setSelectedTarget(null);
     setInvestigatedTarget(null);
     setDaySubPhase("results");
     setNightCount(n => n + 1);
+    resetVotingState();
+    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
+    setNightTransition("city_sleeps");
     setPhase("night");
   };
 
@@ -675,6 +726,23 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: night
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "night") {
+
+    // ── Cinematic interstitial — fullscreen dark/dawn screen ──────────────
+    if (nightTransition !== "none") {
+      const isDawn = nightTransition === "city_wakes";
+      return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center gap-8 px-8" style={ROOT_STYLE}>
+          {isDawn
+            ? <Sun  size={56} color="#FFB300" strokeWidth={1} style={{ opacity: 0.85 }} />
+            : <Moon size={56} color="#1E1E3A" strokeWidth={1} style={{ opacity: 0.6  }} />}
+          <p className="text-2xl font-black text-center leading-relaxed"
+            style={{ color: isDawn ? "#FFB300" : "#2A2A4A" }}>
+            {nightTransitionLabel}
+          </p>
+        </div>
+      );
+    }
+
     const aliveTargets = livePlayers.filter(p => p.isAlive);
     const meta         = ROLE_META[nightStep] ?? ROLE_META["المواطن"];
     // Seer (الشايب) step: reveal مافيا vs بريء for each player
@@ -710,6 +778,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-sm font-semibold mt-1" style={{ color: "#CCCCCC" }}>{stepHint}</span>
             </div>
           </div>
+
+          {/* ── Mafia ally info banner — shown ONLY to الولد so host can point out partner ── */}
+          {nightStep === "الولد" && (() => {
+            const ally = livePlayers.find(p => p.isAlive && p.role === "الإكة");
+            if (!ally) return null;
+            return (
+              <div className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl"
+                style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
+                <span className="text-sm font-bold text-white">{ally.name}</span>
+                <span className="text-xs" style={{ color: "#555555" }}>حليفك (الإكة):</span>
+                <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+              </div>
+            );
+          })()}
 
           {/* ── Target player list — per-role filtering + badge rules ── */}
           {(() => {
@@ -834,12 +916,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE: day — sub-phases: results → voting
+  // PHASE: day — sub-phases: results → discussion → voting_tally → justification → final_vote
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "day") {
     const alivePlayers = livePlayers.filter(p => p.isAlive);
 
-    // ── Shared restart handler ──
     const restartGame = () => {
       setPhase("setup");
       setAssignedRoles([]);
@@ -850,12 +931,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
       setDayResult({ died: false, name: null, silenced: null });
       setNightCount(1);
-      setConfirmExecute(null);
       setInvestigatedTarget(null);
       setDaySubPhase("results");
+      setNightTransition("none");
+      resetVotingState();
     };
 
-    // ── Shared morning banner ──
+    const restartBtn = (
+      <button
+        onClick={restartGame}
+        className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
+        <Shuffle size={16} strokeWidth={2} />
+        <span>إعادة اللعبة من البداية</span>
+      </button>
+    );
+
+    const skipNightBtn = (
+      <button
+        onClick={handleStartNextNight}
+        className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
+        <Moon size={20} strokeWidth={2} />
+        <span>بدء الليلة التالية</span>
+      </button>
+    );
+
     const morningBanner = (
       <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
         style={{
@@ -866,155 +967,278 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
             style={{ backgroundColor: dayResult.died ? "#D32F2F" : "#4CAF50" }} />
           <p className="text-sm font-bold" style={{ color: dayResult.died ? "#FF6B6B" : "#8BC34A" }}>
-            {dayResult.died
-              ? `اكتشفنا جثة المقتول: ${dayResult.name}`
-              : "مرت الليلة بسلام.. لم يمت أحد."}
+            {dayResult.died ? `اكتشفنا جثة المقتول: ${dayResult.name}` : "مرت الليلة بسلام.. لم يمت أحد."}
           </p>
         </div>
         {dayResult.silenced && (
-          <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>
-            والساكت: {dayResult.silenced}
-          </p>
+          <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>والساكت: {dayResult.silenced}</p>
         )}
       </div>
     );
 
     // ════════════════════════════════════════════
-    // SUB-PHASE: results — announcement only
+    // SUB-PHASE 1: results — morning announcement only
     // ════════════════════════════════════════════
     if (daySubPhase === "results") {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
-
-            {/* ── Header ── */}
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <Sun size={18} color="#FFB300" strokeWidth={1.5} />
               <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#FFB300" }}>الصباح</span>
               <h1 className="text-2xl font-black text-white">يستيقظ الجميع</h1>
             </div>
-
-            {/* ── Morning announcement ── */}
             {morningBanner}
-
-            {/* ── Spacer ── */}
             <div className="flex-1" />
-
-            {/* ── Start voting ── */}
             <button
-              onClick={() => setDaySubPhase("voting")}
+              onClick={() => {
+                setTimerEndsAt(Date.now() + 120_000);
+                setDaySubPhase("discussion");
+              }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
-              <span>بدء التصويت</span>
+              <span>بدء النقاش</span>
             </button>
-
-            {/* ── Skip to next night ── */}
-            <button
-              onClick={handleStartNextNight}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
-              <Moon size={20} strokeWidth={2} />
-              <span>بدء الليلة التالية</span>
-            </button>
-
-            {/* ── Restart ── */}
-            <button
-              onClick={restartGame}
-              className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
-              <Shuffle size={16} strokeWidth={2} />
-              <span>إعادة اللعبة من البداية</span>
-            </button>
-
+            {skipNightBtn}
+            {restartBtn}
           </div>
         </div>
       );
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE: voting — execution list
+    // SUB-PHASE 2: discussion — 2-min timer + player list
     // ════════════════════════════════════════════
+    if (daySubPhase === "discussion") {
+      return (
+        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+            <div className="flex flex-col items-center gap-2 text-center pt-1">
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش</span>
+              <h1 className="text-2xl font-black text-white">كل يدافع عن نفسه</h1>
+              <div className="mt-1 px-4 py-2 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
+                <Countdown endsAt={timerEndsAt} />
+              </div>
+            </div>
+            {morningBanner}
+            <div className="flex flex-col gap-2">
+              {alivePlayers.map((p) => (
+                <div key={p.name}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                  style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
+                  <div />
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
+                    {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={() => {
+                const init: Record<string, number> = {};
+                alivePlayers.forEach(p => { init[p.name] = 0; });
+                setVoteCounts(init);
+                setTimerEndsAt(null);
+                setDaySubPhase("voting_tally");
+              }}
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+              <Users size={20} strokeWidth={2} />
+              <span>بدء التصويت</span>
+            </button>
+            {skipNightBtn}
+            {restartBtn}
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════
+    // SUB-PHASE 3: voting_tally — host counts raised hands
+    // ════════════════════════════════════════════
+    if (daySubPhase === "voting_tally") {
+      const handleCountVotes = () => {
+        const maxVotes = Math.max(...alivePlayers.map(p => voteCounts[p.name] ?? 0));
+        const nominees = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
+        if (nominees.length !== 1) {
+          // Tie or zero votes → skip to next night
+          handleStartNextNight();
+        } else {
+          setAccusedPlayer(nominees[0].name);
+          setTimerEndsAt(Date.now() + 60_000);
+          setDaySubPhase("justification");
+        }
+      };
+      return (
+        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+            <div className="flex flex-col items-center gap-1 text-center pt-1">
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
+              <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
+            </div>
+            <div className="flex flex-col gap-2">
+              {alivePlayers.map((p) => {
+                const count = voteCounts[p.name] ?? 0;
+                return (
+                  <div key={p.name}
+                    className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                    style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
+                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center"
+                        style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
+                        −
+                      </button>
+                      <span className="text-base font-black tabular-nums w-6 text-center"
+                        style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
+                        {count}
+                      </span>
+                      <button
+                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: (prev[p.name] ?? 0) + 1 }))}
+                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center"
+                        style={{ backgroundColor: "#001A00", color: "#8BC34A", border: "1px solid #8BC34A44" }}>
+                        +
+                      </button>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="text-sm font-semibold" style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
+                      {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={handleCountVotes}
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+              <Users size={20} strokeWidth={2} />
+              <span>فرز الأصوات</span>
+            </button>
+            {skipNightBtn}
+            {restartBtn}
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════
+    // SUB-PHASE 4: justification — accused defends, 1-min timer
+    // ════════════════════════════════════════════
+    if (daySubPhase === "justification") {
+      return (
+        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+            <div className="flex flex-col items-center gap-1 text-center pt-1">
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>المحاكمة</span>
+              <h1 className="text-2xl font-black text-white">{accusedPlayer} يدافع عن نفسه</h1>
+            </div>
+            <div className="flex flex-col items-center gap-3 py-6 rounded-2xl"
+              style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F44" }}>
+              <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
+              <span className="text-lg font-black text-white">{accusedPlayer}</span>
+              <p className="text-xs text-center" style={{ color: "#555" }}>لديه دقيقة كاملة للدفاع عن نفسه</p>
+              <div className="mt-1 px-4 py-2 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
+                <Countdown endsAt={timerEndsAt} />
+              </div>
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={() => { setTimerEndsAt(null); setDaySubPhase("final_vote"); }}
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+              <Users size={20} strokeWidth={2} />
+              <span>بدء التصويت النهائي</span>
+            </button>
+            {skipNightBtn}
+            {restartBtn}
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════
+    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict
+    // ════════════════════════════════════════════
+    const handleFinalVerdict = () => {
+      if (finalVoteFor > finalVoteAgainst) {
+        handleExecute(accusedPlayer!);
+      } else {
+        handleStartNextNight();
+      }
+    };
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
-
-          {/* ── Header ── */}
           <div className="flex flex-col items-center gap-1 text-center pt-1">
-            <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت</span>
-            <h1 className="text-2xl font-black text-white">من تعدمون؟</h1>
+            <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
+            <h1 className="text-2xl font-black text-white">هل يُعدَم {accusedPlayer}؟</h1>
           </div>
-
-          {/* ── Alive players with execute ── */}
-          <div className="flex flex-col gap-2">
-            {alivePlayers.length === 0 ? (
-              <div className="flex items-center justify-center py-6 rounded-2xl"
-                style={{ border: "1px solid #1E1E1E" }}>
-                <span className="text-sm" style={{ color: "#333" }}>لا يوجد لاعبون أحياء</span>
+          <div className="flex gap-3">
+            {/* Agree counter */}
+            <div className="flex-1 flex flex-col items-center gap-3 py-5 rounded-2xl"
+              style={{ backgroundColor: "#001A00", border: "1px solid #33691E" }}>
+              <span className="text-2xl">👍</span>
+              <span className="text-3xl font-black" style={{ color: "#8BC34A" }}>{finalVoteFor}</span>
+              <span className="text-xs font-bold" style={{ color: "#4CAF50" }}>أوافق على الإعدام</span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => setFinalVoteFor(n => Math.max(0, n - 1))}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  style={{ backgroundColor: "#0A2A0A", color: "#8BC34A", border: "1px solid #4CAF5044" }}>
+                  −
+                </button>
+                <button
+                  onClick={() => setFinalVoteFor(n => n + 1)}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  style={{ backgroundColor: "#1A3A1A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
+                  +
+                </button>
               </div>
-            ) : alivePlayers.map((p) => (
-              <div key={p.name}
-                className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-                style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
-                {confirmExecute === p.name ? (
-                  <>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleExecute(p.name)}
-                        className="text-xs font-black px-3 py-1.5 rounded-lg transition-all active:scale-95"
-                        style={{ backgroundColor: "#D32F2F", color: "#fff" }}>
-                        تأكيد الإعدام
-                      </button>
-                      <button
-                        onClick={() => setConfirmExecute(null)}
-                        className="text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
-                        style={{ backgroundColor: "#1A1A1A", color: "#555", border: "1px solid #2A2A2A" }}>
-                        إلغاء
-                      </button>
-                    </div>
-                    <span className="text-sm font-semibold text-white">{p.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setConfirmExecute(p.name)}
-                      className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95"
-                      style={{ backgroundColor: "#1A0000", color: "#D32F2F", border: "1px solid #D32F2F33" }}>
-                      ⚖️ إعدام
-                    </button>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
-                      {p.isSilenced && (
-                        <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
-                      )}
-                    </div>
-                  </>
-                )}
+            </div>
+            {/* Disagree counter */}
+            <div className="flex-1 flex flex-col items-center gap-3 py-5 rounded-2xl"
+              style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
+              <span className="text-2xl">👎</span>
+              <span className="text-3xl font-black" style={{ color: "#FF6B6B" }}>{finalVoteAgainst}</span>
+              <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>أعارض الإعدام</span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => setFinalVoteAgainst(n => Math.max(0, n - 1))}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
+                  −
+                </button>
+                <button
+                  onClick={() => setFinalVoteAgainst(n => n + 1)}
+                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center"
+                  style={{ backgroundColor: "#3A0000", color: "#D32F2F", border: "1px solid #D32F2F66" }}>
+                  +
+                </button>
               </div>
-            ))}
+            </div>
           </div>
-
-          {/* ── Spacer ── */}
           <div className="flex-1" />
-
-          {/* ── Skip vote → go straight to next night ── */}
           <button
-            onClick={handleStartNextNight}
+            onClick={handleFinalVerdict}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
-            <Moon size={20} strokeWidth={2} />
-            <span>تخطي التصويت</span>
+            style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+            <Users size={20} strokeWidth={2} />
+            <span>
+              {finalVoteFor > finalVoteAgainst
+                ? `إعدام ${accusedPlayer} ⚖️`
+                : finalVoteAgainst > finalVoteFor
+                ? `${accusedPlayer} يُفرج عنه`
+                : "تنفيذ الحكم"}
+            </span>
           </button>
-
-          {/* ── Restart ── */}
-          <button
-            onClick={restartGame}
-            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
-            <Shuffle size={16} strokeWidth={2} />
-            <span>إعادة اللعبة من البداية</span>
-          </button>
-
+          {skipNightBtn}
+          {restartBtn}
         </div>
       </div>
     );
