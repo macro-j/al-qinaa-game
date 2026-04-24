@@ -695,75 +695,101 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* ── Target player list — EXACT Online Mode row style ── */}
-          {/* Fog-of-war: seer reveals only after picking; mafia sees allies instantly */}
-          <div className="flex flex-col gap-2">
-            {aliveTargets.map((p) => {
-              const isSelected   = selectedTarget === p.name;
-              const isMafiaRole  = p.role === "الولد" || p.role === "الإكة";
-              const isMafiaStep  = nightStep === "الولد" || nightStep === "الإكة";
+          {/* ── Target player list — per-role filtering + badge rules ── */}
+          {(() => {
+            // The player whose role matches the active step
+            const currentPlayer = livePlayers.find(p => p.isAlive && p.role === nightStep) ?? null;
 
-              // ── Ally badge: visible immediately during mafia steps ──
-              const showAllyBadge = isMafiaStep && isMafiaRole;
+            // Per-role filter rules:
+            // الولد & الشايب: cannot target themselves → exclude currentPlayer
+            // الإكة & البنت: can include themselves → all alive
+            const allAlive   = livePlayers.filter(p => p.isAlive);
+            const targetList =
+              (nightStep === "الولد" || nightStep === "الشايب")
+                ? allAlive.filter(p => p.name !== currentPlayer?.name)
+                : allAlive;
 
-              // ── Seer result badge: ONLY after investigatedTarget is locked ──
-              const isInvestigated = isSeerStep && investigatedTarget === p.name;
-              const showSeerBadge  = isInvestigated;
+            return (
+              <div className="flex flex-col gap-2">
+                {targetList.map((p) => {
+                  const isSelected      = selectedTarget === p.name;
+                  const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
+                  const isMafiaRole     = p.role === "الولد" || p.role === "الإكة";
 
-              // ── Seer rows: lock after a choice is made (can't re-pick) ──
-              const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
+                  // ── Ally badge (حليف): shown only to the other mafia member ──
+                  // الولد sees الإكة; الإكة sees الولد
+                  const showAllyBadge =
+                    (nightStep === "الولد" && p.role === "الإكة") ||
+                    (nightStep === "الإكة" && p.role === "الولد");
 
-              const rowBg     = isSelected ? "#2A0000" : "#141414";
-              const rowBorder = isSelected ? "#D32F2F" : "#222222";
+                  // ── "أنت" badge: shown on the current player's own row (الإكة & البنت) ──
+                  const showSelfBadge =
+                    (nightStep === "الإكة" || nightStep === "البنت") && isCurrentPlayer;
 
-              return (
-                <div key={p.name}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
-                  style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+                  // ── Seer fog-of-war: badge only after host locks a choice ──
+                  const isInvestigated = isSeerStep && investigatedTarget === p.name;
+                  const showSeerBadge  = isInvestigated;
+                  // Lock all other rows once seer has picked
+                  const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
 
-                  {/* ── Reveal/select button ── */}
-                  <button
-                    disabled={seerLocked || (isSeerStep && isInvestigated)}
-                    onClick={() => {
-                      setSelectedTarget(p.name);
-                      if (isSeerStep) setInvestigatedTarget(p.name);
-                    }}
-                    className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-                    style={{
-                      backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
-                      color:           isSelected ? "#ffffff" : "#888888",
-                      border: `1px solid ${isSelected ? "#D32F2F" : "#333333"}`,
-                    }}>
-                    {isSelected ? "تم الاختيار" : "اختر"}
-                  </button>
+                  const rowBg     = isSelected ? "#2A0000" : "#141414";
+                  const rowBorder = isSelected ? "#D32F2F" : "#222222";
 
-                  {/* ── Player name + badges ── */}
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                      {p.name}
-                    </span>
+                  return (
+                    <div key={p.name}
+                      className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                      style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
 
-                    {/* Mafia ally badge — pixel-perfect clone of Online Mode */}
-                    {showAllyBadge && (
-                      <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
-                    )}
-
-                    {/* Seer result badge — ONLY after locking target */}
-                    {showSeerBadge && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      {/* ── Select button ── */}
+                      <button
+                        disabled={seerLocked || (isSeerStep && isInvestigated)}
+                        onClick={() => {
+                          setSelectedTarget(p.name);
+                          if (isSeerStep) setInvestigatedTarget(p.name);
+                        }}
+                        className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                         style={{
-                          backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
-                          color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
-                          border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                          backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
+                          color:           isSelected ? "#ffffff" : "#888888",
+                          border: `1px solid ${isSelected ? "#D32F2F" : "#333333"}`,
                         }}>
-                        {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                        {isSelected ? "تم الاختيار" : "اختر"}
+                      </button>
+
+                      {/* ── Player name + badges ── */}
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                          {p.name}
+                        </span>
+
+                        {/* Ally badge — exact Online Mode clone */}
+                        {showAllyBadge && (
+                          <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                        )}
+
+                        {/* "أنت" self badge — same layout as حليف but neutral gray */}
+                        {showSelfBadge && (
+                          <span className="text-xs font-bold" style={{ color: "#999999" }}>(أنت)</span>
+                        )}
+
+                        {/* Seer result badge — ONLY after host locks a target */}
+                        {showSeerBadge && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
+                              color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
+                              border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                            }}>
+                            {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* ── Spacer ── */}
           <div className="flex-1" />
