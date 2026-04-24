@@ -398,7 +398,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
 // ─── In-game Main Menu (Online mode lobby) ────────────────────────────────────
 
-function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJoinRoom: () => void }) {
+function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => void; onJoinRoom: () => void; onBack: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-sm">
@@ -413,6 +413,12 @@ function MainMenu({ onCreateRoom, onJoinRoom }: { onCreateRoom: () => void; onJo
           </button>
           <button onClick={onJoinRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
             <LogIn size={22} color="#D32F2F" strokeWidth={2.5} /><span>دخول لعبة</span>
+          </button>
+          <button onClick={onBack}
+            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", border: "1px solid #1E1E1E", color: "#444444" }}>
+            <ArrowRight size={16} strokeWidth={2} />
+            <span className="text-sm font-semibold">العودة لاختيار الطور</span>
           </button>
         </div>
       </div>
@@ -2740,5 +2746,5 @@ export default function App() {
     />;
   }
 
-  return <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} />;
+  return <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} onBack={() => setSelectedMode(null)} />;
 }
