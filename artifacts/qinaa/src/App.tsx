@@ -576,11 +576,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return null;
   };
 
+  // ── Gender helper — returns the correct verb form for a role ──
+  const FEMININE_ROLES = new Set(["البنت", "الإكة"]);
+  const roleWakes = (role: string) => FEMININE_ROLES.has(role) ? "تصحى" : "يصحى";
+  const roleSleeps = (role: string) => FEMININE_ROLES.has(role) ? "تنام" : "ينام";
+
   // ── Helper: launch city_sleeps → role_wakes → night action ──
   const startNightWithTransition = (order: string[]) => {
     const firstRole = order[0] ?? "الولد";
     nightTransitionNextRef.current = () => {
-      setNightTransitionLabel(`${firstRole} يصحى`);
+      setNightTransitionLabel(`${firstRole} ${roleWakes(firstRole)}`);
       nightTransitionNextRef.current = null;
       setNightTransition("role_wakes");
     };
@@ -627,11 +632,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setNightStep(nextRole);
         setSelectedTarget(null);
         setInvestigatedTarget(null);
-        setNightTransitionLabel(`${nextRole} يصحى`);
+        setNightTransitionLabel(`${nextRole} ${roleWakes(nextRole)}`);
         nightTransitionNextRef.current = null;
         setNightTransition("role_wakes");
       };
-      setNightTransitionLabel(`${nightStep} ينام..`);
+      setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
     } else {
       // ── city_wakes → compute results → win check ──
@@ -1026,7 +1031,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               boxShadow:       selectedTarget ? `0 0 28px ${meta.glow}` : "none",
             }}>
             <Moon size={20} strokeWidth={2} />
-            <span>{selectedTarget ? `ينام ${nightStep}` : nightTimerExpired ? `تخطي دور ${nightStep}` : `ينام ${nightStep}`}</span>
+            <span>{selectedTarget ? `${roleSleeps(nightStep)} ${nightStep}` : nightTimerExpired ? `تخطي دور ${nightStep}` : `${roleSleeps(nightStep)} ${nightStep}`}</span>
           </button>
 
         </div>
