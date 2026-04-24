@@ -1,0 +1,45 @@
+"Act as a specialized React developer. We are replacing the manual dashboard in <NarratorMode /> with a Cinematic Game Sequencer, exactly mirroring the logic and flow of the existing Online Mode, but operated entirely locally by the Host.
+
+STRICT CONSTRAINTS: > - DO NOT modify the backend or <OnlineMode />.
+
+DO NOT invent any new rules, abilities, or roles.
+
+Maintain the Apple-like, cinematic dark UI.
+
+TASK: Build the Night/Day Sequencer
+
+State Engine Update: Replace the basic playing phase with two new phases: night and day. Add state to track nightStep (e.g., which role is currently waking up: الولد -> الشايب -> الآكة) and nightActions (to store killTarget, protectTarget, investigateTarget for the current night).
+
+NIGHT PHASE UI (phase === 'night'):
+
+Cinematic Header: 'الليل يخيم على المدينة.. الجميع ينام'.
+
+Step-by-Step Logic: Based on nightStep, display exactly who is awake.
+
+Example: 'يستيقظ الولد' (The Boy wakes up).
+
+Display the list of livePlayers. The Host taps the requested target.
+
+Crucial Detail for الآكة (Detective): When it is the Detective's turn to wake up, visually indicate their allies (حليف) on the player list exactly as the Online Mode does, so the Host knows who the Detective's allies/silenced targets are.
+
+Step Navigation: Below the player list, show a primary button: 'ينام [اسم الدور]' (e.g., 'ينام الولد'). Clicking this saves the target to nightActions and advances to the next role's turn.
+
+End of Night: When all night roles have acted, resolve the actions (If killTarget !== protectTarget, set target's isAlive to false). Clear nightActions and switch phase to day.
+
+DAY PHASE UI (phase === 'day'):
+
+Cinematic Header: 'يستيقظ الجميع' (Everyone wakes up).
+
+Night Results: Display a dramatic dramatic summary card:
+
+If someone died: 'محاولة الاغتيال ناجحة.. مات [اسم اللاعب]' (with a skull icon).
+
+If saved: 'محاولة الاغتيال فاشلة.. تدخل الطبيب في الوقت المناسب'.
+
+Daytime Dashboard: Below the results, display the active livePlayers for discussion.
+
+Add a ⚖️ إعدام (Execute) button next to each alive player. If clicked, show a simple confirmation (window.confirm), and if confirmed, set them to dead.
+
+Next Cycle: At the bottom, add a massive glowing button: 'بدء الليلة التالية' (Start Next Night) which resets the phase to night and starts the sequence over.
+
+GOAL: Provide a flawless, sequential game loop where the Narrator's screen acts as the game engine, stepping through night actions logically before revealing daytime results."
