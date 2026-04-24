@@ -492,6 +492,38 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return () => clearTimeout(t);
   }, [nightStep, nightTransition, phase]);
 
+  // ── Screen Wake Lock — keeps host device awake during the session ──
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  useEffect(() => {
+    const acquire = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          // @ts-ignore — WakeLock API may not be in all TS lib versions
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+        }
+      } catch { /* device may deny the request silently */ }
+    };
+    acquire();
+    const onVisible = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, []);
+
+  // ── beforeunload guard — warns host before accidental tab close/refresh ──
+  useEffect(() => {
+    const guard = (e: BeforeUnloadEvent) => {
+      if (phase !== "setup" && phase !== "game_over") {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [phase]);
+
   const addPlayer = () => {
     const trimmed = newPlayer.trim();
     if (!trimmed) return;
@@ -1045,8 +1077,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const headLabel = isTownWin ? "انتصار المدينة" : "انتصار المافيا";
     const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
 
-    const fullReset = () => {
-      setPhase("setup");
+    const resetCore = () => {
       setAssignedRoles([]);
       setLivePlayers([]);
       setCurrentIndex(0);
@@ -1062,6 +1093,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setExecutionReveal(null);
       setNightTimerExpired(false);
       resetVotingState();
+    };
+
+    const fullReset = () => {
+      resetCore();
+      setPlayers([]);
+      setPhase("setup");
+    };
+
+    const handlePlayAgainSamePlayers = () => {
+      const sameNames = assignedRoles.map(p => p.name);
+      resetCore();
+      setPlayers(sameNames);
+      setPhase("setup");
     };
 
     return (
@@ -1102,13 +1146,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             })}
           </div>
         </div>
-        <button
-          onClick={fullReset}
-          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-          style={{ backgroundColor: accent, color: "#fff", boxShadow: `0 0 32px ${accent}55` }}>
-          <Shuffle size={20} strokeWidth={2} />
-          <span>العودة للقائمة</span>
-        </button>
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button
+            onClick={handlePlayAgainSamePlayers}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#10B981", color: "#fff", boxShadow: "0 0 32px #10B98155" }}>
+            <Shuffle size={20} strokeWidth={2} />
+            <span>إعادة اللعبة بنفس اللاعبين</span>
+          </button>
+          <button
+            onClick={fullReset}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
+            <ArrowRight size={20} strokeWidth={2} />
+            <span>العودة للقائمة</span>
+          </button>
+        </div>
       </div>
     );
   }
