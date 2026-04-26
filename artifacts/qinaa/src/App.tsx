@@ -265,7 +265,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
-          <p className="text-sm text-center" style={{ color: "#666666" }}>اختر طريقة اللعب</p>
+          <p className="text-sm text-center tracking-wide font-light" style={{ color: "rgba(255,255,255,0.55)" }}>المدينة تنام والقاتل يصحو..</p>
         </div>
 
         {/* Mode buttons */}
@@ -358,7 +358,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </div>
               <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h2>
               <p className="text-xs text-center leading-relaxed" style={{ color: "#666666" }}>
-                المدينة تنام والقاتل يصحو.. لعبة استنتاج وخداع صُنعت للمجالس
+                لعبة استنتاج وخداع صُنعت للمجالس
               </p>
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
