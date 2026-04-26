@@ -32,6 +32,9 @@ import {
   Eye,
   EyeOff,
   User,
+  Info,
+  X,
+  ExternalLink,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -250,9 +253,10 @@ const GUIDE_ROLES = [
 
 function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator") => void }) {
   const [showGuide, setShowGuide] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 relative" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-10 w-full max-w-sm">
 
         {/* Logo + Title */}
@@ -314,6 +318,100 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
         </div>
       </div>
+
+      {/* ── Info button — fixed bottom-left ── */}
+      <button
+        onClick={() => setShowAbout(true)}
+        className="fixed bottom-6 left-6 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 active:scale-90"
+        style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A", color: "rgba(255,255,255,0.35)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
+        <Info size={18} strokeWidth={1.8} />
+      </button>
+
+      {/* ── About Modal ── */}
+      {showAbout && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-5"
+          style={{ backgroundColor: "rgba(0,0,0,0.82)", backdropFilter: "blur(12px)" }}
+          onClick={() => setShowAbout(false)}>
+          <div
+            className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-5 shadow-2xl relative"
+            style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.08)" }}
+            onClick={(e) => e.stopPropagation()}>
+
+            {/* Close button */}
+            <button
+              onClick={() => setShowAbout(false)}
+              className="absolute top-4 left-4 flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 active:scale-90"
+              style={{ backgroundColor: "#1A1A1A", color: "#555555", border: "1px solid #2A2A2A" }}>
+              <X size={15} strokeWidth={2} />
+            </button>
+
+            {/* Logo + Title */}
+            <div className="flex flex-col items-center gap-3 pt-2">
+              <div style={{ filter: "drop-shadow(0 0 28px #D32F2F55)" }}>
+                <VenetianMask size={56} color="#D32F2F" strokeWidth={0.9} />
+              </div>
+              <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h2>
+              <p className="text-xs text-center leading-relaxed" style={{ color: "#666666" }}>
+                لعبة استنتاج وخداع، صُنعت للمجالس
+              </p>
+              <span className="text-xs font-semibold px-3 py-1 rounded-full"
+                style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
+                إصدار الإطلاق الأول — v1.0.0
+              </span>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+            {/* Credits */}
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold tracking-widest text-center" style={{ color: "#444444" }}>
+                فريق الصنع
+              </span>
+
+              {/* Mohammed */}
+              <a
+                href="https://www.tiktok.com/@ll_f7"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-xs font-medium" style={{ color: "#555555" }}>التصميم والتطوير</span>
+                  <span className="text-sm font-black text-white">Mohammed</span>
+                </div>
+                <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
+                  <ExternalLink size={13} strokeWidth={2} />
+                  <span className="text-xs" style={{ color: "#555555" }}>TikTok</span>
+                </div>
+              </a>
+
+              {/* Abdullah */}
+              <a
+                href="https://www.tiktok.com/@abdullah.jj57"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-xs font-medium" style={{ color: "#555555" }}>الأفكار وتجربة اللعب</span>
+                  <span className="text-sm font-black text-white">Abdullah</span>
+                </div>
+                <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
+                  <ExternalLink size={13} strokeWidth={2} />
+                  <span className="text-xs" style={{ color: "#555555" }}>TikTok</span>
+                </div>
+              </a>
+            </div>
+
+            {/* Footer */}
+            <p className="text-center text-xs" style={{ color: "#2A2A2A" }}>© 2026 القناع</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Game Guide Modal ── */}
       {showGuide && (
