@@ -271,23 +271,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         {/* Mode buttons */}
         <div className="flex flex-col gap-4 w-full">
 
-          {/* Online Mode */}
-          <button
-            onClick={() => onSelect("online")}
-            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#0D0D0D", border: "1px solid #D32F2F" }}>
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
-              style={{ backgroundColor: "#1A0505" }}>
-              <Smartphone size={24} color="#D32F2F" strokeWidth={1.8} />
-            </div>
-            <div className="flex flex-col items-end gap-1 flex-1 mx-4">
-              <span className="text-lg font-black text-white">لعب أونلاين</span>
-              <span className="text-xs" style={{ color: "#666666" }}>كل لاعب بجواله</span>
-            </div>
-            <ChevronRight size={18} color="#D32F2F" strokeWidth={2} className="rotate-180 flex-shrink-0" />
-          </button>
-
-          {/* Narrator Mode */}
+          {/* Narrator Mode — PRIMARY */}
           <button
             onClick={() => onSelect("narrator")}
             className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
@@ -307,6 +291,25 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
+          {/* Online Mode — DISABLED (coming soon) */}
+          <div
+            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl opacity-50 cursor-not-allowed"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
+              style={{ backgroundColor: "#1A1A1A" }}>
+              <Smartphone size={24} color="#555555" strokeWidth={1.8} />
+            </div>
+            <div className="flex flex-col items-end gap-1 flex-1 mx-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-md"
+                  style={{ backgroundColor: "rgba(234,179,8,0.08)", color: "#EAB308", border: "1px solid rgba(234,179,8,0.2)" }}>قريباً</span>
+                <span className="text-lg font-black text-white">لعب أونلاين</span>
+              </div>
+              <span className="text-xs" style={{ color: "#444444" }}>كل لاعب بجواله</span>
+            </div>
+            <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+          </div>
+
           {/* Rules — ghost/outline style, visually subordinate */}
           <button
             onClick={() => setShowGuide(true)}
@@ -319,10 +322,10 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         </div>
       </div>
 
-      {/* ── Info button — fixed bottom-left ── */}
+      {/* ── Info button — fixed top-left ── */}
       <button
         onClick={() => setShowAbout(true)}
-        className="fixed bottom-6 left-6 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 active:scale-90"
+        className="fixed top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 active:scale-90"
         style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A", color: "rgba(255,255,255,0.35)" }}
         onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
         onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
