@@ -452,19 +452,19 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <div className="flex flex-col gap-2">
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
               {GUIDE_ROLES.map((r) => (
-                <div key={r.label} className="flex flex-row-reverse items-start gap-3 rounded-xl px-4 py-3"
+                <div key={r.label} className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
                   style={{ backgroundColor: "#0D0D0D", border: `1px solid ${r.color}22` }}>
                   <VenetianMask size={20} color={r.color} strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                  <div className="flex flex-col items-end gap-0.5 flex-1">
+                  <div className="flex flex-col items-start gap-0.5 flex-1">
                     <span className="font-black text-sm" style={{ color: r.color, fontFamily: "serif" }}>{r.label}</span>
                     <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>{r.desc}</span>
                   </div>
                 </div>
               ))}
-              <div className="flex flex-row-reverse items-start gap-3 rounded-xl px-4 py-3"
+              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
                 style={{ backgroundColor: "#0D0D0D", border: "1px solid #33333322" }}>
                 <VenetianMask size={20} color="#555555" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-end gap-0.5 flex-1">
+                <div className="flex flex-col items-start gap-0.5 flex-1">
                   <span className="font-black text-sm" style={{ color: "#777777", fontFamily: "serif" }}>المواطن</span>
                   <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب — لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
                 </div>
