@@ -427,17 +427,17 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
             onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <BookOpen size={18} color="#D32F2F" />
+                <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
+              </div>
               <button
                 onClick={() => setShowGuide(false)}
                 className="flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 active:scale-90"
                 style={{ backgroundColor: "#1A1A1A", color: "#555555", border: "1px solid #2A2A2A" }}>
                 <X size={15} strokeWidth={2} />
               </button>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
-                <BookOpen size={18} color="#D32F2F" />
-              </div>
             </div>
 
             {/* Objective */}
