@@ -355,11 +355,11 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </div>
               <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h2>
               <p className="text-xs text-center leading-relaxed" style={{ color: "#666666" }}>
-                لعبة استنتاج وخداع، صُنعت للمجالس
+                المدينة تنام والقاتل يصحو.. لعبة استنتاج وخداع صُنعت للمجالس
               </p>
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-                إصدار الإطلاق الأول — v1.0.0
+                الإصدار التجريبي — Beta v1.0.0
               </span>
             </div>
 
@@ -369,7 +369,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             {/* Credits */}
             <div className="flex flex-col gap-3">
               <span className="text-xs font-bold tracking-widest text-center" style={{ color: "#444444" }}>
-                فريق الصنع
+                صُنّاع القناع
               </span>
 
               {/* Mohammed */}
@@ -380,7 +380,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
                 style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-xs font-medium" style={{ color: "#555555" }}>التصميم والتطوير</span>
+                  <span className="text-xs font-medium" style={{ color: "#555555" }}>التطوير والتصميم البصري</span>
                   <span className="text-sm font-black text-white">Mohammed</span>
                 </div>
                 <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
@@ -397,7 +397,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
                 style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-xs font-medium" style={{ color: "#555555" }}>الأفكار وتجربة اللعب</span>
+                  <span className="text-xs font-medium" style={{ color: "#555555" }}>تصميم اللعب وقوانين المجلس</span>
                   <span className="text-sm font-black text-white">Abdullah</span>
                 </div>
                 <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
