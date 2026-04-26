@@ -471,7 +471,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </div>
             </div>
 
-            <p className="text-xs text-center" style={{ color: "#333333" }}>اضغط خارج النافذة للإغلاق</p>
+
           </div>
         </div>
       )}
