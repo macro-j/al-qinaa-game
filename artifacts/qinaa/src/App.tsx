@@ -243,10 +243,10 @@ function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
 // ─── Main Menu ────────────────────────────────────────────────────────────────
 
 const GUIDE_ROLES = [
-  { label: "الولد",   color: "#D32F2F", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
-  { label: "الإكة",  color: "#B71C1C", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
-  { label: "الشايب", color: "#FF8F00", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
-  { label: "البنت",  color: "#1565C0", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
+  { label: "الولد",   color: "#D32F2F", desc: "القاتل، يختار ضحية كل ليلة ويحاول البقاء مجهولًا." },
+  { label: "الإكة",  color: "#B71C1C", desc: "الكاتم، تسكت لاعبًا وتمنعه من الكلام صباحًا." },
+  { label: "الشايب", color: "#FF8F00", desc: "العرّاف، يكشف هوية لاعبًا كل ليلة، مافيا أم بريء." },
+  { label: "البنت",  color: "#1565C0", desc: "الحارس، تحمي لاعبًا من القتل تلك الليلة." },
 ];
 
 // ─── Game Mode Selector (top-level entry point) ───────────────────────────────
@@ -444,7 +444,13 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
               <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
-                أنت في قرية غامضة. إذا كنت من الشعب، هدفك هو كشف المافيا والتصويت ضدهم للنجاة. إذا كنت من المافيا (الولد أو الإكة)، هدفك هو تصفية الشعب والسيطرة على القرية دون أن ينكشف أمرك.
+                أنت في قرية غامضة، لكل فريق هدف واحد:
+              </p>
+              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+                • الشعب: اكشفوا المافيا وصوّتوا ضدهم للنجاة.
+              </p>
+              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+                • المافيا: تصفية الشعب والسيطرة على القرية دون الانكشاف.
               </p>
             </div>
 
@@ -466,7 +472,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 <VenetianMask size={20} color="#555555" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
                 <div className="flex flex-col items-start gap-0.5 flex-1">
                   <span className="font-black text-sm" style={{ color: "#777777", fontFamily: "serif" }}>المواطن</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب — لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب، لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
                 </div>
               </div>
             </div>
