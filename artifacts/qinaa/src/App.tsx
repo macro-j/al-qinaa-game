@@ -428,15 +428,15 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen size={18} color="#D32F2F" />
+                <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
+              </div>
               <button onClick={() => setShowGuide(false)}
                 className="text-xs px-3 py-1.5 rounded-lg font-semibold"
                 style={{ backgroundColor: "#1A1A1A", color: "#555555", border: "1px solid #333333" }}>
                 إغلاق
               </button>
-              <div className="flex items-center gap-2">
-                <BookOpen size={18} color="#D32F2F" />
-                <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
-              </div>
             </div>
 
             {/* Objective */}
