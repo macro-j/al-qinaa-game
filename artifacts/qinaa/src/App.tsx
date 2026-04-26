@@ -284,7 +284,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-md"
                   style={{ backgroundColor: "#10B98110", color: "#34D399", border: "1px solid #10B98120" }}>جديد ✨</span>
-                <span className="text-lg font-black text-white">لعب المجلس</span>
+                <span className="text-lg font-black text-white">طور المجلس</span>
               </div>
               <span className="text-xs" style={{ color: "#6EE7B7" }}>شاشة عرض وراوي</span>
             </div>
@@ -303,7 +303,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-md"
                   style={{ backgroundColor: "rgba(234,179,8,0.08)", color: "#EAB308", border: "1px solid rgba(234,179,8,0.2)" }}>قريباً</span>
-                <span className="text-lg font-black text-white">لعب أونلاين</span>
+                <span className="text-lg font-black text-white">طور الأونلاين</span>
               </div>
               <span className="text-xs" style={{ color: "#444444" }}>كل لاعب بجواله</span>
             </div>
