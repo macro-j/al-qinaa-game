@@ -979,8 +979,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const isSeerStep   = nightStep === "الشايب";
 
     const stepHint =
-      nightStep === "الولد"  ? "تذبح مين هذي الليلة يا ولد؟" :
-      nightStep === "الإكة"  ? "تسكتين مين يا إكة الليلة؟" :
+      nightStep === "الولد"  ? "تذبح مين يا ولد؟" :
+      nightStep === "الإكة"  ? "تسكتين مين يا إكة؟" :
       nightStep === "الشايب" ? "تسأل عن مين يا شايب؟" :
                                "تحمين مين يا بنت؟";
 
