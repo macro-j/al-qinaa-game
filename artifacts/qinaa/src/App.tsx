@@ -562,6 +562,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [nightTransitionLabel, setNightTransitionLabel] = useState<string>("");
   const nightTransitionNextRef                         = useRef<(() => void) | null>(null);
   const postRevealRef                                  = useRef<(() => void) | null>(null);
+  const [isNightKillReveal, setIsNightKillReveal]     = useState(false);
 
   // ── Day/night timers — local epoch ms passed to <Countdown /> ──
   const [timerEndsAt, setTimerEndsAt]   = useState<number | null>(null);
@@ -671,7 +672,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
   const getNightOrder = (lp: LivePlayer[]) =>
-    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r => lp.some(p => p.role === r && p.isAlive));
+    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r => lp.some(p => p.role === r));
 
   // ── Win condition checker — called after every death ──
   const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
@@ -769,6 +770,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           const dp = updated.find(p => p.name === died)!;
           setExecutionReveal({ name: died, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
           postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
+          setIsNightKillReveal(true);
           setPhase("reveal");
         } else {
           setDaySubPhase("results");
@@ -827,6 +829,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         startNightWithTransition(order);
         setPhase("night");
       };
+      setIsNightKillReveal(false);
       setPhase("reveal");
     }
   };
@@ -1027,8 +1030,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
           {/* ── Target player list — per-role filtering + badge rules ── */}
           {(() => {
-            // The player whose role matches the active step
-            const currentPlayer = livePlayers.find(p => p.isAlive && p.role === nightStep) ?? null;
+            // Find the player holding this role (dead or alive) for phantom turn detection
+            const currentPlayer    = livePlayers.find(p => p.role === nightStep) ?? null;
+            const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
+
+            if (isCurrentPlayerDead) {
+              return (
+                <div className="flex flex-col items-center gap-3 py-4 px-4 rounded-2xl"
+                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+                  <span className="text-2xl">👻</span>
+                  <p className="text-xs text-center leading-relaxed font-semibold" style={{ color: "#888888" }}>
+                    (هذا اللاعب مقتول. تظاهر بسؤاله وانتظر قليلاً للحفاظ على الغموض)
+                  </p>
+                </div>
+              );
+            }
 
             // Per-role filter rules:
             // الولد: cannot target himself OR his teammate الإكة (no friendly fire)
@@ -1127,20 +1143,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Sleep button — enabled when target chosen OR timer expired ── */}
-          <button
-            onClick={handleNightStep}
-            disabled={!selectedTarget && !nightTimerExpired}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-            style={{
-              backgroundColor: selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
-              color:           selectedTarget ? "#ffffff"  : nightTimerExpired ? "#888888" : "#333",
-              border:          selectedTarget ? "none"     : nightTimerExpired ? "1px solid #444" : "1px solid #222",
-              boxShadow:       selectedTarget ? `0 0 28px ${meta.glow}` : "none",
-            }}>
-            <Moon size={20} strokeWidth={2} />
-            <span>{selectedTarget ? `${roleSleeps(nightStep)} ${nightStep}` : nightTimerExpired ? `تخطي دور ${nightStep}` : `${roleSleeps(nightStep)} ${nightStep}`}</span>
-          </button>
+          {/* ── Sleep button — dead player: always enabled as phantom skip ── */}
+          {(() => {
+            const currentPlayer       = livePlayers.find(p => p.role === nightStep) ?? null;
+            const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
+            return (
+              <button
+                onClick={handleNightStep}
+                disabled={!isCurrentPlayerDead && !selectedTarget && !nightTimerExpired}
+                className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+                style={{
+                  backgroundColor: isCurrentPlayerDead ? "#1A1A1A" : selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
+                  color:           isCurrentPlayerDead ? "#555555" : selectedTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
+                  border:          isCurrentPlayerDead ? "1px solid #333" : selectedTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
+                  boxShadow:       (!isCurrentPlayerDead && selectedTarget) ? `0 0 28px ${meta.glow}` : "none",
+                }}>
+                <Moon size={20} strokeWidth={2} />
+                <span>
+                  {isCurrentPlayerDead
+                    ? `تخطي الدور (ميت)`
+                    : selectedTarget
+                    ? `${roleSleeps(nightStep)} ${nightStep}`
+                    : nightTimerExpired
+                    ? `تخطي دور ${nightStep}`
+                    : `${roleSleeps(nightStep)} ${nightStep}`}
+                </span>
+              </button>
+            );
+          })()}
 
         </div>
       </div>
@@ -1152,6 +1182,45 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "reveal" && executionReveal) {
     const revealMeta = ROLE_META[executionReveal.role] ?? ROLE_META["المواطن"];
+    const continueBtn = (
+      <button
+        onClick={() => {
+          const cb = postRevealRef.current;
+          postRevealRef.current = null;
+          setExecutionReveal(null);
+          cb?.();
+        }}
+        className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
+        <ChevronRight size={20} strokeWidth={2} />
+        <span>متابعة</span>
+      </button>
+    );
+
+    if (isNightKillReveal) {
+      return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+          <div className="flex flex-col items-center gap-1 text-center">
+            <Skull size={18} color="#555555" strokeWidth={1.5} />
+            <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#555555" }}>اكتشاف</span>
+          </div>
+          <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+            <div className="w-full flex flex-col items-center gap-4 py-8 px-6 rounded-2xl"
+              style={{ backgroundColor: "#0D0D0D", border: "1px solid #33333366", boxShadow: "0 0 40px #11111133" }}>
+              <VenetianMask size={56} color="#444444" strokeWidth={1.2} />
+              <div className="flex flex-col items-center gap-2 text-center">
+                <span className="text-3xl font-black text-white">{executionReveal.name}</span>
+                <span className="text-sm leading-relaxed px-4" style={{ color: "#666666" }}>
+                  تم العثور على {executionReveal.name} مقتولاً..
+                </span>
+              </div>
+            </div>
+          </div>
+          {continueBtn}
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
         <div className="flex flex-col items-center gap-1 text-center">
@@ -1174,18 +1243,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => {
-            const cb = postRevealRef.current;
-            postRevealRef.current = null;
-            setExecutionReveal(null);
-            cb?.();
-          }}
-          className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-          style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
-          <ChevronRight size={20} strokeWidth={2} />
-          <span>متابعة</span>
-        </button>
+        {continueBtn}
       </div>
     );
   }

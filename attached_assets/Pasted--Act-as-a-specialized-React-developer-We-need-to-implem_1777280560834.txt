@@ -1,0 +1,31 @@
+"Act as a specialized React developer. We need to implement professional Mafia rules in <NarratorMode /> without breaking the existing solid game logic. We must add 'Hidden Roles on Night Kill' and 'Phantom Night Turns' for dead roles to maintain suspense.
+
+TASK 1: Differentiate Reveal Screens (Night Kill vs. Execution)
+
+Add a new state variable: const [isNightKillReveal, setIsNightKillReveal] = useState(false);
+
+In handleNightStep (when the city wakes up and someone was killed), before setting the phase to 'reveal', set setIsNightKillReveal(true).
+
+In handleExecute (when someone is voted out during the day), before setting the phase to 'reveal', set setIsNightKillReveal(false).
+
+Update the Reveal UI (phase === 'reveal'):
+
+If isNightKillReveal is true: DO NOT show the player's role, icon, or description. Instead, show a generic text: 'تم العثور على [اسم اللاعب] مقتولاً..' with a generic gray Mask icon.
+
+If isNightKillReveal is false (Day Execution): Keep the current behavior (show the exact role, icon, and description: 'تم إعدام [اسم اللاعب].. وكان دوره [اسم الدور] 💀').
+
+TASK 2: Phantom Night Turns (Ghost Roles)
+
+Locate the logic that generates the nightOrder (the array of roles that wake up at night).
+
+Currently, it might be filtering out dead players. CHANGE THIS: The nightOrder MUST include all night-action roles ('الولد', 'الإكة', 'الشايب', 'البنت') that were assigned at the start of the game, regardless of whether the player holding that role is alive or dead.
+
+Inside the Night UI (phase === 'night' and nightTransition === 'role_action'):
+
+Find the player object for the currently waking role.
+
+If that player is DEAD (isAlive === false), add a prominent warning text for the Host: '(هذا اللاعب مقتول. تظاهر بسؤاله وانتظر قليلاً للحفاظ على الغموض)'.
+
+Change the action button text for dead players to 'تخطي الدور (ميت)' and ensure clicking it resolves the turn harmlessly (returning null action) and moves to the next role.
+
+GOAL: Maintain perfect suspense. The city never knows what role died at night, and the Host continues to fake-ask dead night-roles to prevent players from deducing who died based on missing night phases."
