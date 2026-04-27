@@ -1633,9 +1633,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict (individual cap per side)
+    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict (shared cap: agree + disagree ≤ alive players)
     // ════════════════════════════════════════════
     const finalTotalVoters = alivePlayers.length;
+    const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
 
     const handleFinalVerdict = () => {
       if (finalVoteFor > finalVoteAgainst) {
@@ -1671,7 +1672,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </button>
                 <button
                   onClick={() => setFinalVoteFor(n => n + 1)}
-                  disabled={finalVoteFor >= finalTotalVoters}
+                  disabled={finalVotesUsed >= finalTotalVoters}
                   className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#1A3A1A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
                   +
@@ -1694,7 +1695,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </button>
                 <button
                   onClick={() => setFinalVoteAgainst(n => n + 1)}
-                  disabled={finalVoteAgainst >= finalTotalVoters}
+                  disabled={finalVotesUsed >= finalTotalVoters}
                   className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
                   style={{ backgroundColor: "#3A0000", color: "#D32F2F", border: "1px solid #D32F2F66" }}>
                   +
