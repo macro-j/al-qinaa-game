@@ -698,7 +698,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       nightTransitionNextRef.current = null;
       setNightTransition("role_wakes");
     };
-    setNightTransitionLabel("المدينة تنام.. الجميع يغمض عينيه");
+    setNightTransitionLabel("الجميع ينام الكل يغمض عينه");
     setNightTransition("city_sleeps");
   };
 
