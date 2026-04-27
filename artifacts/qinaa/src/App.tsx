@@ -488,7 +488,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
 // ─── Narrator Mode — role engine constants ────────────────────────────────────
 
-const MIN_PLAYERS = 4;
+const MIN_PLAYERS = 5;
 
 type AssignedRole = { name: string; role: string; color: string };
 type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean };
