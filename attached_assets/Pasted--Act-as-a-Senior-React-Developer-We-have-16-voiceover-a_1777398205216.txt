@@ -1,0 +1,56 @@
+"Act as a Senior React Developer. We have 16 voiceover audio files in the public/audio/ directory. We need to implement a Zero-Delay Audio Manager inside <NarratorMode /> using Audio Preloading.
+
+CRITICAL RULE: DO NOT alter any existing game logic. Only add the audio side-effects.
+
+TASK 1: Audio Preloading System (Zero-Delay)
+
+Outside the component or inside a useRef, create an Audio Cache dictionary: const audioCache = useRef<Record<string, HTMLAudioElement>>({});
+
+Add a useEffect that runs ONCE on component mount to preload all 16 files into memory:
+const files = ['start.m4a', 'w1.m4a', 'w2.m4a', 'w3.m4a', 'e1.m4a', 'e2.m4a', 'e3.m4a', 's1.m4a', 's2.m4a', 's3.m4a', 'b1.m4a', 'b2.m4a', 'b3.m4a', 'morning.m4a', 'success.m4a', 'fail.m4a'];
+files.forEach(file => { const audio = new Audio('/audio/' + file); audio.preload = 'auto'; audioCache.current[file] = audio; });
+
+Create a state/ref for tracking the currently playing audio: const currentPlaying = useRef<HTMLAudioElement | null>(null);
+
+Create playGameAudio(fileName: string) that:
+
+Stops currentPlaying if it exists.
+
+Gets the preloaded audio from audioCache.current[fileName].
+
+Resets its time: audio.currentTime = 0;
+
+Sets currentPlaying.current = audio;
+
+Plays it wrapped in a catch(() => {}) to prevent browser autoplay errors.
+
+TASK 2: State-to-Audio Mapping (Strict Link to UI)
+Add a useEffect listening to phase, nightTransition, and currentRole:
+
+Night Phase (phase === 'night'):
+
+If nightTransition === 'start' ➔ Play start.m4a
+
+If nightTransition === 'role_wake':
+
+'الولد' ➔ Play w1.m4a | 'الإكة' ➔ Play e1.m4a | 'الشايب' ➔ Play s1.m4a | 'البنت' ➔ Play b1.m4a
+
+If nightTransition === 'role_action':
+
+'الولد' ➔ Play w2.m4a | 'الإكة' ➔ Play e2.m4a | 'الشايب' ➔ Play s2.m4a | 'البنت' ➔ Play b2.m4a
+
+If nightTransition === 'role_sleep':
+
+'الولد' ➔ Play w3.m4a | 'الإكة' ➔ Play e3.m4a | 'الشايب' ➔ Play s3.m4a | 'البنت' ➔ Play b3.m4a
+
+Morning Phase (phase === 'morning_results'):
+
+On initial morning load ➔ Play morning.m4a
+
+On kill result reveal:
+
+Success (someone died) ➔ Play success.m4a
+
+Fail (no one died) ➔ Play fail.m4a
+
+GOAL: Ensure instant audio playback linked exactly to the screen changes without any fetching delays."

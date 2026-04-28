@@ -580,6 +580,63 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Night 15-second action timer ──
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
 
+  // ── Audio Manager — preloaded cache for zero-delay playback ──
+  const audioCache     = useRef<Record<string, HTMLAudioElement>>({});
+  const currentPlaying = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const files = [
+      "start.m4a",
+      "w1.m4a", "w2.m4a", "w3.m4a",
+      "e1.m4a", "e2.m4a", "e3.m4a",
+      "s1.m4a", "s2.m4a", "s3.m4a",
+      "b1.m4a", "b2.m4a", "b3.m4a",
+      "morning.m4a", "success.m4a", "fail.m4a",
+    ];
+    files.forEach(file => {
+      const audio = new Audio("/audio/" + file);
+      audio.preload = "auto";
+      audioCache.current[file] = audio;
+    });
+  }, []);
+
+  const playGameAudio = (fileName: string) => {
+    if (currentPlaying.current) {
+      currentPlaying.current.pause();
+      currentPlaying.current.currentTime = 0;
+    }
+    const audio = audioCache.current[fileName];
+    if (!audio) return;
+    audio.currentTime = 0;
+    currentPlaying.current = audio;
+    audio.play().catch(() => {});
+  };
+
+  // ── State-to-audio mapping ──
+  useEffect(() => {
+    if (phase === "night") {
+      if (nightTransition === "city_sleeps") {
+        playGameAudio("start.m4a");
+      } else if (nightTransition === "role_wakes") {
+        const map: Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
+        if (map[nightStep]) playGameAudio(map[nightStep]);
+      } else if (nightTransition === "none") {
+        const map: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
+        if (map[nightStep]) playGameAudio(map[nightStep]);
+      } else if (nightTransition === "role_sleeps") {
+        const map: Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
+        if (map[nightStep]) playGameAudio(map[nightStep]);
+      } else if (nightTransition === "city_wakes") {
+        playGameAudio("morning.m4a");
+      }
+    } else if (phase === "reveal" && isNightKillReveal) {
+      playGameAudio("success.m4a");
+    } else if (phase === "day" && daySubPhase === "results" && !dayResult.died) {
+      playGameAudio("fail.m4a");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, nightTransition, nightStep, daySubPhase]);
+
   // ── Auto-advance night transitions after delay ──
   useEffect(() => {
     if (nightTransition === "none") return;
