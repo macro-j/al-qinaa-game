@@ -667,6 +667,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return () => clearTimeout(t);
   }, [nightStep, nightTransition, phase]);
 
+  // ── Auto-skip: when night timer hits 0, fire the same action as the skip button ──
+  useEffect(() => {
+    if (!nightTimerExpired) return;
+    if (phase !== "night" || nightTransition !== "none") return;
+    handleNightStep();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nightTimerExpired]);
+
   // ── Tie-vote cinematic — 4 s display then auto-advance to night ──
   useEffect(() => {
     if (phase !== "day" || daySubPhase !== "vote_tie") return;
@@ -1062,11 +1070,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <Moon size={18} color="#444" strokeWidth={1.5} />
             <h1 className="text-xl font-black text-white mt-1">الليل يخيم على المدينة</h1>
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightCount} · الجميع ينام..</p>
-            <div className="mt-1.5 flex items-center gap-2 px-3 py-1 rounded-xl"
-              style={{ backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D", border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}` }}>
-              <Timer size={12} color={nightTimerExpired ? "#D32F2F" : "#444"} />
-              <Countdown endsAt={timerEndsAt} />
-            </div>
+            {timerEndsAt && (
+              <div className="mt-1.5 inline-flex items-center justify-center px-3 py-1 rounded-full"
+                style={{
+                  backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D",
+                  border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}`,
+                }}>
+                <Countdown endsAt={timerEndsAt} />
+              </div>
+            )}
           </div>
 
           {/* ── Who's awake — mirrors night action panel header ── */}
@@ -2854,10 +2866,11 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
   }, [endsAt]);
 
   if (secs === null || secs <= 0) return null;
+  const urgent = secs <= 5;
   return (
-    <div className="flex items-center justify-center gap-1.5">
-      <Timer size={12} style={{ color: "#555555" }} />
-      <span className="text-xs font-mono font-bold tabular-nums" style={{ color: secs <= 5 ? "#D32F2F" : "#555555" }}>
+    <div className={`flex items-center justify-center gap-1.5${urgent ? " animate-pulse" : ""}`}>
+      <Timer size={12} style={{ color: urgent ? "#D32F2F" : "#555555" }} />
+      <span className="text-xs font-mono font-bold tabular-nums" style={{ color: urgent ? "#D32F2F" : "#555555" }}>
         {String(Math.floor(secs / 60)).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}
       </span>
     </div>
