@@ -640,8 +640,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Auto-advance night transitions after delay ──
   useEffect(() => {
     if (nightTransition === "none") return;
+    const startAudio = audioCache.current["start.m4a"];
+    const citySleepsDelay = (startAudio && !isNaN(startAudio.duration))
+      ? (startAudio.duration * 1000) + 1500
+      : 4500;
     const delay =
-      nightTransition === "city_sleeps" ? 6000 :
+      nightTransition === "city_sleeps" ? citySleepsDelay :
       nightTransition === "role_wakes"  ? 2000 :
       nightTransition === "role_sleeps" ? 4500 : // 2500ms cinematic + 2000ms dramatic pause
       2500; // city_wakes
