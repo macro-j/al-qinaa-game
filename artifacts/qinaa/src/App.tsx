@@ -641,7 +641,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (nightTransition === "none") return;
     const delay =
-      nightTransition === "city_sleeps" ? 3000 :
+      nightTransition === "city_sleeps" ? 6000 :
       nightTransition === "role_wakes"  ? 2000 :
       nightTransition === "role_sleeps" ? 4500 : // 2500ms cinematic + 2000ms dramatic pause
       2500; // city_wakes
