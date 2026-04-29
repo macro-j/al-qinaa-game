@@ -810,8 +810,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
     } else {
-      // ── city_wakes → compute results → win check ──
-      nightTransitionNextRef.current = () => {
+      // ── role_sleeps → city_wakes → compute results → win check ──
+      // Always pass through role_sleeps so the last role's sleep audio plays
+      const goToMorning = () => {
         const { killTarget, protectTarget, silenceTarget } = newActions;
         const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
         const updated = livePlayers.map(p => ({
@@ -839,8 +840,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           setPhase("day");
         }
       };
-      setNightTransitionLabel("الصباح.. يستيقظ الجميع");
-      setNightTransition("city_wakes");
+      // role_sleeps fires first, its callback chains into city_wakes
+      nightTransitionNextRef.current = () => {
+        nightTransitionNextRef.current = goToMorning;
+        setNightTransitionLabel("الصباح.. يستيقظ الجميع");
+        setNightTransition("city_wakes");
+      };
+      setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
+      setNightTransition("role_sleeps");
     }
   };
 
