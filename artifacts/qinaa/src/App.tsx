@@ -539,7 +539,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
+  const [phase, setPhase]                   = useState<"setup" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>([]);
   const [currentIndex, setCurrentIndex]     = useState(0);
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
@@ -614,7 +614,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // ── State-to-audio mapping ──
   useEffect(() => {
-    if (phase === "night" || phase === "pre_distribution") {
+    if (phase === "night") {
       if (nightTransition === "city_sleeps") {
         playGameAudio("start.m4a");
       } else if (nightTransition === "role_wakes") {
@@ -737,10 +737,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
-    nightTransitionNextRef.current = () => setPhase("distribution");
-    setNightTransitionLabel("الجميع ينام الكل يغمض عينه");
-    setNightTransition("city_sleeps");
-    setPhase("pre_distribution");
+    setPhase("distribution");
   };
 
   // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
@@ -787,12 +784,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightCount(1);
-      // city_wakes first (morning.m4a plays) → then chain into Night 1's city_sleeps
-      nightTransitionNextRef.current = () => {
-        startNightWithTransition(order);
-      };
-      setNightTransitionLabel("الجميع يصحى.. اللعبة تبدأ");
-      setNightTransition("city_wakes");
+      startNightWithTransition(order);
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
@@ -948,19 +940,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const canDistribute = players.length >= MIN_PLAYERS;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE: pre_distribution — "Everyone sleeps" cinematic bridge
-  // ─────────────────────────────────────────────────────────────────────────
-  if (phase === "pre_distribution") {
-    return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-8 px-8" style={ROOT_STYLE}>
-        <Moon size={56} color="#1E1E3A" strokeWidth={1} style={{ opacity: 0.6 }} />
-        <p className="text-2xl font-black text-center leading-relaxed" style={{ color: "#2A2A4A" }}>
-          {nightTransitionLabel}
-        </p>
-      </div>
-    );
-  }
-
   // PHASE: distribution
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "distribution" && assignedRoles.length > 0) {
