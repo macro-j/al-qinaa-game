@@ -787,7 +787,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightCount(1);
-      startNightWithTransition(order);
+      // city_wakes first (morning.m4a plays) → then chain into Night 1's city_sleeps
+      nightTransitionNextRef.current = () => {
+        startNightWithTransition(order);
+      };
+      setNightTransitionLabel("الجميع يصحى.. اللعبة تبدأ");
+      setNightTransition("city_wakes");
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
