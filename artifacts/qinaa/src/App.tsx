@@ -881,7 +881,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setAccusedPlayer(null);
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
-    setPlayers([]);
     setPhase("setup");
   };
 
