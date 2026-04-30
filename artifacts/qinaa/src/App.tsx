@@ -737,11 +737,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
-    // city_sleeps plays start.m4a, then callback transitions into الليلة التعريفية
-    nightTransitionNextRef.current = () => setPhase("distribution");
-    setNightTransitionLabel("الجميع ينام الكل يغمض عينه");
-    setNightTransition("city_sleeps");
-    setPhase("night");
+    setPhase("distribution");
   };
 
   // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
@@ -788,8 +784,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightCount(1);
-      // city_sleeps already played at game start — go directly to Night 1 actions
-      setNightTransition("none");
+      startNightWithTransition(order);
       setPhase("night");
     } else {
       setCurrentIndex((i) => i + 1);
