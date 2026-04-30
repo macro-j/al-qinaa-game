@@ -1510,7 +1510,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <button
               onClick={() => {
-                setTimerEndsAt(Date.now() + 120_000);
+                setTimerEndsAt(Date.now() + 60_000);
                 setDaySubPhase("discussion");
               }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
@@ -1588,7 +1588,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           setDaySubPhase("vote_tie");
         } else {
           setAccusedPlayer(nominees[0].name);
-          setTimerEndsAt(Date.now() + 60_000);
+          setTimerEndsAt(Date.now() + 30_000);
           setDaySubPhase("justification");
         }
       };
