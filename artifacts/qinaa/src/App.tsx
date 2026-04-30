@@ -859,6 +859,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const handleEndGame = () => {
+    if (!window.confirm("هل أنت متأكد أنك تريد إنهاء اللعبة والعودة للرئيسية؟")) return;
+    setAssignedRoles([]);
+    setLivePlayers([]);
+    setCurrentIndex(0);
+    setIsPressing(false);
+    setHasRevealedOnce(false);
+    setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+    setDayResult({ died: false, name: null, silenced: null });
+    setNightCount(1);
+    setInvestigatedTarget(null);
+    setDaySubPhase("results");
+    setNightTransition("none");
+    nightTransitionNextRef.current = null;
+    setGameOver(null);
+    setExecutionReveal(null);
+    setNightTimerExpired(false);
+    setTimerEndsAt(null);
+    setVoteCounts({});
+    setAccusedPlayer(null);
+    setFinalVoteFor(0);
+    setFinalVoteAgainst(0);
+    setPlayers([]);
+    setPhase("setup");
+  };
+
   const resetVotingState = () => {
     setTimerEndsAt(null);
     setVoteCounts({});
@@ -1061,15 +1087,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       nightStep === "الشايب" ? "تسأل عن مين يا شايب؟" :
                                "تحمين مين يا بنت؟";
 
+    const arabicNights = ["الأولى","الثانية","الثالثة","الرابعة","الخامسة","السادسة","السابعة","الثامنة","التاسعة","العاشرة"];
+    const nightLabel = arabicNights[nightCount - 1] ?? String(nightCount);
+
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="relative min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        {/* ── End Game escape hatch ── */}
+        <button
+          onClick={handleEndGame}
+          className="absolute top-4 left-4 text-xs px-2.5 py-1 rounded-lg transition-opacity opacity-40 hover:opacity-80 active:opacity-100"
+          style={{ color: "#888", border: "1px solid #2a2a2a", backgroundColor: "#0d0d0d" }}>
+          إنهاء اللعبة
+        </button>
+
         <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
 
           {/* ── Cinematic header ── */}
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <Moon size={18} color="#444" strokeWidth={1.5} />
             <h1 className="text-xl font-black text-white mt-1">الليل يخيم على المدينة</h1>
-            <p className="text-xs" style={{ color: "#333" }}>الليلة {nightCount} · الجميع ينام..</p>
+            <p className="text-xs" style={{ color: "#333" }}>الليلة {nightLabel} · الجميع ينام..</p>
             {timerEndsAt && (
               <div className="mt-1.5 inline-flex items-center justify-center px-3 py-1 rounded-full"
                 style={{
