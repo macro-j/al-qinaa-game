@@ -950,7 +950,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   // ── Global floating controls (position:fixed — always on top of every phase) ──
   const globalControls = (
-    <div className="fixed top-3 left-3 z-50 flex gap-2">
+    <div className="fixed bottom-5 left-3 z-50 flex gap-2">
       <button
         onClick={() => setIsMuted(m => !m)}
         title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
