@@ -35,6 +35,8 @@ import {
   Info,
   X,
   ExternalLink,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -579,6 +581,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // ── Night 15-second action timer ──
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
+  // ── Global audio mute ──
+  const [isMuted, setIsMuted] = useState(false);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
   const audioCache     = useRef<Record<string, HTMLAudioElement>>({});
@@ -601,6 +605,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }, []);
 
   const playGameAudio = (fileName: string) => {
+    if (isMuted) return;
     if (currentPlaying.current) {
       currentPlaying.current.pause();
       currentPlaying.current.currentTime = 0;
@@ -943,6 +948,36 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const canDistribute = players.length >= MIN_PLAYERS;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // ── Global floating controls (position:fixed — always on top of every phase) ──
+  const globalControls = (
+    <div className="fixed top-3 left-3 z-50 flex gap-2">
+      <button
+        onClick={() => setIsMuted(m => !m)}
+        title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+        style={{
+          backgroundColor: "rgba(13,13,13,0.88)",
+          border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
+          backdropFilter: "blur(10px)",
+          color: isMuted ? "#D32F2F" : "#555",
+        }}>
+        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+      </button>
+      <button
+        onClick={handleEndGame}
+        title="إنهاء اللعبة"
+        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+        style={{
+          backgroundColor: "rgba(13,13,13,0.88)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          backdropFilter: "blur(10px)",
+          color: "#444",
+        }}>
+        <X size={15} />
+      </button>
+    </div>
+  );
+
   // PHASE: distribution
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "distribution" && assignedRoles.length > 0) {
@@ -952,6 +987,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        {globalControls}
         <div className="flex flex-col flex-1 w-full max-w-sm mx-auto gap-6">
 
           {/* ── Header ── */}
@@ -1093,15 +1129,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const nightLabel = arabicNights[nightCount - 1] ?? String(nightCount);
 
     return (
-      <div className="relative min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
-        {/* ── End Game escape hatch ── */}
-        <button
-          onClick={handleEndGame}
-          className="absolute top-4 left-4 text-xs px-2.5 py-1 rounded-lg transition-opacity opacity-40 hover:opacity-80 active:opacity-100"
-          style={{ color: "#888", border: "1px solid #2a2a2a", backgroundColor: "#0d0d0d" }}>
-          إنهاء اللعبة
-        </button>
-
+      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        {globalControls}
         <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
 
           {/* ── Cinematic header ── */}
@@ -1320,6 +1349,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (isNightKillReveal) {
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col items-center gap-1 text-center">
             <Skull size={18} color="#555555" strokeWidth={1.5} />
             <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#555555" }}>اكتشاف</span>
@@ -1343,6 +1373,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+        {globalControls}
         <div className="flex flex-col items-center gap-1 text-center">
           <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
           <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#D32F2F" }}>تم الاستبعاد</span>
@@ -1413,6 +1444,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
+        {globalControls}
         <div className="flex flex-col items-center gap-5 w-full max-w-sm">
           <div className="w-full flex flex-col items-center gap-5 py-10 px-6 rounded-2xl"
             style={{ backgroundColor: bgColor, border: `1px solid ${borderCol}`, boxShadow: `0 0 60px ${glowCol}` }}>
@@ -1539,6 +1571,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (daySubPhase === "results") {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <Sun size={18} color="#FFB300" strokeWidth={1.5} />
@@ -1570,6 +1603,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (daySubPhase === "discussion") {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
             <div className="flex flex-col items-center gap-2 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش</span>
@@ -1633,6 +1667,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       };
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
@@ -1696,6 +1731,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (daySubPhase === "vote_tie") {
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col items-center gap-6 w-full max-w-sm text-center">
             <div style={{ filter: "drop-shadow(0 0 32px #FF8F0066)" }}>
               <VenetianMask size={72} color="#FF8F00" strokeWidth={1} />
@@ -1723,6 +1759,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (daySubPhase === "justification") {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>المحاكمة</span>
@@ -1770,6 +1807,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        {globalControls}
         <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
@@ -1849,6 +1887,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      {globalControls}
       <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
 
         {/* ── Header ── */}
