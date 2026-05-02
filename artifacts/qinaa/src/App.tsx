@@ -964,18 +964,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           }}>
           {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
-        <button
-          onClick={handleEndGame}
-          title="إنهاء اللعبة"
-          className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
-          style={{
-            backgroundColor: "rgba(13,13,13,0.88)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            backdropFilter: "blur(10px)",
-            color: "#444",
-          }}>
-          <X size={15} />
-        </button>
+        {phase !== "setup" && (
+          <button
+            onClick={handleEndGame}
+            title="إنهاء اللعبة"
+            className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+            style={{
+              backgroundColor: "rgba(13,13,13,0.88)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              backdropFilter: "blur(10px)",
+              color: "#444",
+            }}>
+            <X size={15} />
+          </button>
+        )}
       </div>
       <div className="h-14" />
     </div>
