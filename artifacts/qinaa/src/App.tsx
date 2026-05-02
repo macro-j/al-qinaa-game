@@ -1122,9 +1122,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex-1" />
 
           {/* ── Next player button — only enabled after card is flipped ── */}
-          <button
+          <motion.button
             onClick={handleNext}
             disabled={!isCardFlipped}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-300 active:scale-95"
             style={{
               backgroundColor: isCardFlipped ? "#D32F2F" : "#111111",
@@ -1134,7 +1137,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }}>
             <VenetianMask size={20} strokeWidth={2} />
             <span>{isLast ? "إنهاء الليلة التعريفية" : "اللاعب التالي"}</span>
-          </button>
+          </motion.button>
 
         </div>
       </div>
@@ -1349,9 +1352,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const currentPlayer       = livePlayers.find(p => p.role === nightStep) ?? null;
             const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
             return (
-              <button
+              <motion.button
                 onClick={handleNightStep}
                 disabled={!isCurrentPlayerDead && !selectedTarget && !nightTimerExpired}
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
                 style={{
                   backgroundColor: isCurrentPlayerDead ? "#1A1A1A" : selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
@@ -1369,7 +1375,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     ? `تخطي دور ${nightStep}`
                     : `${roleSleeps(nightStep)} ${nightStep}`}
                 </span>
-              </button>
+              </motion.button>
             );
           })()}
 
@@ -1384,18 +1390,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   if (phase === "reveal" && executionReveal) {
     const revealMeta = ROLE_META[executionReveal.role] ?? ROLE_META["المواطن"];
     const continueBtn = (
-      <button
+      <motion.button
         onClick={() => {
           const cb = postRevealRef.current;
           postRevealRef.current = null;
           setExecutionReveal(null);
           cb?.();
         }}
+        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.02 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
         className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
         style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
         <ChevronRight size={20} strokeWidth={2} />
         <span>متابعة</span>
-      </button>
+      </motion.button>
     );
 
     if (isNightKillReveal) {
@@ -1549,8 +1558,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
         {/* ── Action buttons ── */}
         <div className="flex flex-col gap-3 w-full max-w-sm">
-          <button
+          <motion.button
             onClick={handlePlayAgainSamePlayers}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{
               backgroundColor: "transparent",
@@ -1560,14 +1572,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }}>
             <Shuffle size={20} strokeWidth={2} />
             <span>إعادة اللعبة بنفس اللاعبين</span>
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             onClick={fullReset}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-sm transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", color: "#383838", border: "1px solid #1C1C1C" }}>
             <ArrowRight size={18} strokeWidth={2} />
             <span>العودة للقائمة</span>
-          </button>
+          </motion.button>
         </div>
       </div>
     );
@@ -1599,23 +1614,29 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
 
     const restartBtn = (
-      <button
+      <motion.button
         onClick={restartGame}
+        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.02 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
         className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
         style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
         <Shuffle size={16} strokeWidth={2} />
         <span>إعادة اللعبة من البداية</span>
-      </button>
+      </motion.button>
     );
 
     const skipNightBtn = (
-      <button
+      <motion.button
         onClick={handleStartNextNight}
+        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.02 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
         className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
         style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
         <Moon size={20} strokeWidth={2} />
         <span>بدء الليلة التالية</span>
-      </button>
+      </motion.button>
     );
 
     const morningBanner = (
@@ -1652,16 +1673,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
             {morningBanner}
             <div className="flex-1" />
-            <button
+            <motion.button
               onClick={() => {
                 setTimerEndsAt(Date.now() + 60_000);
                 setDaySubPhase("discussion");
               }}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>بدء النقاش</span>
-            </button>
+            </motion.button>
             {skipNightBtn}
             {restartBtn}
           </div>
@@ -1699,7 +1723,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               ))}
             </div>
             <div className="flex-1" />
-            <button
+            <motion.button
               onClick={() => {
                 const init: Record<string, number> = {};
                 alivePlayers.forEach(p => { init[p.name] = 0; });
@@ -1707,11 +1731,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 setTimerEndsAt(null);
                 setDaySubPhase("voting_tally");
               }}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>بدء التصويت</span>
-            </button>
+            </motion.button>
             {skipNightBtn}
             {restartBtn}
           </div>
@@ -1783,13 +1810,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               })}
             </div>
             <div className="flex-1" />
-            <button
+            <motion.button
               onClick={handleCountVotes}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>فرز الأصوات</span>
-            </button>
+            </motion.button>
             {skipNightBtn}
             {restartBtn}
           </div>
@@ -1847,13 +1877,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               </div>
             </div>
             <div className="flex-1" />
-            <button
+            <motion.button
               onClick={() => { setTimerEndsAt(null); setDaySubPhase("final_vote"); }}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>بدء التصويت النهائي</span>
-            </button>
+            </motion.button>
             {skipNightBtn}
             {restartBtn}
           </div>
@@ -1934,8 +1967,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <div className="flex-1" />
-          <button
+          <motion.button
             onClick={handleFinalVerdict}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
             <Users size={20} strokeWidth={2} />
@@ -1946,7 +1982,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 ? `${accusedPlayer} يُفرج عنه`
                 : "تنفيذ الحكم"}
             </span>
-          </button>
+          </motion.button>
           {skipNightBtn}
           {restartBtn}
         </div>
@@ -2050,9 +2086,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               أضف {remaining} {remaining === 1 ? "لاعباً" : "لاعبين"} على الأقل للبدء
             </p>
           )}
-          <button
+          <motion.button
             onClick={handleDistribute}
             disabled={!canDistribute}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{
               backgroundColor: canDistribute ? "#D32F2F" : "#1A1A1A",
@@ -2062,14 +2101,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }}>
             <VenetianMask size={20} strokeWidth={2} />
             <span>توزيع الأقنعة</span>
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             onClick={onBack}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
             <ArrowRight size={16} strokeWidth={2} />
             <span>العودة لاختيار الطور</span>
-          </button>
+          </motion.button>
         </div>
 
       </div>
