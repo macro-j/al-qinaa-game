@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { io, type Socket } from "socket.io-client";
 import QRCode from "react-qr-code";
 import {
@@ -948,40 +949,44 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const canDistribute = players.length >= MIN_PLAYERS;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // ── Global floating controls (position:fixed — always on top of every phase) ──
-  const globalControls = (
-    <div className="w-full shrink-0">
-      <div className="fixed top-4 left-4 z-50 flex gap-2">
+  // ── Floating control buttons — rendered OUTSIDE motion.div so CSS
+  //    transforms never drag them. position:fixed keeps them viewport-anchored.
+  const floatingButtons = (
+    <div className="fixed top-4 left-4 z-50 flex gap-2">
+      <button
+        onClick={() => setIsMuted(m => !m)}
+        title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+        style={{
+          backgroundColor: "rgba(13,13,13,0.88)",
+          border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
+          backdropFilter: "blur(10px)",
+          color: isMuted ? "#D32F2F" : "#555",
+        }}>
+        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+      </button>
+      {phase !== "setup" && (
         <button
-          onClick={() => setIsMuted(m => !m)}
-          title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+          onClick={handleEndGame}
+          title="إنهاء اللعبة"
           className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
           style={{
             backgroundColor: "rgba(13,13,13,0.88)",
-            border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
+            border: "1px solid rgba(255,255,255,0.07)",
             backdropFilter: "blur(10px)",
-            color: isMuted ? "#D32F2F" : "#555",
+            color: "#444",
           }}>
-          {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+          <X size={15} />
         </button>
-        {phase !== "setup" && (
-          <button
-            onClick={handleEndGame}
-            title="إنهاء اللعبة"
-            className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
-            style={{
-              backgroundColor: "rgba(13,13,13,0.88)",
-              border: "1px solid rgba(255,255,255,0.07)",
-              backdropFilter: "blur(10px)",
-              color: "#444",
-            }}>
-            <X size={15} />
-          </button>
-        )}
-      </div>
-      <div className="h-14" />
+      )}
     </div>
   );
+
+  // ── In-flow spacer that reserves room below the floating buttons ──
+  const globalControls = <div className="h-14 shrink-0 w-full" />;
+
+  // ── All phase content lives here so we can wrap it in AnimatePresence ──
+  const renderPhaseContent = (): React.ReactNode => {
 
   // PHASE: distribution
   // ─────────────────────────────────────────────────────────────────────────
@@ -2027,6 +2032,29 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
       </div>
     </div>
+  );
+
+  }; // end renderPhaseContent
+
+  // ── Transition key: changes on every major phase (+ day sub-phase) ──
+  const phaseKey = phase === "day" ? `day-${daySubPhase}` : phase;
+
+  return (
+    <>
+      {floatingButtons}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={phaseKey}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -15 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          style={{ width: "100%", minHeight: "100vh" }}
+        >
+          {renderPhaseContent()}
+        </motion.div>
+      </AnimatePresence>
+    </>
   );
 }
 
