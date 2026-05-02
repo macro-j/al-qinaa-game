@@ -491,7 +491,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 const MIN_PLAYERS = 5;
 
 type AssignedRole = { name: string; role: string; color: string };
-type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean };
+type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean; deathReason: "vote" | "night" | null };
 
 const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
   "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
@@ -742,7 +742,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
   const getNightOrder = (lp: LivePlayer[]) =>
-    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r => lp.some(p => p.role === r));
+    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r =>
+      lp.some(p => p.role === r && p.deathReason !== "vote")
+    );
 
   // ── Win condition checker — called after every death ──
   const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
@@ -775,7 +777,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const handleNext = () => {
     const isLast = currentIndex === assignedRoles.length - 1;
     if (isLast) {
-      const lp: LivePlayer[] = assignedRoles.map(ar => ({ name: ar.name, role: ar.role, color: ar.color, isAlive: true, isSilenced: false }));
+      const lp: LivePlayer[] = assignedRoles.map(ar => ({ name: ar.name, role: ar.role, color: ar.color, isAlive: true, isSilenced: false, deathReason: null }));
       const order = getNightOrder(lp);
       setLivePlayers(lp);
       setNightStep(order[0] ?? "الولد");
@@ -825,8 +827,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
         const updated = livePlayers.map(p => ({
           ...p,
-          isAlive:    p.name === died ? false : p.isAlive,
-          isSilenced: p.name === silenceTarget,
+          isAlive:     p.name === died ? false : p.isAlive,
+          isSilenced:  p.name === silenceTarget,
+          deathReason: p.name === died ? "night" as const : p.deathReason,
         }));
         setLivePlayers(updated);
         setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
@@ -909,7 +912,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   const handleExecute = (name: string) => {
     const updatedPlayers = livePlayers.map(p =>
-      p.name === name ? { ...p, isAlive: false } : { ...p, isSilenced: false }
+      p.name === name ? { ...p, isAlive: false, deathReason: "vote" as const } : { ...p, isSilenced: false }
     );
     setLivePlayers(updatedPlayers);
     const winner = checkWinCondition(updatedPlayers);
