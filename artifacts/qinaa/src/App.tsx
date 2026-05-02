@@ -1203,12 +1203,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <h1 className="text-xl font-black text-white mt-1">الليل يخيم على المدينة</h1>
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightLabel} · الجميع ينام..</p>
             {timerEndsAt && (
-              <div className="mt-1.5 inline-flex items-center justify-center px-3 py-1 rounded-full"
+              <div className="mt-2 w-full px-4 py-3 rounded-xl"
                 style={{
                   backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D",
                   border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}`,
                 }}>
-                <Countdown endsAt={timerEndsAt} />
+                <DayTimerBar endsAt={timerEndsAt} maxSeconds={15} urgentAt={5} />
               </div>
             )}
           </div>
@@ -3082,7 +3082,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 // ─── Game Over Screen ─────────────────────────────────────────────────────────
 
 // ── DayTimerBar — animated progress bar + countdown for day phases ────────────
-function DayTimerBar({ endsAt, maxSeconds }: { endsAt: number | null; maxSeconds: number }) {
+function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | null; maxSeconds: number; urgentAt?: number }) {
   const [secs, setSecs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -3096,7 +3096,7 @@ function DayTimerBar({ endsAt, maxSeconds }: { endsAt: number | null; maxSeconds
   if (secs === null) return null;
 
   const pct       = Math.max(0, Math.min(100, (secs / maxSeconds) * 100));
-  const isUrgent  = secs <= 10;
+  const isUrgent  = secs <= urgentAt;
   const mm        = String(Math.floor(secs / 60)).padStart(2, "0");
   const ss        = String(secs % 60).padStart(2, "0");
 
