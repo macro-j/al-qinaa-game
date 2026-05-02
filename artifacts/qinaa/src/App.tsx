@@ -854,7 +854,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       // role_sleeps fires first, its callback chains into city_wakes
       nightTransitionNextRef.current = () => {
         nightTransitionNextRef.current = goToMorning;
-        setNightTransitionLabel("الصباح.. يستيقظ الجميع");
+        setNightTransitionLabel("الكل يصحى");
         setNightTransition("city_wakes");
       };
       setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
@@ -1543,7 +1543,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <Sun size={18} color="#FFB300" strokeWidth={1.5} />
               <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#FFB300" }}>الصباح</span>
-              <h1 className="text-2xl font-black text-white">يستيقظ الجميع</h1>
+              <h1 className="text-2xl font-black text-white">الكل يصحى</h1>
             </div>
             {morningBanner}
             <div className="flex-1" />
