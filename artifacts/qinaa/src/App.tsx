@@ -172,6 +172,13 @@ const BASE_BUTTON =
 
 const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000" };
 
+// ── Haptic Feedback — safe wrapper around navigator.vibrate ───────────────────
+const triggerHaptic = (pattern: number | number[]) => {
+  if (typeof window !== "undefined" && "vibrate" in navigator) {
+    try { navigator.vibrate(pattern); } catch (_) {}
+  }
+};
+
 function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
   return (
     <div className="flex items-center justify-between">
@@ -853,6 +860,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           const dp = updated.find(p => p.name === died)!;
           setExecutionReveal({ name: died, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
           postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
+          triggerHaptic([200, 100, 200, 100, 400]);
           setIsNightKillReveal(true);
           setPhase("reveal");
         } else {
@@ -943,6 +951,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         startNightWithTransition(order);
         setPhase("night");
       };
+      triggerHaptic([200, 100, 200, 100, 400]);
       setIsNightKillReveal(false);
       setPhase("reveal");
     }
@@ -1725,6 +1734,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <motion.button
               onClick={() => {
+                triggerHaptic([50, 100, 50]);
                 const init: Record<string, number> = {};
                 alivePlayers.forEach(p => { init[p.name] = 0; });
                 setVoteCounts(init);
@@ -1878,7 +1888,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
             <div className="flex-1" />
             <motion.button
-              onClick={() => { setTimerEndsAt(null); setDaySubPhase("final_vote"); }}
+              onClick={() => { triggerHaptic([50, 100, 50]); setTimerEndsAt(null); setDaySubPhase("final_vote"); }}
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
