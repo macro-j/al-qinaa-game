@@ -1448,57 +1448,77 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
 
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-6"
+        style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
         {globalControls}
-        <div className="flex flex-col items-center gap-5 w-full max-w-sm">
-          <div className="w-full flex flex-col items-center gap-5 py-10 px-6 rounded-2xl"
-            style={{ backgroundColor: bgColor, border: `1px solid ${borderCol}`, boxShadow: `0 0 60px ${glowCol}` }}>
+
+        {/* ── Winner card with pulsing glow ── */}
+        <div className="winner-card w-full max-w-sm flex flex-col items-center gap-6 py-12 px-6 rounded-3xl"
+          style={{
+            ["--glow-sm" as string]: `0 0 40px ${glowCol}, 0 0 80px ${glowCol}`,
+            ["--glow-lg" as string]: `0 0 70px ${glowCol}, 0 0 140px ${glowCol}, inset 0 0 30px ${glowCol}`,
+            backgroundColor: isTownWin ? "#00081A" : "#0D0000",
+            border: `1px solid ${borderCol}`,
+          }}>
+          <div style={{ filter: `drop-shadow(0 0 18px ${accent}99)` }}>
             {headIcon}
-            <div className="flex flex-col items-center gap-2 text-center">
-              <span className="text-3xl font-black" style={{ color: accent, fontFamily: "serif" }}>{headLabel}</span>
-              {isTownWin && gameOver.killerName && (
-                <p className="text-sm font-semibold text-center leading-relaxed" style={{ color: "#AAAAAA" }}>
-                  تم القبض على القاتل: <span className="font-black" style={{ color: accent }}>{gameOver.killerName}</span>
-                </p>
-              )}
-              {!isTownWin && (
-                <p className="text-sm font-semibold text-center" style={{ color: "#888" }}>
-                  المافيا تسيطر على المدينة
-                </p>
-              )}
-            </div>
           </div>
-          <div className="flex flex-col gap-2 w-full pt-2">
-            <p className="text-xs text-center font-semibold" style={{ color: "#333" }}>الأدوار النهائية</p>
-            {livePlayers.map(p => {
-              const pm = ROLE_META[p.role] ?? ROLE_META["المواطن"];
-              return (
-                <div key={p.name}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl"
-                  style={{ backgroundColor: "#111", border: `1px solid ${p.isAlive ? "#222" : "#1A1A1A"}`, opacity: p.isAlive ? 1 : 0.45 }}>
-                  <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#444" }}>{p.name}</span>
-                    {!p.isAlive && <Skull size={12} color="#444" />}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="text-4xl font-black" style={{ color: accent, fontFamily: "serif", textShadow: `0 0 28px ${accent}55`, letterSpacing: "0.04em" }}>
+              {headLabel}
+            </span>
+            {isTownWin && gameOver.killerName && (
+              <p className="text-sm leading-loose" style={{ color: "#666" }}>
+                تم كشف القاتل<br />
+                <span className="text-base font-black" style={{ color: accent }}>{gameOver.killerName}</span>
+              </p>
+            )}
+            {!isTownWin && (
+              <p className="text-xs font-semibold" style={{ color: "#444", letterSpacing: "0.18em" }}>
+                المافيا تسيطر على المدينة
+              </p>
+            )}
           </div>
         </div>
+
+        {/* ── Final roles list ── */}
+        <div className="flex flex-col gap-2 w-full max-w-sm">
+          <p className="text-xs text-center font-semibold pb-1" style={{ color: "#2A2A2A", letterSpacing: "0.12em" }}>الأدوار النهائية</p>
+          {livePlayers.map(p => {
+            const pm = ROLE_META[p.role] ?? ROLE_META["المواطن"];
+            return (
+              <div key={p.name}
+                className="flex items-center justify-between px-3 py-2 rounded-xl"
+                style={{ backgroundColor: "#0A0A0A", border: `1px solid ${p.isAlive ? "#1E1E1E" : "#141414"}`, opacity: p.isAlive ? 1 : 0.38 }}>
+                <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#3A3A3A" }}>{p.name}</span>
+                  {!p.isAlive && <Skull size={12} color="#3A3A3A" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── Action buttons ── */}
         <div className="flex flex-col gap-3 w-full max-w-sm">
           <button
             onClick={handlePlayAgainSamePlayers}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#10B981", color: "#fff", boxShadow: "0 0 32px #10B98155" }}>
+            style={{
+              backgroundColor: "transparent",
+              color: accent,
+              border: `1.5px solid ${borderCol}`,
+              boxShadow: `0 0 22px ${glowCol}`,
+            }}>
             <Shuffle size={20} strokeWidth={2} />
             <span>إعادة اللعبة بنفس اللاعبين</span>
           </button>
           <button
             onClick={fullReset}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
-            <ArrowRight size={20} strokeWidth={2} />
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-sm transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "transparent", color: "#383838", border: "1px solid #1C1C1C" }}>
+            <ArrowRight size={18} strokeWidth={2} />
             <span>العودة للقائمة</span>
           </button>
         </div>

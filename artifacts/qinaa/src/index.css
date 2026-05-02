@@ -390,3 +390,11 @@
     inset: -1px;
   }
 }
+
+@keyframes winnerPulse {
+  0%, 100% { box-shadow: var(--glow-sm); }
+  50%       { box-shadow: var(--glow-lg); }
+}
+.winner-card {
+  animation: winnerPulse 2.8s ease-in-out infinite;
+}
