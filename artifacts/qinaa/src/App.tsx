@@ -950,31 +950,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   // ── Global floating controls (position:fixed — always on top of every phase) ──
   const globalControls = (
-    <div className="fixed bottom-5 left-3 z-50 flex gap-2">
-      <button
-        onClick={() => setIsMuted(m => !m)}
-        title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
-        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
-        style={{
-          backgroundColor: "rgba(13,13,13,0.88)",
-          border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
-          backdropFilter: "blur(10px)",
-          color: isMuted ? "#D32F2F" : "#555",
-        }}>
-        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-      </button>
-      <button
-        onClick={handleEndGame}
-        title="إنهاء اللعبة"
-        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
-        style={{
-          backgroundColor: "rgba(13,13,13,0.88)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          backdropFilter: "blur(10px)",
-          color: "#444",
-        }}>
-        <X size={15} />
-      </button>
+    <div className="w-full shrink-0">
+      <div className="fixed top-4 left-4 z-50 flex gap-2">
+        <button
+          onClick={() => setIsMuted(m => !m)}
+          title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+          className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+          style={{
+            backgroundColor: "rgba(13,13,13,0.88)",
+            border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
+            backdropFilter: "blur(10px)",
+            color: isMuted ? "#D32F2F" : "#555",
+          }}>
+          {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+        </button>
+        <button
+          onClick={handleEndGame}
+          title="إنهاء اللعبة"
+          className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+          style={{
+            backgroundColor: "rgba(13,13,13,0.88)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            backdropFilter: "blur(10px)",
+            color: "#444",
+          }}>
+          <X size={15} />
+        </button>
+      </div>
+      <div className="h-14" />
     </div>
   );
 
