@@ -1680,8 +1680,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-2 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش</span>
               <h1 className="text-2xl font-black text-white">كل يدافع عن نفسه</h1>
-              <div className="mt-1 px-4 py-2 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                <Countdown endsAt={timerEndsAt} />
+              <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
+                <DayTimerBar endsAt={timerEndsAt} maxSeconds={60} />
               </div>
             </div>
             {morningBanner}
@@ -1842,8 +1842,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
               <span className="text-lg font-black text-white">{accusedPlayer}</span>
               <p className="text-xs text-center" style={{ color: "#555" }}>لديه دقيقة كاملة للدفاع عن نفسه</p>
-              <div className="mt-1 px-4 py-2 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
-                <Countdown endsAt={timerEndsAt} />
+              <div className="mt-2 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
+                <DayTimerBar endsAt={timerEndsAt} maxSeconds={30} />
               </div>
             </div>
             <div className="flex-1" />
@@ -3022,6 +3022,61 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 }
 
 // ─── Game Over Screen ─────────────────────────────────────────────────────────
+
+// ── DayTimerBar — animated progress bar + countdown for day phases ────────────
+function DayTimerBar({ endsAt, maxSeconds }: { endsAt: number | null; maxSeconds: number }) {
+  const [secs, setSecs] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!endsAt) { setSecs(null); return; }
+    const tick = () => setSecs(Math.max(0, Math.round((endsAt - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [endsAt]);
+
+  if (secs === null) return null;
+
+  const pct       = Math.max(0, Math.min(100, (secs / maxSeconds) * 100));
+  const isUrgent  = secs <= 10;
+  const mm        = String(Math.floor(secs / 60)).padStart(2, "0");
+  const ss        = String(secs % 60).padStart(2, "0");
+
+  return (
+    <div className="flex flex-col items-center gap-2 w-full">
+      {/* Countdown digits */}
+      <div className="flex items-center gap-1.5">
+        <Timer size={13} style={{ color: isUrgent ? "#D32F2F" : "#555" }} />
+        <motion.span
+          className="text-base font-mono font-black tabular-nums"
+          animate={isUrgent ? { opacity: [1, 0.45, 1] } : { opacity: 1 }}
+          transition={isUrgent ? { repeat: Infinity, duration: 0.75, ease: "easeInOut" } : {}}
+          style={{ color: isUrgent ? "#D32F2F" : "#AAAAAA" }}
+        >
+          {mm}:{ss}
+        </motion.span>
+      </div>
+      {/* Progress bar track */}
+      <div className="w-full rounded-full overflow-hidden" style={{ height: 5, backgroundColor: "#1A1A1A" }}>
+        <motion.div
+          animate={{
+            width: `${pct}%`,
+            backgroundColor: isUrgent ? "#D32F2F" : "#FFFFFF",
+            opacity: isUrgent ? [1, 0.35, 1] : 1,
+          }}
+          transition={{
+            width: { duration: 0.45, ease: "linear" },
+            backgroundColor: { duration: 0.3 },
+            opacity: isUrgent
+              ? { repeat: Infinity, duration: 0.75, ease: "easeInOut" }
+              : { duration: 0.3 },
+          }}
+          style={{ height: "100%", borderRadius: 9999 }}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ── Countdown component ───────────────────────────────────────────────────────
 function Countdown({ endsAt }: { endsAt: number | null }) {
