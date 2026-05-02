@@ -170,7 +170,7 @@ function getSocket(): Socket {
 const BASE_BUTTON =
   "flex flex-row-reverse items-center gap-4 w-full px-6 py-4 rounded-xl border font-bold text-white text-lg transition-all duration-200 hover:brightness-125 active:scale-95";
 
-const ROOT_STYLE: React.CSSProperties = { backgroundColor: "#000000" };
+const ROOT_STYLE: React.CSSProperties = { backgroundColor: "var(--n-bg, #000000)" };
 
 // ── Haptic Feedback — safe wrapper around navigator.vibrate ───────────────────
 const triggerHaptic = (pattern: number | number[]) => {
@@ -2131,10 +2131,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }; // end renderPhaseContent
 
   // ── Transition key: changes on every major phase (+ day sub-phase) ──
-  const phaseKey = phase === "day" ? `day-${daySubPhase}` : phase;
+  const phaseKey   = phase === "day" ? `day-${daySubPhase}` : phase;
+  const isDayPhase = phase === "day";
 
   return (
-    <>
+    <motion.div
+      initial={false}
+      animate={{ "--n-bg": isDayPhase ? "#111827" : "#000000" } as React.CSSProperties}
+      transition={{ duration: 1.5, ease: "easeInOut" }}
+      style={{ "--n-bg": "#000000", minHeight: "100vh", width: "100%" } as React.CSSProperties}
+    >
       {floatingButtons}
       <AnimatePresence mode="wait">
         <motion.div
@@ -2148,7 +2154,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {renderPhaseContent()}
         </motion.div>
       </AnimatePresence>
-    </>
+    </motion.div>
   );
 }
 
