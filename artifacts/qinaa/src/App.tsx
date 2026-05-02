@@ -548,6 +548,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
   const [isPressing, setIsPressing]             = useState(false);
   const [hasRevealedOnce, setHasRevealedOnce]   = useState(false);
+  const [isCardFlipped, setIsCardFlipped]       = useState(false);
 
   // ── Game loop state ──
   const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>([]);
@@ -791,6 +792,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setSelectedTarget(null);
       setIsPressing(false);
       setHasRevealedOnce(false);
+      setIsCardFlipped(false);
       setNightCount(1);
       startNightWithTransition(order);
       setPhase("night");
@@ -798,6 +800,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setCurrentIndex((i) => i + 1);
       setIsPressing(false);
       setHasRevealedOnce(false);
+      setIsCardFlipped(false);
     }
   };
 
@@ -995,6 +998,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const meta    = ROLE_META[current.role] ?? ROLE_META["المواطن"];
     const isLast  = currentIndex === assignedRoles.length - 1;
 
+    const CARD_HEIGHT = 320;
+
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
@@ -1018,77 +1023,114 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span className="text-3xl font-black text-white">{current.name}</span>
           </div>
 
-          {/* ── Secret card — EXACT clone of Online Mode PlayerScreen role card ── */}
+          {/* ── 3D Flip Card ── */}
           <div
-            onPointerDown={() => { setIsPressing(true); setHasRevealedOnce(true); }}
-            onPointerUp={() => setIsPressing(false)}
-            onPointerLeave={() => setIsPressing(false)}
-            onPointerCancel={() => setIsPressing(false)}
-            className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none touch-none transition-all duration-300"
-            style={{
-              backgroundColor: isPressing ? "#0A0000" : "#111111",
-              borderColor:     isPressing ? meta.color : "#2A2A2A",
-              boxShadow:       isPressing ? `0 0 40px ${meta.color}33` : "none",
-              cursor: "pointer",
-              touchAction: "none",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-            }}>
-            {isPressing ? (
-              <>
-                <VenetianMask size={64} color={meta.color} strokeWidth={1.2} />
-                <div className="flex flex-col items-center gap-2">
-                  <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
-                  <span className="text-3xl font-black text-center leading-tight"
-                    style={{ color: meta.color, fontFamily: "serif", direction: "rtl" }}>
+            onClick={() => !isCardFlipped && setIsCardFlipped(true)}
+            style={{ perspective: "900px", height: CARD_HEIGHT, cursor: isCardFlipped ? "default" : "pointer" }}
+            className="w-full select-none">
+
+            {/* Rotating inner wrapper */}
+            <motion.div
+              animate={{ rotateY: isCardFlipped ? 180 : 0 }}
+              transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
+              style={{
+                width: "100%",
+                height: "100%",
+                transformStyle: "preserve-3d",
+                position: "relative",
+              }}>
+
+              {/* ── FRONT (hidden/mystery) ── */}
+              <div style={{
+                position: "absolute", inset: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                borderRadius: 16,
+                backgroundColor: "#0D0D0D",
+                border: "1.5px solid #222222",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+              }}>
+                <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <VenetianMask size={72} color="#1E1E1E" strokeWidth={1.2} />
+                  <div style={{ position: "absolute" }}>
+                    <Lock size={24} color="#3A3A3A" />
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك مخفي</span>
+                  <span style={{ color: "#2A2A2A", fontSize: 13, textAlign: "center" }}>
+                    اضغط لكشف دورك
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                  <Lock size={13} color="#2A2A2A" />
+                  <span style={{ fontSize: 11, color: "#2A2A2A" }}>مخفي عن الجميع</span>
+                </div>
+              </div>
+
+              {/* ── BACK (role reveal) ── */}
+              <div style={{
+                position: "absolute", inset: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                borderRadius: 16,
+                backgroundColor: "#0A0000",
+                border: `1.5px solid ${meta.color}55`,
+                boxShadow: `0 0 40px ${meta.color}22`,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 14,
+              }}>
+                <div style={{ filter: `drop-shadow(0 0 16px ${meta.color}88)` }}>
+                  <VenetianMask size={68} color={meta.color} strokeWidth={1.2} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#666", fontSize: 11, letterSpacing: "0.15em", fontWeight: 600 }}>قناعك</span>
+                  <span style={{
+                    color: meta.color, fontSize: 32, fontWeight: 900,
+                    fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
+                    textShadow: `0 0 24px ${meta.color}55`,
+                  }}>
                     {current.role}
                   </span>
-                  <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
+                  <span style={{ color: "#777", fontSize: 12, textAlign: "center", paddingInline: 12, lineHeight: 1.6 }}>
                     {meta.desc}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 mt-2" style={{ color: "#444444" }}>
-                  <Unlock size={14} /><span className="text-xs">أنت ترى قناعك</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Unlock size={13} color="#555" />
+                  <span style={{ fontSize: 11, color: "#555" }}>أنت ترى قناعك</span>
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="relative">
-                  <VenetianMask size={64} color="#2A2A2A" strokeWidth={1.2} />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Lock size={22} color="#555555" />
-                  </div>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <span className="text-xl font-bold" style={{ color: "#444444" }}>قناعك مخفي</span>
-                  <span className="text-sm text-center" style={{ color: "#333333" }}>اضغط وامسك للكشف عن قناعك</span>
-                </div>
-                <div className="flex items-center gap-2" style={{ color: "#333333" }}>
-                  <Lock size={14} /><span className="text-xs">مخفي عن الجميع</span>
-                </div>
-              </>
-            )}
+              </div>
+
+            </motion.div>
           </div>
 
-          <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
-            {isPressing
-              ? "ارفع إصبعك لإخفاء القناع مجدداً"
-              : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
+          {/* ── Hint text ── */}
+          <p className="text-xs text-center" style={{ color: "#2A2A2A" }}>
+            {isCardFlipped ? "قناعك مكشوف — لا أحد سواك يرى الشاشة" : "اضغط على البطاقة للكشف عن قناعك"}
           </p>
 
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Next player button ── */}
+          {/* ── Next player button — only enabled after card is flipped ── */}
           <button
             onClick={handleNext}
-            disabled={!hasRevealedOnce}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            disabled={!isCardFlipped}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-300 active:scale-95"
             style={{
-              backgroundColor: hasRevealedOnce ? "#D32F2F" : "#1A1A1A",
-              color:           hasRevealedOnce ? "#ffffff" : "#333333",
-              border:          hasRevealedOnce ? "none" : "1px solid #222222",
-              boxShadow:       hasRevealedOnce ? "0 0 24px #D32F2F44" : "none",
+              backgroundColor: isCardFlipped ? "#D32F2F" : "#111111",
+              color:           isCardFlipped ? "#ffffff" : "#2A2A2A",
+              border:          isCardFlipped ? "none" : "1px solid #1A1A1A",
+              boxShadow:       isCardFlipped ? "0 0 24px #D32F2F44" : "none",
             }}>
             <VenetianMask size={20} strokeWidth={2} />
             <span>{isLast ? "إنهاء الليلة التعريفية" : "اللاعب التالي"}</span>
