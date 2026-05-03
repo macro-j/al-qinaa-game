@@ -301,24 +301,25 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
-          {/* Online Mode — DISABLED (coming soon) */}
-          <div
-            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl opacity-50 cursor-not-allowed"
-            style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+          {/* Online Mode — BETA: AI-narrated multiplayer */}
+          <button
+            onClick={() => onSelect("online")}
+            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#120A06", border: "1px solid #FB923C33", boxShadow: "0 0 24px #FB923C11" }}>
             <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
-              style={{ backgroundColor: "#1A1A1A" }}>
-              <Smartphone size={24} color="#555555" strokeWidth={1.8} />
+              style={{ backgroundColor: "#1F140A", border: "1px solid #FB923C22" }}>
+              <Smartphone size={24} color="#FB923C" strokeWidth={1.8} />
             </div>
             <div className="flex flex-col items-end gap-1 flex-1 mx-4">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-md"
-                  style={{ backgroundColor: "rgba(234,179,8,0.08)", color: "#EAB308", border: "1px solid rgba(234,179,8,0.2)" }}>قريباً</span>
-                <span className="text-lg font-black text-white">طور الأونلاين</span>
+                  style={{ backgroundColor: "rgba(251,146,60,0.10)", color: "#FB923C", border: "1px solid rgba(251,146,60,0.25)" }}>تجريبي</span>
+                <span className="text-lg font-black text-white">طور الراوي الذكي</span>
               </div>
-              <span className="text-xs" style={{ color: "#444444" }}>كل لاعب بجواله</span>
+              <span className="text-xs text-right" style={{ color: "#A8825F" }}>كل لاعب بجواله، وراوي بالذكاء الاصطناعي</span>
             </div>
-            <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
-          </div>
+            <ChevronRight size={18} color="#FB923C" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+          </button>
 
           {/* Rules — ghost/outline style, visually subordinate */}
           <button
