@@ -2637,6 +2637,76 @@ function LobbyScreen({
 
 // ─── Player Screen (Role Reveal) ──────────────────────────────────────────────
 
+/**
+ * Online Mode Silent-Night transition overlay.
+ *
+ * When the active game phase moves AWAY from a night role phase
+ * (e.g. night_wolf → night_shadow, or night_guard → day_discussion),
+ * fades in a full-screen "X ينام" card for ~2 seconds before revealing
+ * the next role's UI. Pure client-side: no server timer changes.
+ *
+ * Renders nothing outside of role-phase transitions.
+ */
+const NIGHT_ROLE_NAMES: Record<string, string> = {
+  night_wolf:   "الولد",
+  night_shadow: "الإكة",
+  night_seer:   "الشايب",
+  night_guard:  "البنت",
+};
+
+function NightRoleSleepingOverlay({ phase }: { phase: string }) {
+  const prevPhaseRef = useRef<string>(phase);
+  const [sleepingRole, setSleepingRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+    if (prev === phase) return;
+    // Only show when leaving an active role phase (not night_sleep itself)
+    const leavingRoleName = NIGHT_ROLE_NAMES[prev];
+    if (!leavingRoleName) return;
+    setSleepingRole(leavingRoleName);
+    const t = setTimeout(() => setSleepingRole(null), 2000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  return (
+    <AnimatePresence>
+      {sleepingRole && (
+        <motion.div
+          key="night-role-sleeping"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.35, ease: "easeInOut" }}
+          className="fixed inset-0 flex items-center justify-center"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.94)",
+            zIndex: 100,
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.92, y: 8 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-center gap-4 px-10 text-center"
+          >
+            <div style={{ fontSize: "3.5rem", lineHeight: 1 }}>😴</div>
+            <p className="text-3xl font-black" style={{ color: "#D32F2F", letterSpacing: "0.02em" }}>
+              {sleepingRole} ينام
+            </p>
+            <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: "#555555" }}>
+              المدينة هادئة
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayerNames, phaseEndsAt, myDeathReason, executionInfo, trialState, accusedPlayer, onLeave }: {
   role: MyRole;
   gamePhase: string;
@@ -2765,6 +2835,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+      <NightRoleSleepingOverlay phase={gamePhase} />
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-6">
 
         <TopBar />
@@ -3446,6 +3517,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+      <NightRoleSleepingOverlay phase={activeGamePhase} />
       <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
 
         <TopBar />
@@ -4010,12 +4082,11 @@ export default function App() {
   const isAudioEnabledRef   = useRef(true);
   isAudioEnabledRef.current = isAudioEnabled;
 
+  // Online Mode: Silent Night UI — only morning/global cues play. All night
+  // role audio (sleep/mafia/investigator/protector) is intentionally stripped
+  // so the per-role on-screen UI (active = action panel, others = suspense)
+  // is the only signal during night phases.
   const PHASE_AUDIO: Record<string, string> = {
-    night_sleep:   "/sounds/sleep.mp3",
-    night_wolf:    "/sounds/mafia.mp3",
-    night_shadow:  "/sounds/mafia.mp3",
-    night_seer:    "/sounds/investigator.mp3",
-    night_guard:   "/sounds/protector.mp3",
     day_discussion: "/sounds/day.mp3",
   };
 
@@ -4371,28 +4442,13 @@ export default function App() {
     };
 
     const onPlayTone = ({ type }: { type: string }) => {
-      // gamePhaseRef.current is already updated by onPhaseUpdate (emitted just before play_tone)
-      // NOTE: only audio calls are timed here — all UI/state updates happen instantly via separate events.
-      switch (type) {
-        case "global_phase":
-          // Immediate: set the night or morning mood on the ambient layer
-          playAmbient(
-            gamePhaseRef.current === "day_discussion"
-              ? "/sounds/day.mp3"
-              : "/sounds/night.mp3"
-          );
-          break;
-        case "role_wake":
-          // After 2.5 s: cut the ambient layer, then fire the role alert
-          setTimeout(() => {
-            stopRef(ambientRef); // silence night.mp3 cleanly
-            playAlert("/sounds/wake.mp3");
-          }, 2500);
-          break;
-        case "role_sleep":
-          // Immediate: role is done, play the sleep cue on the alert layer
-          playAlert("/sounds/sleep.mp3");
-          break;
+      // Silent Night UI: night phase audio is fully stripped on every client.
+      // Only the synchronized morning chime (day_discussion) is allowed —
+      // it acts as the unified "wake up" alarm across all devices.
+      // role_wake / role_sleep / global_phase(night) are intentional no-ops.
+      if (type === "global_phase" && gamePhaseRef.current === "day_discussion") {
+        stopRef(ambientRef); // ensure no leftover night ambient
+        playAmbient("/sounds/day.mp3");
       }
     };
 
