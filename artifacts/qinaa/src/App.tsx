@@ -605,6 +605,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       "s1.m4a", "s2.m4a", "s3.m4a",
       "b1.m4a", "b2.m4a", "b3.m4a",
       "morning.m4a", "success.m4a", "fail.m4a",
+      "mafia_win.mp3", "town_win.mp3",
     ];
     files.forEach(file => {
       const audio = new Audio("/audio/" + file);
@@ -625,6 +626,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     currentPlaying.current = audio;
     audio.play().catch(() => {});
   };
+
+  // ── Victory audio — fires once when entering game_over ──
+  useEffect(() => {
+    if (phase !== "game_over" || !gameOver) return;
+    playGameAudio(gameOver.winner === "mafia" ? "mafia_win.mp3" : "town_win.mp3");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, gameOver?.winner]);
 
   // ── State-to-audio mapping ──
   useEffect(() => {
