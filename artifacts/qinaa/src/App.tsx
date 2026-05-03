@@ -859,9 +859,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
         setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
         setSelectedTarget(null);
-        // ── Win condition is now evaluated AFTER the morning results screen ──
-        // (when the host taps "بدء النقاش"), so players see who died first.
-        if (died) {
+        const winner = checkWinCondition(updated);
+        if (winner) {
+          const killerName = updated.find(p => p.role === "الولد")?.name ?? null;
+          setGameOver({ winner, killerName });
+          setPhase("game_over");
+        } else if (died) {
           const dp = updated.find(p => p.name === died)!;
           setExecutionReveal({ name: died, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
           postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
@@ -1689,15 +1692,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <motion.button
               onClick={() => {
-                // ── Deferred win check: now that the host (and players) have
-                //    seen the morning kill reveal, evaluate victory ──
-                const winner = checkWinCondition(livePlayers);
-                if (winner) {
-                  const killerName = livePlayers.find(p => p.role === "الولد")?.name ?? null;
-                  setGameOver({ winner, killerName });
-                  setPhase("game_over");
-                  return;
-                }
                 setTimerEndsAt(Date.now() + 60_000);
                 setDaySubPhase("discussion");
               }}
