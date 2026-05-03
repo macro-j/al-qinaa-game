@@ -812,10 +812,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       startNightWithTransition(order);
       setPhase("night");
     } else {
-      setCurrentIndex((i) => i + 1);
+      // ── Spoiler-safe sequencing ──
+      // 1) Close the card first; `disabled={!isCardFlipped}` instantly locks the button.
+      // 2) Wait for the 0.55s flip-back animation to fully complete BEFORE advancing
+      //    the index, otherwise the next player's role peeks through mid-rotation.
+      setIsCardFlipped(false);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setIsCardFlipped(false);
+      setTimeout(() => {
+        setCurrentIndex((i) => i + 1);
+      }, 600);
     }
   };
 
