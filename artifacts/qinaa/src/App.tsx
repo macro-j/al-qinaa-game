@@ -2185,7 +2185,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   return (
     <motion.div
       initial={false}
-      animate={{ "--n-bg": isDayPhase ? "#111827" : "#000000" } as React.CSSProperties}
+      animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as React.CSSProperties}
       transition={{ duration: 1.5, ease: "easeInOut" }}
       style={{ "--n-bg": "#000000", minHeight: "100vh", width: "100%" } as React.CSSProperties}
     >
