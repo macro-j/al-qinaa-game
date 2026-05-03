@@ -1554,6 +1554,40 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
+        {/* ── Last night's victims (Mafia win only, when casualties exist) ── */}
+        {!isTownWin && (dayResult.name || dayResult.silenced) && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
+            className="w-full max-w-sm flex flex-col gap-3 px-5 py-4 rounded-2xl"
+            style={{
+              backgroundColor: "#0A0000",
+              border: "1px solid #D32F2F44",
+              boxShadow: "inset 0 0 18px #D32F2F18",
+            }}>
+            <p className="text-xs text-center font-bold tracking-widest" style={{ color: "#D32F2F", letterSpacing: "0.18em" }}>
+              ضحايا الليلة الأخيرة
+            </p>
+            <div className="flex flex-col gap-2">
+              {dayResult.name && (
+                <div className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F33" }}>
+                  <span className="text-sm font-bold" style={{ color: "#FF6B6B" }}>{dayResult.name}</span>
+                  <span className="text-xs font-semibold" style={{ color: "#888" }}>💀 المقتول</span>
+                </div>
+              )}
+              {dayResult.silenced && (
+                <div className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ backgroundColor: "#0D0700", border: "1px solid #FF8F0033" }}>
+                  <span className="text-sm font-bold" style={{ color: "#FFB300" }}>{dayResult.silenced}</span>
+                  <span className="text-xs font-semibold" style={{ color: "#888" }}>🤐 الساكت</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* ── Final roles list ── */}
         <div className="flex flex-col gap-2 w-full max-w-sm">
           <p className="text-xs text-center font-semibold pb-1" style={{ color: "#2A2A2A", letterSpacing: "0.12em" }}>الأدوار النهائية</p>
