@@ -1296,7 +1296,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
             return (
               <div className="flex flex-col gap-2">
-                {targetList.map((p) => {
+                {targetList.map((p, idx) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
                   const isMafiaRole     = p.role === "الولد" || p.role === "الإكة";
@@ -1343,9 +1343,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
                       {/* ── Player name + badges ── */}
                       <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                          {p.name}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {/* Number badge — far-right in RTL (first in DOM) */}
+                          <span className="flex items-center justify-center w-6 h-6 text-xs font-bold rounded-full flex-shrink-0"
+                            style={{ backgroundColor: "#1E1E1E", color: isSelected ? "#D32F2F" : "#555555", border: `1px solid ${isSelected ? "#D32F2F44" : "#333333"}` }}>
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                            {p.name}
+                          </span>
+                        </div>
 
                         {/* Ally badge — exact Online Mode clone */}
                         {showAllyBadge && (
