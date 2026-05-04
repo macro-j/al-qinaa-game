@@ -1325,14 +1325,58 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
                       style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
 
-                      {/* ── Select button ── */}
+                      {/* ── RIGHT side (first in DOM = rightmost in RTL):
+                              Number badge + name/subtitle column ── */}
+                      <div className="flex items-center gap-3">
+
+                        {/* Index badge — prominent, isolated column */}
+                        <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
+                          style={{
+                            backgroundColor: isSelected ? "rgba(211,47,47,0.18)" : "rgba(255,255,255,0.06)",
+                            color:           isSelected ? "#FF6B6B" : "#888888",
+                            border: `1px solid ${isSelected ? "rgba(211,47,47,0.4)" : "rgba(255,255,255,0.08)"}`,
+                          }}>
+                          {idx + 1}
+                        </span>
+
+                        {/* Name + subtitles stacked */}
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                            {p.name}
+                          </span>
+
+                          {/* Ally badge */}
+                          {showAllyBadge && (
+                            <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                          )}
+
+                          {/* "أنت" self badge */}
+                          {showSelfBadge && (
+                            <span className="text-xs font-bold" style={{ color: "#999999" }}>(أنت)</span>
+                          )}
+
+                          {/* Seer result badge — only after host locks a target */}
+                          {showSeerBadge && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{
+                                backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
+                                color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
+                                border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                              }}>
+                              {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── LEFT side (last in DOM = leftmost in RTL): Select button ── */}
                       <button
                         disabled={seerLocked || (isSeerStep && isInvestigated)}
                         onClick={() => {
                           setSelectedTarget(p.name);
                           if (isSeerStep) setInvestigatedTarget(p.name);
                         }}
-                        className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
                         style={{
                           backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
                           color:           isSelected ? "#ffffff" : "#888888",
@@ -1340,42 +1384,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         }}>
                         {isSelected ? "تم الاختيار" : "اختر"}
                       </button>
-
-                      {/* ── Player name + badges ── */}
-                      <div className="flex flex-col items-end gap-0.5">
-                        <div className="flex items-center gap-2">
-                          {/* Number badge — far-right in RTL (first in DOM) */}
-                          <span className="flex items-center justify-center w-6 h-6 text-xs font-bold rounded-full flex-shrink-0"
-                            style={{ backgroundColor: "#1E1E1E", color: isSelected ? "#D32F2F" : "#555555", border: `1px solid ${isSelected ? "#D32F2F44" : "#333333"}` }}>
-                            {idx + 1}
-                          </span>
-                          <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                            {p.name}
-                          </span>
-                        </div>
-
-                        {/* Ally badge — exact Online Mode clone */}
-                        {showAllyBadge && (
-                          <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
-                        )}
-
-                        {/* "أنت" self badge — same layout as حليف but neutral gray */}
-                        {showSelfBadge && (
-                          <span className="text-xs font-bold" style={{ color: "#999999" }}>(أنت)</span>
-                        )}
-
-                        {/* Seer result badge — ONLY after host locks a target */}
-                        {showSeerBadge && (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{
-                              backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
-                              color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
-                              border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
-                            }}>
-                            {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
-                          </span>
-                        )}
-                      </div>
                     </div>
                   );
                 })}
