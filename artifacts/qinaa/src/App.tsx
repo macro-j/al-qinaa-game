@@ -301,8 +301,8 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
-          {/* Online Mode — BETA: AI-narrated multiplayer */}
-          <button
+          {/* Online Mode — BETA: AI-narrated multiplayer (hidden during Council Mode playtest) */}
+          {false && <button
             onClick={() => {
               const code = window.prompt("أدخل رمز المرور السري:");
               if (code === "0949" || code === "٠٩٤٩") {
@@ -327,7 +327,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               <span className="text-xs text-right" style={{ color: "#A8825F" }}>انضموا لغرفة واحدة، والراوي الذكي يتولى إدارة الجلسة</span>
             </div>
             <ChevronRight size={18} color="#FB923C" strokeWidth={2} className="rotate-180 flex-shrink-0" />
-          </button>
+          </button>}
 
           {/* Rules — ghost/outline style, visually subordinate */}
           <button
