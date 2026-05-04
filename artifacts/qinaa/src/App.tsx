@@ -1981,8 +1981,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     const finalTotalVoters = alivePlayers.length;
     const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
-    // Strict majority rule: execution requires more than half of alive players
-    const requiredVotes    = Math.floor(finalTotalVoters / 2) + 1;
+    // Strict majority rule: accused cannot vote, so eligible voters = alive - 1
+    const requiredVotes    = Math.floor((finalTotalVoters - 1) / 2) + 1;
     const canExecute       = finalVoteFor >= requiredVotes;
 
     const handleFinalVerdict = () => {
@@ -2070,7 +2070,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span>
               {canExecute
                 ? `إعدام ${accusedPlayer} ⚖️`
-                : `${requiredVotes - finalVoteFor} أصوات ناقصة للإعدام`}
+                : (() => {
+                    const missing = requiredVotes - finalVoteFor;
+                    if (missing === 1) return "ناقص صوت واحد للإعدام ⚖️";
+                    if (missing === 2) return "ناقص صوتان للإعدام ⚖️";
+                    return `ناقص ${missing} أصوات للإعدام ⚖️`;
+                  })()}
             </span>
           </motion.button>
           {skipNightBtn}
