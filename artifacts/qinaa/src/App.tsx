@@ -296,7 +296,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                   style={{ backgroundColor: "#10B98110", color: "#34D399", border: "1px solid #10B98120" }}>جديد ✨</span>
                 <span className="text-lg font-black text-white">طور المجلس</span>
               </div>
-              <span className="text-xs" style={{ color: "#6EE7B7" }}>شاشة عرض وراوي</span>
+              <span className="text-xs text-right" style={{ color: "#6EE7B7" }}>شاشة واحدة تجمعكم، والراوي يدير أحداث اللعبة</span>
             </div>
             <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
@@ -306,9 +306,10 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             onClick={() => onSelect("online")}
             className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "#120A06", border: "1px solid #FB923C33", boxShadow: "0 0 24px #FB923C11" }}>
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0 relative"
               style={{ backgroundColor: "#1F140A", border: "1px solid #FB923C22" }}>
-              <Smartphone size={24} color="#FB923C" strokeWidth={1.8} />
+              <Smartphone size={22} color="#FB923C" strokeWidth={1.8} style={{ position: "absolute", top: "8px", right: "10px" }} />
+              <Smartphone size={22} color="#FB923C" strokeWidth={1.8} style={{ position: "absolute", bottom: "8px", left: "10px", opacity: 0.55 }} />
             </div>
             <div className="flex flex-col items-end gap-1 flex-1 mx-4">
               <div className="flex items-center gap-2">
@@ -316,7 +317,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                   style={{ backgroundColor: "rgba(251,146,60,0.10)", color: "#FB923C", border: "1px solid rgba(251,146,60,0.25)" }}>تجريبي</span>
                 <span className="text-lg font-black text-white">طور الراوي الذكي</span>
               </div>
-              <span className="text-xs text-right" style={{ color: "#A8825F" }}>كل لاعب بجواله، وراوي بالذكاء الاصطناعي</span>
+              <span className="text-xs text-right" style={{ color: "#A8825F" }}>انضموا لغرفة واحدة، والراوي الذكي يتولى إدارة الجلسة</span>
             </div>
             <ChevronRight size={18} color="#FB923C" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
