@@ -1981,6 +1981,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     const finalTotalVoters = alivePlayers.length;
     const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
+    // Strict majority rule: execution requires more than half of alive players
+    const requiredVotes    = Math.floor(finalTotalVoters / 2) + 1;
+    const canExecute       = finalVoteFor >= requiredVotes;
 
     const handleFinalVerdict = () => {
       if (finalVoteFor > finalVoteAgainst) {
@@ -2007,6 +2010,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-2xl">👍</span>
               <span className="text-3xl font-black" style={{ color: "#8BC34A" }}>{finalVoteFor}</span>
               <span className="text-xs font-bold" style={{ color: "#4CAF50" }}>أوافق على الإعدام</span>
+              <span className="text-xs" style={{ color: "#4a5a40" }}>يحتاج {requiredVotes} أصوات للإعدام</span>
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => setFinalVoteFor(n => Math.max(0, n - 1))}
@@ -2051,18 +2055,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex-1" />
           <motion.button
             onClick={handleFinalVerdict}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
+            disabled={!canExecute}
+            whileTap={canExecute ? { scale: 0.95 } : {}}
+            whileHover={canExecute ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
+            style={{
+              backgroundColor: canExecute ? "#D32F2F" : "#2A1A1A",
+              color: canExecute ? "#fff" : "#555555",
+              boxShadow: canExecute ? "0 0 32px #D32F2F55" : "none",
+              cursor: canExecute ? "pointer" : "not-allowed",
+            }}>
             <Users size={20} strokeWidth={2} />
             <span>
-              {finalVoteFor > finalVoteAgainst
+              {canExecute
                 ? `إعدام ${accusedPlayer} ⚖️`
-                : finalVoteAgainst > finalVoteFor
-                ? `${accusedPlayer} يُفرج عنه`
-                : "تنفيذ الحكم"}
+                : `${requiredVotes - finalVoteFor} أصوات ناقصة للإعدام`}
             </span>
           </motion.button>
           {skipNightBtn}
