@@ -1255,11 +1255,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const ally = livePlayers.find(p => p.isAlive && p.role === "الإكة");
             if (!ally) return null;
             return (
-              <div className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl"
+              <div className="flex items-center justify-end gap-2 px-4 py-3 rounded-xl"
                 style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
-                <span className="text-sm font-bold text-white">{ally.name}</span>
+                <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>🐺 حليف</span>
                 <span className="text-xs" style={{ color: "#555555" }}>حليفك (الإكة):</span>
-                <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                <span className="text-sm font-bold text-white">{ally.name}</span>
               </div>
             );
           })()}
