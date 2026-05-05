@@ -2107,7 +2107,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: setup (default)
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+    <div className="min-h-screen w-full flex flex-col px-5 pt-3 pb-8" style={ROOT_STYLE}>
       {globalControls}
       <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
 
