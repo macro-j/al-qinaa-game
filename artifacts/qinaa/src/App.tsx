@@ -1086,18 +1086,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 justifyContent: "center",
                 gap: 16,
               }}>
-                <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <VenetianMask size={72} color="#1E1E1E" strokeWidth={1.2} />
-                  <div style={{ position: "absolute" }}>
-                    <Lock size={24} color="#3A3A3A" />
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك مخفي</span>
-                  <span style={{ color: "#2A2A2A", fontSize: 13, textAlign: "center" }}>
-                    اضغط لتكشف قناع {current.name}
-                  </span>
-                </div>
+                <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك مخفي</span>
+                <Lock size={18} color="#2A2A2A" />
+                <VenetianMask size={72} color="#1E1E1E" strokeWidth={1.2} />
+                <span style={{ color: "#2A2A2A", fontSize: 13, textAlign: "center" }}>
+                  اضغط لتكشف قناع {current.name}
+                </span>
               </div>
 
               {/* ── BACK (role reveal) ── */}
