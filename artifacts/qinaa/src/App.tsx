@@ -1991,6 +1991,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Strict majority rule: accused cannot vote, so eligible voters = alive - 1
     const requiredVotes    = Math.floor((finalTotalVoters - 1) / 2) + 1;
     const canExecute       = finalVoteFor >= requiredVotes;
+    const canPardon        = !canExecute && finalVoteAgainst >= requiredVotes;
 
     const handleFinalVerdict = () => {
       if (finalVoteFor > finalVoteAgainst) {
@@ -2061,22 +2062,24 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex-1" />
           <motion.button
-            onClick={handleFinalVerdict}
-            disabled={!canExecute}
-            whileTap={canExecute ? { scale: 0.95 } : {}}
-            whileHover={canExecute ? { scale: 1.02 } : {}}
+            onClick={canExecute ? () => handleExecute(accusedPlayer!) : canPardon ? handleStartNextNight : undefined}
+            disabled={!canExecute && !canPardon}
+            whileTap={canExecute || canPardon ? { scale: 0.95 } : {}}
+            whileHover={canExecute || canPardon ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
             style={{
-              backgroundColor: canExecute ? "#D32F2F" : "#2A1A1A",
-              color: canExecute ? "#fff" : "#555555",
-              boxShadow: canExecute ? "0 0 32px #D32F2F55" : "none",
-              cursor: canExecute ? "pointer" : "not-allowed",
+              backgroundColor: canExecute ? "#D32F2F" : canPardon ? "#1B5E20" : "#1A1A1A",
+              color: canExecute || canPardon ? "#fff" : "#555555",
+              boxShadow: canExecute ? "0 0 32px #D32F2F55" : canPardon ? "0 0 32px #2E7D3255" : "none",
+              cursor: canExecute || canPardon ? "pointer" : "not-allowed",
             }}>
             <Users size={20} strokeWidth={2} />
             <span>
               {canExecute
                 ? `إعدام ${accusedPlayer} ⚖️`
+                : canPardon
+                ? `العفو عن ${accusedPlayer} 🕊️`
                 : (() => {
                     const missing = requiredVotes - finalVoteFor;
                     if (missing === 1) return "ناقص صوت واحد للإعدام ⚖️";
