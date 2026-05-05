@@ -2113,7 +2113,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
         {/* ── Header ── */}
         <div className="flex flex-col gap-1">
-          <div className="flex flex-row-reverse items-center gap-2">
+          <div className="flex items-center gap-2">
             <Monitor size={18} color="#D32F2F" strokeWidth={1.8} />
             <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>طور المجلس</span>
           </div>
@@ -2123,7 +2123,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
         {/* ── Add Player Input ── */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex flex-row-reverse gap-2">
+          <div className="flex gap-2">
             <input
               ref={inputRef}
               value={newPlayer}
@@ -2164,15 +2164,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex flex-col rounded-2xl overflow-hidden"
             style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
             {players.map((name, idx) => (
-              <div key={name} className="flex flex-row-reverse items-center justify-between px-4 py-3.5"
+              <div key={name} className="flex items-center justify-between px-4 py-3.5"
                 style={{ borderBottom: idx < players.length - 1 ? "1px solid #141414" : "none" }}>
-                <div className="flex flex-row-reverse items-center gap-3">
+                {/* Right group: number badge + name (first in DOM = far right in RTL) */}
+                <div className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
                     style={{ backgroundColor: "#1A1A1A", color: "#D32F2F" }}>
                     {idx + 1}
                   </div>
                   <span className="text-sm font-semibold text-white">{name}</span>
                 </div>
+                {/* Trash icon: last in DOM = far left in RTL */}
                 <button onClick={() => removePlayer(name)}
                   className="flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150 active:scale-90"
                   style={{ backgroundColor: "transparent" }}>
