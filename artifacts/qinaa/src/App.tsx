@@ -1051,7 +1051,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Call-out ── */}
           <div className="flex flex-col items-center gap-2 py-4 rounded-2xl"
             style={{ backgroundColor: "#0A0A0A", border: "1px solid #1E1E1E" }}>
-            <span className="text-sm font-semibold" style={{ color: "#555555" }}>نداء إلى</span>
+            <span className="text-sm font-semibold" style={{ color: "#555555" }}>يستيقظ الآن :</span>
             <span className="text-3xl font-black text-white">{current.name}</span>
           </div>
 
@@ -1095,12 +1095,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك مخفي</span>
                   <span style={{ color: "#2A2A2A", fontSize: 13, textAlign: "center" }}>
-                    اضغط لكشف دورك
+                    اضغط لتكشف قناع {current.name}
                   </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
-                  <Lock size={13} color="#2A2A2A" />
-                  <span style={{ fontSize: 11, color: "#2A2A2A" }}>مخفي عن الجميع</span>
                 </div>
               </div>
 
@@ -1144,11 +1140,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
             </motion.div>
           </div>
-
-          {/* ── Hint text ── */}
-          <p className="text-xs text-center" style={{ color: "#2A2A2A" }}>
-            {isCardFlipped ? "قناعك مكشوف — لا أحد سواك يرى الشاشة" : "اضغط على البطاقة للكشف عن قناعك"}
-          </p>
 
           {/* ── Spacer ── */}
           <div className="flex-1" />
