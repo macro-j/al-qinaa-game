@@ -1255,15 +1255,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const ally = livePlayers.find(p => p.isAlive && p.role === "الإكة");
             if (!ally) return null;
             return (
-              <div className="flex items-center justify-start gap-4 px-3 py-2.5 rounded-xl w-full"
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full"
                 style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
-                {/* Badge — same dimensions as index numbers in the list below */}
-                <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-lg"
-                  style={{ backgroundColor: "rgba(153,27,27,0.3)", border: "1px solid rgba(211,47,47,0.3)" }}>
-                  🤝
+                {/* Wolf badge — first in DOM = far right in RTL, exact same w-8 h-8 as index numbers */}
+                <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-base"
+                  style={{ backgroundColor: "rgba(153,27,27,0.3)", border: "1px solid rgba(211,47,47,0.35)" }}>
+                  🐺
                 </span>
-                {/* Label + name — mirrors name column alignment */}
-                <div className="flex items-center gap-1 text-right">
+                {/* Label + name — second in DOM = left of badge in RTL */}
+                <div className="flex items-center gap-1">
                   <span className="text-xs" style={{ color: "#666666" }}>حليفك (الإكة):</span>
                   <span className="text-sm font-bold text-white">{ally.name}</span>
                 </div>
