@@ -1780,56 +1780,65 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 2: discussion — 2-min timer + player list
+    // SUB-PHASE 2: discussion — 60s timer + player list
     // ════════════════════════════════════════════
     if (daySubPhase === "discussion") {
+      const startVoting = () => {
+        triggerHaptic([50, 100, 50]);
+        const init: Record<string, number> = {};
+        alivePlayers.forEach(p => { init[p.name] = 0; });
+        setVoteCounts(init);
+        setTimerEndsAt(null);
+        setDaySubPhase("voting_tally");
+      };
+
       return (
-        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
-          {globalControls}
-          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
-            <div className="flex flex-col items-center gap-2 text-center pt-1">
-              <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش</span>
-              <h1 className="text-2xl font-black text-white">كل يدافع عن نفسه</h1>
-              <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                <DayTimerBar endsAt={timerEndsAt} maxSeconds={60} />
-              </div>
-            </div>
-            {morningBanner}
-            <div className="flex flex-col gap-2">
-              {alivePlayers.map((p) => (
-                <div key={p.name}
-                  className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-                  style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
-                  <div />
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
-                    {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
-                  </div>
+        <AutoAdvanceDiscussion timerEndsAt={timerEndsAt} onExpire={startVoting}>
+          <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+            {globalControls}
+            <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+              <div className="flex flex-col items-center gap-2 text-center pt-1">
+                <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
+                <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
+                <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
+                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={60} />
                 </div>
-              ))}
+              </div>
+              {morningBanner}
+              <div className="flex flex-col gap-2">
+                {alivePlayers.map((p, idx) => (
+                  <div key={p.name}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                    style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
+                    {/* Number badge — first in DOM = far right in RTL */}
+                    <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm"
+                      style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
+                      {idx + 1}
+                    </span>
+                    {/* Name + status — directly beside badge */}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
+                      {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex-1" />
+              <motion.button
+                onClick={startVoting}
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+                style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+                <Users size={20} strokeWidth={2} />
+                <span>بدء التصويت</span>
+              </motion.button>
+              {skipNightBtn}
+              {restartBtn}
             </div>
-            <div className="flex-1" />
-            <motion.button
-              onClick={() => {
-                triggerHaptic([50, 100, 50]);
-                const init: Record<string, number> = {};
-                alivePlayers.forEach(p => { init[p.name] = 0; });
-                setVoteCounts(init);
-                setTimerEndsAt(null);
-                setDaySubPhase("voting_tally");
-              }}
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.02 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
-              <Users size={20} strokeWidth={2} />
-              <span>بدء التصويت</span>
-            </motion.button>
-            {skipNightBtn}
-            {restartBtn}
           </div>
-        </div>
+        </AutoAdvanceDiscussion>
       );
     }
 
@@ -3254,6 +3263,25 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 }
 
 // ─── Game Over Screen ─────────────────────────────────────────────────────────
+
+// ── AutoAdvanceDiscussion — fires onExpire() once when timerEndsAt passes ─────
+function AutoAdvanceDiscussion({
+  timerEndsAt, onExpire, children,
+}: { timerEndsAt: number | null; onExpire: () => void; children: React.ReactNode }) {
+  const firedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!timerEndsAt) { firedRef.current = false; return; }
+    firedRef.current = false;
+    const id = setInterval(() => {
+      if (!firedRef.current && Date.now() >= timerEndsAt) {
+        firedRef.current = true;
+        onExpire();
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [timerEndsAt, onExpire]);
+  return <>{children}</>;
+}
 
 // ── DayTimerBar — animated progress bar + countdown for day phases ────────────
 function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | null; maxSeconds: number; urgentAt?: number }) {
