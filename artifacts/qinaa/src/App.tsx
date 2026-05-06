@@ -1089,12 +1089,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               }}>
                 <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك مخفي</span>
                 {/* Fixed bounding box for lock icon — identical on both faces */}
-                <div style={{ height: 48, width: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Lock size={40} color="#666666" />
+                <div style={{ height: 32, width: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Lock size={24} color="#666666" />
                 </div>
                 {/* Fixed bounding box for mask art — identical on both faces */}
-                <div style={{ height: 96, width: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <VenetianMask size={96} color="#2A2A2A" strokeWidth={1.2} />
+                <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <VenetianMask size={80} color="#2A2A2A" strokeWidth={1.2} />
                 </div>
                 <span style={{ color: "#444444", fontSize: 13, textAlign: "center" }}>
                   اضغط لتكشف قناع {current.name}
@@ -1122,13 +1122,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك يا {current.name} هو</span>
 
                 {/* Slot 2 — fixed bounding box for unlock icon, identical to front face */}
-                <div style={{ height: 48, width: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Unlock size={40} color="#4CAF50" />
+                <div style={{ height: 32, width: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Unlock size={24} color="#4CAF50" />
                 </div>
 
                 {/* Slot 3 — fixed bounding box for mask art, identical to front face */}
-                <div style={{ height: 96, width: 96, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
-                  <VenetianMask size={96} color={meta.color} strokeWidth={1.2} />
+                <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
+                  <VenetianMask size={80} color={meta.color} strokeWidth={1.2} />
                 </div>
 
                 {/* Slot 4 — role name, mirrors instruction text slot */}
