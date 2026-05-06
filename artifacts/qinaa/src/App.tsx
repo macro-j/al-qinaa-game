@@ -1870,25 +1870,27 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
             </div>
             <div className="flex flex-col gap-2">
-              {alivePlayers.map((p) => {
+              {alivePlayers.map((p, idx) => {
                 const count  = voteCounts[p.name] ?? 0;
                 const canAdd = count < perPlayerCap;
                 return (
                   <div key={p.name}
                     className="flex items-center justify-between px-3 py-2.5 rounded-xl"
                     style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
-                        disabled={count === 0}
-                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                        style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
-                        −
-                      </button>
-                      <span className="text-base font-black tabular-nums w-6 text-center"
-                        style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
-                        {count}
+                    {/* Right group: badge + name — first in DOM = far right in RTL */}
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm"
+                        style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
+                        {idx + 1}
                       </span>
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className="text-sm font-semibold" style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
+                        {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
+                      </div>
+                    </div>
+                    {/* Left group: voting controls — last in DOM = far left in RTL */}
+                    {/* Inside: + first (right of count), count, − last (left of count) */}
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: (prev[p.name] ?? 0) + 1 }))}
                         disabled={!canAdd}
@@ -1896,10 +1898,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         style={{ backgroundColor: "#001A00", color: "#8BC34A", border: "1px solid #8BC34A44" }}>
                         +
                       </button>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-sm font-semibold" style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
-                      {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
+                      <span className="text-base font-black tabular-nums w-6 text-center"
+                        style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
+                        {count}
+                      </span>
+                      <button
+                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
+                        disabled={count === 0}
+                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
+                        style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
+                        −
+                      </button>
                     </div>
                   </div>
                 );
