@@ -1521,7 +1521,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const bgColor   = isTownWin ? "#000D1A" : "#0D0000";
     const borderCol = isTownWin ? "#1565C066" : "#D32F2F66";
     const glowCol   = isTownWin ? "#1565C022" : "#D32F2F22";
-    const headLabel = isTownWin ? "انتصار المدينة" : "انتصار المافيا";
+    const headLabel = isTownWin ? "انتصرت المدينة" : "انتصرت المافيا";
     const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
 
     const resetCore = () => {
