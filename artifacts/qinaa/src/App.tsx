@@ -2245,7 +2245,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
             <ArrowRight size={16} strokeWidth={2} />
-            <span>العودة لاختيار الطور</span>
+            <span>العودة للقائمة الرئيسية</span>
           </motion.button>
         </div>
 
@@ -2307,7 +2307,7 @@ function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => vo
             className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
             <ArrowRight size={16} strokeWidth={2} />
-            <span>العودة لاختيار الطور</span>
+            <span>العودة للقائمة الرئيسية</span>
           </button>
         </div>
       </div>
