@@ -1084,12 +1084,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 16,
+                gap: 20,
+                padding: "20px 16px",
               }}>
-                <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك مخفي</span>
-                <Lock size={18} color="#2A2A2A" />
-                <VenetianMask size={72} color="#1E1E1E" strokeWidth={1.2} />
-                <span style={{ color: "#2A2A2A", fontSize: 13, textAlign: "center" }}>
+                <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك مخفي</span>
+                <Lock size={32} color="#666666" />
+                <VenetianMask size={88} color="#2A2A2A" strokeWidth={1.2} />
+                <span style={{ color: "#444444", fontSize: 13, textAlign: "center" }}>
                   اضغط لتكشف قناع {current.name}
                 </span>
               </div>
@@ -1108,18 +1109,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 16,
+                gap: 20,
                 padding: "20px 16px",
               }}>
                 {/* Slot 1 — mirrors "قناعك مخفي" */}
-                <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك يا {current.name} هو</span>
+                <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك يا {current.name} هو</span>
 
-                {/* Slot 2 — mirrors lone Lock icon, identical size/color */}
-                <Unlock size={18} color="#2A2A2A" />
+                {/* Slot 2 — unlock icon, bright to contrast with closed lock */}
+                <Unlock size={32} color="#4CAF50" />
 
-                {/* Slot 3 — mask art, identical size + margins to hidden side */}
-                <div style={{ filter: `drop-shadow(0 0 16px ${meta.color}88)` }}>
-                  <VenetianMask size={72} color={meta.color} strokeWidth={1.2} />
+                {/* Slot 3 — mask art, same size as hidden side */}
+                <div style={{ filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
+                  <VenetianMask size={88} color={meta.color} strokeWidth={1.2} />
                 </div>
 
                 {/* Slot 4 — role name, mirrors instruction text slot */}
