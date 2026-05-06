@@ -1111,24 +1111,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 gap: 16,
                 padding: "20px 16px",
               }}>
-                {/* Slot 1 — title (mirrors "قناعك مخفي") */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#555", fontSize: 11, letterSpacing: "0.12em", fontWeight: 600 }}>أنت :</span>
-                  <span style={{ color: "#CCCCCC", fontSize: 14, fontWeight: 800 }}>{current.name}</span>
-                </div>
+                {/* Slot 1 — mirrors "قناعك مخفي" */}
+                <span style={{ color: "#3A3A3A", fontSize: 18, fontWeight: 800 }}>قناعك يا {current.name} هو</span>
 
-                {/* Slot 2 — status row (mirrors lone Lock icon) */}
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <Unlock size={13} color="#3A5A3A" />
-                  <span style={{ fontSize: 11, color: "#3A5A3A", fontWeight: 600 }}>قناعك مكشوف لجميع المجلس</span>
-                </div>
+                {/* Slot 2 — mirrors lone Lock icon, identical size/color */}
+                <Unlock size={18} color="#2A2A2A" />
 
-                {/* Slot 3 — mask art (same size + alignment as hidden side) */}
+                {/* Slot 3 — mask art, identical size + margins to hidden side */}
                 <div style={{ filter: `drop-shadow(0 0 16px ${meta.color}88)` }}>
                   <VenetianMask size={72} color={meta.color} strokeWidth={1.2} />
                 </div>
 
-                {/* Slot 4 — role title (mirrors instruction text) */}
+                {/* Slot 4 — role name, mirrors instruction text slot */}
                 <span style={{
                   color: "#FFFFFF", fontSize: 28, fontWeight: 900,
                   fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
@@ -1137,7 +1131,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   {current.role}
                 </span>
 
-                {/* Description box — below the 4 mirrored slots */}
+                {/* Description box — extra slot below the 4 mirrored elements */}
                 <div style={{
                   width: "100%",
                   backgroundColor: "rgba(0,0,0,0.45)",
@@ -1148,12 +1142,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <span style={{ color: "#888888", fontSize: 11, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
                     {meta.desc}
                   </span>
-                </div>
-
-                {/* Footer */}
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <Unlock size={11} color="#383838" />
-                  <span style={{ fontSize: 10, color: "#383838", letterSpacing: "0.04em" }}>كشفت قناعك — لا أحد سواك يرى الشاشة</span>
                 </div>
               </div>
 
