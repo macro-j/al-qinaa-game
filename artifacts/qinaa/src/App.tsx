@@ -1107,46 +1107,53 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifyContent: "center",
+                gap: 16,
                 padding: "20px 16px",
               }}>
-                {/* Header — player name */}
+                {/* Slot 1 — title (mirrors "قناعك مخفي") */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#555", fontSize: 11, letterSpacing: "0.12em", fontWeight: 600 }}>أنت :</span>
-                  <span style={{ color: "#CCCCCC", fontSize: 13, fontWeight: 700 }}>{current.name}</span>
+                  <span style={{ color: "#CCCCCC", fontSize: 14, fontWeight: 800 }}>{current.name}</span>
                 </div>
 
-                {/* Mask icon + role name */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                  <div style={{ filter: `drop-shadow(0 0 16px ${meta.color}88)` }}>
-                    <VenetianMask size={60} color={meta.color} strokeWidth={1.2} />
-                  </div>
-                  <span style={{
-                    color: "#FFFFFF", fontSize: 30, fontWeight: 900,
-                    fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
-                    textShadow: `0 0 24px ${meta.color}66`,
-                  }}>
-                    {current.role}
-                  </span>
+                {/* Slot 2 — status row (mirrors lone Lock icon) */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Unlock size={13} color="#3A5A3A" />
+                  <span style={{ fontSize: 11, color: "#3A5A3A", fontWeight: 600 }}>قناعك مكشوف لجميع المجلس</span>
                 </div>
 
-                {/* Description box */}
+                {/* Slot 3 — mask art (same size + alignment as hidden side) */}
+                <div style={{ filter: `drop-shadow(0 0 16px ${meta.color}88)` }}>
+                  <VenetianMask size={72} color={meta.color} strokeWidth={1.2} />
+                </div>
+
+                {/* Slot 4 — role title (mirrors instruction text) */}
+                <span style={{
+                  color: "#FFFFFF", fontSize: 28, fontWeight: 900,
+                  fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
+                  textShadow: `0 0 24px ${meta.color}66`,
+                }}>
+                  {current.role}
+                </span>
+
+                {/* Description box — below the 4 mirrored slots */}
                 <div style={{
                   width: "100%",
                   backgroundColor: "rgba(0,0,0,0.45)",
                   borderRadius: 10,
-                  padding: "12px 14px",
+                  padding: "10px 14px",
                   border: `1px solid ${meta.color}22`,
                 }}>
-                  <span style={{ color: "#999999", fontSize: 12, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
+                  <span style={{ color: "#888888", fontSize: 11, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
                     {meta.desc}
                   </span>
                 </div>
 
                 {/* Footer */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Unlock size={12} color="#444" />
-                  <span style={{ fontSize: 10, color: "#444", letterSpacing: "0.05em" }}>كشفت قناعك — لا أحد سواك يرى الشاشة</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Unlock size={11} color="#383838" />
+                  <span style={{ fontSize: 10, color: "#383838", letterSpacing: "0.04em" }}>كشفت قناعك — لا أحد سواك يرى الشاشة</span>
                 </div>
               </div>
 
