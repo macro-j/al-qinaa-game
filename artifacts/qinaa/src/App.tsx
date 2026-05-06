@@ -1606,15 +1606,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </p>
             <div className="flex flex-col gap-2">
               {dayResult.name && (
-                <div className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl"
                   style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F33" }}>
+                  {/* Name first in DOM = far right in RTL */}
                   <span className="text-sm font-bold" style={{ color: "#FF6B6B" }}>{dayResult.name}</span>
                   <span className="text-xs font-semibold" style={{ color: "#888" }}>💀 المقتول</span>
                 </div>
               )}
               {dayResult.silenced && (
-                <div className="flex flex-row-reverse items-center justify-between px-3 py-2 rounded-xl"
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl"
                   style={{ backgroundColor: "#0D0700", border: "1px solid #FF8F0033" }}>
+                  {/* Name first in DOM = far right in RTL */}
                   <span className="text-sm font-bold" style={{ color: "#FFB300" }}>{dayResult.silenced}</span>
                   <span className="text-xs font-semibold" style={{ color: "#888" }}>🤐 الساكت</span>
                 </div>
@@ -1632,11 +1634,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <div key={p.name}
                 className="flex items-center justify-between px-3 py-2 rounded-xl"
                 style={{ backgroundColor: "#0A0A0A", border: `1px solid ${p.isAlive ? "#1E1E1E" : "#141414"}`, opacity: p.isAlive ? 1 : 0.38 }}>
-                <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
+                {/* Player name + skull — first in DOM = far right in RTL */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#3A3A3A" }}>{p.name}</span>
                   {!p.isAlive && <Skull size={12} color="#3A3A3A" />}
+                  <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#3A3A3A" }}>{p.name}</span>
                 </div>
+                {/* Role name — last in DOM = far left in RTL */}
+                <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
               </div>
             );
           })}
