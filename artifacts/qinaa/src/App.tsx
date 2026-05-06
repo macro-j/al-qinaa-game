@@ -1976,7 +1976,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F44" }}>
               <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
               <span className="text-lg font-black text-white">{accusedPlayer}</span>
-              <p className="text-xs text-center" style={{ color: "#555" }}>لديه دقيقة كاملة للدفاع عن نفسه</p>
+              <p className="text-xs text-center" style={{ color: "#555" }}>لديه 30 ثانية للدفاع عن نفسه</p>
               <div className="mt-2 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
                 <DayTimerBar endsAt={timerEndsAt} maxSeconds={30} />
               </div>
