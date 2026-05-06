@@ -3267,9 +3267,9 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 // ── AutoAdvanceDiscussion — fires onExpire() once when timerEndsAt passes ─────
 function AutoAdvanceDiscussion({
   timerEndsAt, onExpire, children,
-}: { timerEndsAt: number | null; onExpire: () => void; children: React.ReactNode }) {
-  const firedRef = React.useRef(false);
-  React.useEffect(() => {
+}: { timerEndsAt: number | null; onExpire: () => void; children: ReactNode }) {
+  const firedRef = useRef(false);
+  useEffect(() => {
     if (!timerEndsAt) { firedRef.current = false; return; }
     firedRef.current = false;
     const id = setInterval(() => {
