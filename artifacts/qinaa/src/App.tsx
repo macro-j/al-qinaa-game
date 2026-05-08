@@ -301,6 +301,26 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <ChevronRight size={18} color="#10B981" strokeWidth={2} className="rotate-180 flex-shrink-0" />
           </button>
 
+          {/* AI Narrator Mode — Coming Soon placeholder */}
+          <button
+            disabled
+            className="w-full flex flex-row-reverse items-center justify-between px-5 py-5 rounded-2xl opacity-40 cursor-not-allowed"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl flex-shrink-0"
+              style={{ backgroundColor: "#181818", border: "1px solid #2A2A2A" }}>
+              <Smartphone size={24} color="#888888" strokeWidth={1.8} />
+            </div>
+            <div className="flex flex-col items-end gap-1 flex-1 mx-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-md"
+                  style={{ backgroundColor: "#2A2A2A22", color: "#888888", border: "1px solid #2A2A2A" }}>قريباً ⏳</span>
+                <span className="text-lg font-black" style={{ color: "#888888" }}>طور الراوي الذكي</span>
+              </div>
+              <span className="text-xs text-right" style={{ color: "#555555" }}>كل لاعب على هاتفه، والذكاء الاصطناعي يروي</span>
+            </div>
+            <ChevronRight size={18} color="#444444" strokeWidth={2} className="rotate-180 flex-shrink-0" />
+          </button>
+
           {/* Online Mode — BETA: AI-narrated multiplayer (hidden during Council Mode playtest) */}
           {false && <button
             onClick={() => {
