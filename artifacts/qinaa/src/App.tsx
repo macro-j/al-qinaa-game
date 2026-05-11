@@ -803,6 +803,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
     setNightTransitionLabel("الجميع ينام الكل يغمض عينه");
     setNightTransition("city_sleeps");
+    playGameAudio("start.m4a"); // direct call — guarantees audio on every night start
   };
 
   const handleNext = () => {
