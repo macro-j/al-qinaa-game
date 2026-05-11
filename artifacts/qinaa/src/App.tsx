@@ -147,6 +147,30 @@ function clearSession() {
   localStorage.removeItem(STORAGE_SESSION);
 }
 
+// ─── NarratorMode persistence ────────────────────────────────────────────────
+
+const STORAGE_NARRATOR = "qinaa_narrator_state";
+const STORAGE_MODE     = "qinaa_selected_mode";
+
+function loadNarratorState(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_NARRATOR);
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  } catch { return null; }
+}
+function saveNarratorState(s: Record<string, unknown>) {
+  try { localStorage.setItem(STORAGE_NARRATOR, JSON.stringify(s)); } catch { /* quota — ignore */ }
+}
+function clearNarratorState() {
+  localStorage.removeItem(STORAGE_NARRATOR);
+}
+function loadSelectedMode(): "online" | "narrator" | null {
+  try {
+    const v = localStorage.getItem(STORAGE_MODE);
+    return v === "online" || v === "narrator" ? v : null;
+  } catch { return null; }
+}
+
 // ─── Socket Singleton ─────────────────────────────────────────────────────────
 
 let _socket: Socket | null = null;
@@ -551,56 +575,82 @@ function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
+  // ── Hydrate from localStorage on mount (read once) ──
+  const SAVED = loadNarratorState();
+  const pick = <T,>(key: string, fallback: T): T =>
+    (SAVED && key in SAVED ? (SAVED[key] as T) : fallback);
+
   // ── Setup phase state ──
-  const [players, setPlayers]       = useState<string[]>([]);
+  const [players, setPlayers]       = useState<string[]>(() => pick("players", [] as string[]));
   const [newPlayer, setNewPlayer]   = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
-  const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>([]);
-  const [currentIndex, setCurrentIndex]     = useState(0);
+  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "game_over">(() => pick("phase", "setup" as const));
+  const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
+  const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
   const [isPressing, setIsPressing]             = useState(false);
-  const [hasRevealedOnce, setHasRevealedOnce]   = useState(false);
+  const [hasRevealedOnce, setHasRevealedOnce]   = useState(() => pick("hasRevealedOnce", false));
   const [isCardFlipped, setIsCardFlipped]       = useState(false);
 
   // ── Game loop state ──
-  const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>([]);
-  const [nightStep, setNightStep]               = useState<string>("الولد");
-  const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null }>({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+  const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => pick("livePlayers", [] as LivePlayer[]));
+  const [nightStep, setNightStep]               = useState<string>(() => pick("nightStep", "الولد"));
+  const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null }>(() => pick("nightActions", { killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null }));
   const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
-  const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(null);
-  const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>({ died: false, name: null, silenced: null });
-  const [nightCount, setNightCount]             = useState(1);
+  const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(() => pick("investigatedTarget", null as string | null));
+  const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>(() => pick("dayResult", { died: false, name: null, silenced: null }));
+  const [nightCount, setNightCount]             = useState(() => pick("nightCount", 1));
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
-  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">("results");
+  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
 
   // ── Night cinematic transitions ──
-  const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">("none");
-  const [nightTransitionLabel, setNightTransitionLabel] = useState<string>("");
+  const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">(() => pick("nightTransition", "none" as const));
+  const [nightTransitionLabel, setNightTransitionLabel] = useState<string>(() => pick("nightTransitionLabel", ""));
   const nightTransitionNextRef                         = useRef<(() => void) | null>(null);
   const postRevealRef                                  = useRef<(() => void) | null>(null);
-  const [isNightKillReveal, setIsNightKillReveal]     = useState(false);
+  const [isNightKillReveal, setIsNightKillReveal]     = useState(() => pick("isNightKillReveal", false));
 
   // ── Day/night timers — local epoch ms passed to <Countdown /> ──
   const [timerEndsAt, setTimerEndsAt]   = useState<number | null>(null);
 
   // ── Smart voting engine ──
-  const [voteCounts, setVoteCounts]         = useState<Record<string, number>>({});
-  const [accusedPlayer, setAccusedPlayer]   = useState<string | null>(null);
-  const [finalVoteFor, setFinalVoteFor]     = useState(0);
-  const [finalVoteAgainst, setFinalVoteAgainst] = useState(0);
+  const [voteCounts, setVoteCounts]         = useState<Record<string, number>>(() => pick("voteCounts", {} as Record<string, number>));
+  const [accusedPlayer, setAccusedPlayer]   = useState<string | null>(() => pick("accusedPlayer", null as string | null));
+  const [finalVoteFor, setFinalVoteFor]     = useState(() => pick("finalVoteFor", 0));
+  const [finalVoteAgainst, setFinalVoteAgainst] = useState(() => pick("finalVoteAgainst", 0));
 
   // ── Win condition + post-execution screens ──
-  const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia"; killerName: string | null } | null>(null);
-  const [executionReveal, setExecutionReveal] = useState<{ name: string; role: string; color: string } | null>(null);
+  const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia"; killerName: string | null } | null>(() => pick("gameOver", null as { winner: "town" | "mafia"; killerName: string | null } | null));
+  const [executionReveal, setExecutionReveal] = useState<{ name: string; role: string; color: string } | null>(() => pick("executionReveal", null as { name: string; role: string; color: string } | null));
 
   // ── Night 15-second action timer ──
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
   // ── Global audio mute ──
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
+
+  // ── Sync persistable state to localStorage on every change ──
+  useEffect(() => {
+    if (phase === "setup" && players.length === 0) {
+      clearNarratorState();
+      return;
+    }
+    saveNarratorState({
+      phase, players, assignedRoles, currentIndex, hasRevealedOnce,
+      livePlayers, nightStep, nightActions, investigatedTarget,
+      dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
+      isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
+      finalVoteAgainst, gameOver, executionReveal, isMuted,
+    });
+  }, [
+    phase, players, assignedRoles, currentIndex, hasRevealedOnce,
+    livePlayers, nightStep, nightActions, investigatedTarget,
+    dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
+    isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
+    finalVoteAgainst, gameOver, executionReveal, isMuted,
+  ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
   const audioCache     = useRef<Record<string, HTMLAudioElement>>({});
@@ -1567,6 +1617,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       resetCore();
       setPlayers([]);
       setPhase("setup");
+      clearNarratorState();
     };
 
     const handlePlayAgainSamePlayers = () => {
@@ -1574,6 +1625,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       resetCore();
       setPlayers(sameNames);
       setPhase("setup");
+      clearNarratorState();
     };
 
     return (
@@ -1706,6 +1758,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const alivePlayers = livePlayers.filter(p => p.isAlive);
 
     const restartGame = () => {
+      clearNarratorState();
       setPhase("setup");
       setAssignedRoles([]);
       setLivePlayers([]);
@@ -4180,7 +4233,12 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
 
 export default function App() {
   // ── Top-level mode gate — null = mode selector, "online" / "narrator" = game mode
-  const [selectedMode, setSelectedMode] = useState<"online" | "narrator" | null>(null);
+  // Hydrated from localStorage so a mid-game refresh keeps the user inside their mode.
+  const [selectedMode, setSelectedMode] = useState<"online" | "narrator" | null>(() => loadSelectedMode());
+  useEffect(() => {
+    if (selectedMode) localStorage.setItem(STORAGE_MODE, selectedMode);
+    else localStorage.removeItem(STORAGE_MODE);
+  }, [selectedMode]);
 
   const [screen, setScreen]         = useState<Screen>("rejoining");
   const [lobby, setLobby]           = useState<LobbyState | null>(null);
@@ -4769,7 +4827,7 @@ export default function App() {
     return <GameModeSelector onSelect={setSelectedMode} />;
   }
   if (selectedMode === "narrator") {
-    return <NarratorMode onBack={() => setSelectedMode(null)} />;
+    return <NarratorMode onBack={() => { clearNarratorState(); setSelectedMode(null); }} />;
   }
 
   // ── Online Mode: all existing screen rendering below (untouched) ──────────
