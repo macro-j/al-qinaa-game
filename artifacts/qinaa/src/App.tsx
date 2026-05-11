@@ -38,6 +38,8 @@ import {
   ExternalLink,
   Volume2,
   VolumeX,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -572,6 +574,21 @@ function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
   return shuffle(assigned);
 }
 
+// ─── Expansion Pack — static mod definitions (UI only, no logic yet) ─────────
+
+const EXPANSION_MODS: { id: string; name: string; description: string }[] = [
+  {
+    id: "fool",
+    name: "المجنون",
+    description: "يفوز إذا أقنع المجلس بالتصويت ضده وإعدامه",
+  },
+  {
+    id: "hunter",
+    name: "الصياد",
+    description: "يمكنه إعدام لاعب واحد إذا تم إعدامه بالتصويت",
+  },
+];
+
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
@@ -630,6 +647,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
   // ── Global audio mute ──
   const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
+
+  // ── Expansion Pack state (UI only — logic wired in future sprint) ──
+  const [isModsMenuOpen, setIsModsMenuOpen]   = useState(false);
+  const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
+    () => EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {})
+  );
+  const toggleMod = (id: string) =>
+    setActiveMods(prev => ({ ...prev, [id]: !prev[id] }));
 
   // ── Sync persistable state to localStorage on every change ──
   useEffect(() => {
@@ -2287,6 +2312,128 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
         {/* ── Spacer ── */}
         <div className="flex-1" />
+
+        {/* ── Expansion Pack ── */}
+        <div className="flex flex-col rounded-2xl overflow-hidden"
+          style={{ border: "1px solid #1E1E1E", backgroundColor: "#080808" }}>
+
+          {/* Master header row */}
+          <button
+            onClick={() => setIsModsMenuOpen(v => !v)}
+            className="flex items-center justify-between w-full px-4 py-3.5 active:opacity-70 transition-opacity"
+            style={{ background: "none", border: "none", cursor: "pointer" }}>
+
+            {/* Right: icon + title (first in DOM = rightmost in RTL) */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "linear-gradient(135deg,#3A0000,#1A0000)", border: "1px solid #3D1212" }}>
+                <Sparkles size={15} color="#D32F2F" strokeWidth={2} />
+              </div>
+              <div className="flex flex-col items-start gap-0.5">
+                <span className="text-sm font-black text-right" style={{ color: "#CCCCCC" }}>إضافات القناع 🎭</span>
+                <span className="text-xs text-right" style={{ color: "#444444" }}>أدوار إضافية للتجربة</span>
+              </div>
+            </div>
+
+            {/* Left: master toggle + chevron (last in DOM = leftmost in RTL) */}
+            <div className="flex items-center gap-2.5">
+              {/* Pill toggle */}
+              <div
+                onClick={e => { e.stopPropagation(); setIsModsMenuOpen(v => !v); }}
+                style={{
+                  width: 44, height: 26, borderRadius: 13, flexShrink: 0,
+                  backgroundColor: isModsMenuOpen ? "#D32F2F" : "#1E1E1E",
+                  border: `1px solid ${isModsMenuOpen ? "#B71C1C" : "#2A2A2A"}`,
+                  position: "relative", transition: "background-color 0.22s, border-color 0.22s",
+                  cursor: "pointer",
+                }}>
+                <div style={{
+                  width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
+                  position: "absolute", top: 3,
+                  right: isModsMenuOpen ? 3 : undefined,
+                  left: isModsMenuOpen ? undefined : 3,
+                  boxShadow: "0 1px 3px #0006",
+                  transition: "right 0.22s, left 0.22s",
+                }} />
+              </div>
+              {/* Chevron */}
+              <motion.div
+                animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 22 }}>
+                <ChevronDown size={16} color="#444444" strokeWidth={2.5} />
+              </motion.div>
+            </div>
+          </button>
+
+          {/* Expandable role cards */}
+          <AnimatePresence initial={false}>
+            {isModsMenuOpen && (
+              <motion.div
+                key="mods-list"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                style={{ overflow: "hidden" }}>
+                {/* Divider */}
+                <div style={{ height: 1, backgroundColor: "#161616", margin: "0 16px" }} />
+                <div className="flex flex-col gap-0">
+                  {EXPANSION_MODS.map((mod, idx) => (
+                    <div key={mod.id}
+                      className="flex items-center justify-between px-4 py-3.5"
+                      style={{
+                        borderTop: idx > 0 ? "1px solid #111111" : "none",
+                        background: activeMods[mod.id]
+                          ? "linear-gradient(90deg,#0E0000 0%,#080808 100%)"
+                          : "transparent",
+                        transition: "background 0.2s",
+                      }}>
+
+                      {/* Right: role name + description */}
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0 pr-0 pl-4">
+                        <span className="text-sm font-black text-right"
+                          style={{ color: activeMods[mod.id] ? "#CCCCCC" : "#555555" }}>
+                          {mod.name}
+                        </span>
+                        <span className="text-xs text-right leading-relaxed"
+                          style={{ color: activeMods[mod.id] ? "#4A4A4A" : "#303030" }}>
+                          {mod.description}
+                        </span>
+                      </div>
+
+                      {/* Left: individual toggle */}
+                      <button
+                        onClick={() => toggleMod(mod.id)}
+                        style={{
+                          width: 36, height: 22, borderRadius: 11, flexShrink: 0,
+                          backgroundColor: activeMods[mod.id] ? "#D32F2F" : "#1A1A1A",
+                          border: `1px solid ${activeMods[mod.id] ? "#B71C1C" : "#242424"}`,
+                          position: "relative", cursor: "pointer",
+                          transition: "background-color 0.2s, border-color 0.2s",
+                        }}>
+                        <div style={{
+                          width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
+                          position: "absolute", top: 3,
+                          right: activeMods[mod.id] ? 3 : undefined,
+                          left: activeMods[mod.id] ? undefined : 3,
+                          boxShadow: "0 1px 3px #0006",
+                          transition: "right 0.2s, left 0.2s",
+                        }} />
+                      </button>
+
+                    </div>
+                  ))}
+                </div>
+                {/* Bottom caption */}
+                <div className="px-4 py-2.5" style={{ borderTop: "1px solid #111111" }}>
+                  <p className="text-xs text-right" style={{ color: "#2D2D2D" }}>
+                    الأدوار الإضافية قيد التطوير — ستُطبَّق في نسخة قادمة
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* ── Bottom: helper text + CTA + back ── */}
         <div className="flex flex-col gap-3">
