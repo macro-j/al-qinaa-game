@@ -558,7 +558,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
+  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "game_over">("setup");
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>([]);
   const [currentIndex, setCurrentIndex]     = useState(0);
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
@@ -768,7 +768,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
-    setPhase("distribution");
+    setPhase("pre_distribution");
   };
 
   // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
@@ -1022,6 +1022,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // ── All phase content lives here so we can wrap it in AnimatePresence ──
   const renderPhaseContent = (): React.ReactNode => {
+
+  // PHASE: pre_distribution — "Everyone Sleep" atmospheric gate
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "pre_distribution") {
+    return (
+      <PreDistributionScreen
+        onStart={() => setPhase("distribution")}
+        playGameAudio={playGameAudio}
+      />
+    );
+  }
 
   // PHASE: distribution
   // ─────────────────────────────────────────────────────────────────────────
@@ -3280,6 +3291,35 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
         <LeaveButton onLeave={onLeave} />
         <Footer />
       </div>
+    </div>
+  );
+}
+
+// ─── Pre-Distribution "Everyone Sleep" Gate ───────────────────────────────────
+function PreDistributionScreen({
+  onStart,
+  playGameAudio,
+}: {
+  onStart: () => void;
+  playGameAudio: (fileName: string) => void;
+}) {
+  useEffect(() => {
+    playGameAudio("start.m4a");
+  }, []);
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-10 px-8" style={ROOT_STYLE}>
+      <Moon size={56} color="#1E1E3A" strokeWidth={1} style={{ opacity: 0.7 }} />
+      <p className="text-2xl font-black text-center leading-relaxed"
+        style={{ color: "#2A2A4A" }}>
+        الجميع ينام.. الكل يغمض عينه
+      </p>
+      <button
+        onClick={onStart}
+        className="w-full max-w-xs py-4 rounded-2xl text-base font-bold tracking-wide transition-all duration-200 active:scale-95"
+        style={{ backgroundColor: "#D32F2F", color: "#FFFFFF", border: "none" }}>
+        بدء توزيع الأدوار 🎭
+      </button>
     </div>
   );
 }
