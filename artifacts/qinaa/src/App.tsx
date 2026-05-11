@@ -381,7 +381,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </p>
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-                الإصدار التجريبي — Beta v1.0.0
+                الإصدار التجريبي الثاني — Beta v2.0.0
               </span>
             </div>
 
