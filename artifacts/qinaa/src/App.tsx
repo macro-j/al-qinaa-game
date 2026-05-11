@@ -3312,7 +3312,8 @@ function PreDistributionScreen({
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center gap-10 px-8" style={ROOT_STYLE}>
       <Moon size={56} color="#3A3A6A" strokeWidth={1} style={{ opacity: 0.85 }} />
-      <p className="text-3xl font-black text-center leading-relaxed animate-pulse text-white">
+      <p className="text-2xl font-black text-center leading-relaxed"
+        style={{ color: "#2A2A4A" }}>
         الجميع ينام.. الكل يغمض عينه
       </p>
     </div>
