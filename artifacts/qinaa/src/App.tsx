@@ -39,7 +39,7 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
-  Sparkles,
+  Puzzle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -581,35 +581,40 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     id: "madman",
     name: "المجنون",
     description: "يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار",
-    accent: "#C084FC",
-    border: "rgba(88,28,135,0.35)",
-    glow: "rgba(192,132,252,0.06)",
+    accent: "#E879F9",
+    border: "rgba(112,26,117,0.35)",
+    glow: "rgba(232,121,249,0.06)",
   },
   {
     id: "twins",
     name: "التوأم",
     description: "قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً",
-    accent: "#60A5FA",
-    border: "rgba(30,58,138,0.35)",
-    glow: "rgba(96,165,250,0.06)",
+    accent: "#22D3EE",
+    border: "rgba(8,51,68,0.35)",
+    glow: "rgba(34,211,238,0.06)",
   },
   {
     id: "avenger",
     name: "المنتقم",
     description: "إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر",
-    accent: "#F87171",
-    border: "rgba(127,29,29,0.35)",
-    glow: "rgba(248,113,113,0.06)",
+    accent: "#F59E0B",
+    border: "rgba(120,53,15,0.35)",
+    glow: "rgba(245,158,11,0.06)",
   },
   {
     id: "magician",
     name: "الساحر",
     description: "يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل",
-    accent: "#34D399",
-    border: "rgba(6,78,59,0.35)",
-    glow: "rgba(52,211,153,0.06)",
+    accent: "#A3E635",
+    border: "rgba(54,83,20,0.35)",
+    glow: "rgba(163,230,53,0.06)",
   },
 ];
+
+// Slot cost per mod — used for player-count validation
+const MOD_COST: Record<string, number> = { madman: 1, twins: 2, avenger: 1, magician: 1 };
+// Base roles that always consume slots (Boy, Akka, Old Man, Girl)
+const BASE_ROLES_COUNT = 4;
 
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
@@ -675,8 +680,39 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
     () => EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {})
   );
-  const toggleMod = (id: string) =>
-    setActiveMods(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleMod = (id: string) => {
+    setActiveMods(prev => {
+      if (prev[id]) return { ...prev, [id]: false }; // always allow turning off
+      const availableSlots = players.length - BASE_ROLES_COUNT;
+      const usedSlots = Object.entries(prev)
+        .filter(([, on]) => on)
+        .reduce((sum, [modId]) => sum + (MOD_COST[modId] ?? 1), 0);
+      if (usedSlots + (MOD_COST[id] ?? 1) > availableSlots) return prev; // budget exceeded
+      return { ...prev, [id]: true };
+    });
+  };
+
+  // Auto-reset: if player count drops and active mods no longer fit, turn off the excess ones
+  useEffect(() => {
+    const availableSlots = players.length - BASE_ROLES_COUNT;
+    if (availableSlots <= 0) {
+      setActiveMods(EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {} as Record<string, boolean>));
+      return;
+    }
+    setActiveMods(prev => {
+      let used = 0;
+      const next = { ...prev };
+      for (const mod of EXPANSION_MODS) {
+        if (next[mod.id]) {
+          const cost = MOD_COST[mod.id] ?? 1;
+          if (used + cost > availableSlots) { next[mod.id] = false; }
+          else { used += cost; }
+        }
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players.length]);
 
   // ── Sync persistable state to localStorage on every change ──
   useEffect(() => {
@@ -2336,145 +2372,179 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         <div className="flex-1" />
 
         {/* ── Expansion Pack — fully interactive ── */}
-        <div className="flex flex-col rounded-2xl overflow-hidden"
-          style={{ border: `1px solid ${isModsMenuOpen ? "#2A1A2A" : "#1E1E1E"}`, backgroundColor: "#080808", transition: "border-color 0.3s" }}>
+        {(() => {
+          const availableSlots = players.length - BASE_ROLES_COUNT;
+          const usedSlots = Object.entries(activeMods)
+            .filter(([, on]) => on)
+            .reduce((sum, [id]) => sum + (MOD_COST[id] ?? 1), 0);
+          const activeCount = Object.values(activeMods).filter(Boolean).length;
 
-          {/* Master header row */}
-          <button
-            onClick={() => setIsModsMenuOpen(v => !v)}
-            className="flex items-center justify-between w-full px-4 py-3.5 transition-opacity active:opacity-70"
-            style={{ background: "none", border: "none", cursor: "pointer" }}>
+          return (
+            <div className="flex flex-col rounded-2xl overflow-hidden"
+              style={{ border: `1px solid ${isModsMenuOpen ? "#252525" : "#1A1A1A"}`, backgroundColor: "#080808", transition: "border-color 0.3s" }}>
 
-            {/* Right: icon + title + جديد badge */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{
-                  background: isModsMenuOpen
-                    ? "linear-gradient(135deg,#3A0030,#1A0018)"
-                    : "linear-gradient(135deg,#3A0000,#1A0000)",
-                  border: `1px solid ${isModsMenuOpen ? "#5A1050" : "#3D1212"}`,
-                  transition: "background 0.3s, border-color 0.3s",
-                }}>
-                <Sparkles size={15} color={isModsMenuOpen ? "#C084FC" : "#D32F2F"} strokeWidth={2} style={{ transition: "color 0.3s" }} />
-              </div>
-              <div className="flex flex-col items-start gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
-                    style={{ backgroundColor: "rgba(209,13,113,0.10)", color: "#D32F2F", border: "1px solid rgba(211,47,47,0.25)" }}>
-                    جديد
-                  </span>
-                  <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
+              {/* Master header row */}
+              <button
+                onClick={() => setIsModsMenuOpen(v => !v)}
+                className="flex items-center justify-between w-full px-4 py-3.5 transition-opacity active:opacity-70"
+                style={{ background: "none", border: "none", cursor: "pointer" }}>
+
+                {/* Right: icon + title + badge */}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: "#0E0E0E", border: "1px solid #222222" }}>
+                    <Puzzle size={15} color="#888888" strokeWidth={1.8} />
+                  </div>
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
+                        style={{ backgroundColor: "rgba(211,47,47,0.10)", color: "#D32F2F", border: "1px solid rgba(211,47,47,0.22)" }}>
+                        جديد
+                      </span>
+                      <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
+                    </div>
+                    <span className="text-xs" style={{ color: "#444444" }}>
+                      {isModsMenuOpen
+                        ? availableSlots > 0
+                          ? `${usedSlots} / ${availableSlots} مقاعد مستخدمة`
+                          : "أضف لاعبين للتفعيل"
+                        : activeCount > 0
+                          ? `${activeCount} ${activeCount === 1 ? "دور" : "أدوار"} مفعّلة`
+                          : "أدوار إضافية للتجربة"}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-xs" style={{ color: "#444444" }}>
-                  {isModsMenuOpen
-                    ? `${Object.values(activeMods).filter(Boolean).length} أدوار مفعّلة`
-                    : "أدوار إضافية للتجربة"}
-                </span>
-              </div>
-            </div>
 
-            {/* Left: master toggle pill + animated chevron */}
-            <div className="flex items-center gap-2.5">
-              <div style={{
-                width: 44, height: 26, borderRadius: 13, flexShrink: 0,
-                backgroundColor: isModsMenuOpen ? "#7C3AED" : "#1E1E1E",
-                border: `1px solid ${isModsMenuOpen ? "#6D28D9" : "#2A2A2A"}`,
-                position: "relative",
-                transition: "background-color 0.22s, border-color 0.22s",
-              }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
-                  position: "absolute", top: 3,
-                  right: isModsMenuOpen ? 3 : undefined,
-                  left: isModsMenuOpen ? undefined : 3,
-                  boxShadow: "0 1px 4px #0008",
-                  transition: "right 0.22s, left 0.22s",
-                }} />
-              </div>
-              <motion.div
-                animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
-                transition={{ type: "spring", stiffness: 300, damping: 22 }}>
-                <ChevronDown size={16} color={isModsMenuOpen ? "#888888" : "#444444"} strokeWidth={2.5} />
-              </motion.div>
-            </div>
-          </button>
+                {/* Left: master toggle pill + animated chevron */}
+                <div className="flex items-center gap-2.5">
+                  <div style={{
+                    width: 44, height: 26, borderRadius: 13, flexShrink: 0,
+                    backgroundColor: isModsMenuOpen ? "#D32F2F" : "#1E1E1E",
+                    border: `1px solid ${isModsMenuOpen ? "#B71C1C" : "#2A2A2A"}`,
+                    position: "relative",
+                    transition: "background-color 0.22s, border-color 0.22s",
+                  }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
+                      position: "absolute", top: 3,
+                      right: isModsMenuOpen ? 3 : undefined,
+                      left: isModsMenuOpen ? undefined : 3,
+                      boxShadow: "0 1px 4px #0008",
+                      transition: "right 0.22s, left 0.22s",
+                    }} />
+                  </div>
+                  <motion.div
+                    animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 22 }}>
+                    <ChevronDown size={16} color={isModsMenuOpen ? "#777777" : "#444444"} strokeWidth={2.5} />
+                  </motion.div>
+                </div>
+              </button>
 
-          {/* Expandable role cards */}
-          <AnimatePresence initial={false}>
-            {isModsMenuOpen && (
-              <motion.div
-                key="mods-list"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                style={{ overflow: "hidden" }}>
+              {/* Expandable role cards */}
+              <AnimatePresence initial={false}>
+                {isModsMenuOpen && (
+                  <motion.div
+                    key="mods-list"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                    style={{ overflow: "hidden" }}>
 
-                <div style={{ height: 1, backgroundColor: "#161616", margin: "0 16px" }} />
+                    <div style={{ height: 1, backgroundColor: "#141414", margin: "0 16px" }} />
 
-                <div className="flex flex-col p-3 gap-2">
-                  {EXPANSION_MODS.map(mod => {
-                    const isOn = activeMods[mod.id];
-                    return (
-                      <div key={mod.id}
-                        className="flex items-center justify-between rounded-xl px-3.5 py-3"
-                        style={{
-                          backgroundColor: isOn ? mod.glow : "rgba(0,0,0,0.4)",
-                          border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                          backdropFilter: "blur(8px)",
-                          transition: "background-color 0.25s, border-color 0.25s",
-                        }}>
+                    <div className="flex flex-col p-3 gap-2">
+                      {EXPANSION_MODS.map(mod => {
+                        const isOn = activeMods[mod.id];
+                        const cost = MOD_COST[mod.id] ?? 1;
+                        const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
+                        return (
+                          <div key={mod.id}
+                            className="flex items-center justify-between rounded-xl px-3.5 py-3"
+                            style={{
+                              backgroundColor: isOn ? mod.glow : "#050505",
+                              border: `1px solid ${isOn ? mod.border : "#141414"}`,
+                              opacity: !isOn && !canAfford ? 0.4 : 1,
+                              transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
+                            }}>
 
-                        {/* Right: name + description */}
-                        <div className="flex flex-col gap-0.5 flex-1 min-w-0 pl-3">
-                          <span className="text-sm font-black text-right"
-                            style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
-                            {mod.name}
-                          </span>
-                          <span className="text-xs text-right leading-relaxed"
-                            style={{ color: isOn ? "#4A4A4A" : "#2E2E2E", transition: "color 0.2s" }}>
-                            {mod.description}
-                          </span>
-                        </div>
+                            {/* Right: name + description — plain div, no onClick */}
+                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 pl-3">
+                              <div className="flex items-center gap-1.5 justify-end">
+                                {cost === 2 && (
+                                  <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
+                                    style={{ backgroundColor: "#111111", color: "#444444", border: "1px solid #1E1E1E" }}>
+                                    ×2
+                                  </span>
+                                )}
+                                <span className="text-sm font-black text-right"
+                                  style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
+                                  {mod.name}
+                                </span>
+                              </div>
+                              <span className="text-xs text-right leading-relaxed"
+                                style={{ color: isOn ? "#505050" : "#2A2A2A", transition: "color 0.2s" }}>
+                                {mod.description}
+                              </span>
+                            </div>
 
-                        {/* Left: individual toggle */}
-                        <button
-                          onClick={e => { e.stopPropagation(); toggleMod(mod.id); }}
-                          style={{
-                            width: 38, height: 22, borderRadius: 11, flexShrink: 0,
-                            backgroundColor: isOn ? mod.accent : "#1A1A1A",
-                            border: `1px solid ${isOn ? mod.accent : "#282828"}`,
-                            position: "relative", cursor: "pointer",
-                            transition: "background-color 0.2s, border-color 0.2s",
-                            opacity: isOn ? 0.9 : 1,
-                          }}>
-                          <div style={{
-                            width: 14, height: 14, borderRadius: 7,
-                            backgroundColor: "#fff",
-                            position: "absolute", top: 3,
-                            right: isOn ? 3 : undefined,
-                            left: isOn ? undefined : 3,
-                            boxShadow: "0 1px 3px #0006",
-                            transition: "right 0.2s, left 0.2s",
-                          }} />
-                        </button>
+                            {/* Left: individual toggle — ONLY this element has onClick */}
+                            <button
+                              onClick={() => toggleMod(mod.id)}
+                              disabled={!isOn && !canAfford}
+                              style={{
+                                width: 38, height: 22, borderRadius: 11, flexShrink: 0,
+                                backgroundColor: isOn ? mod.accent : "#181818",
+                                border: `1px solid ${isOn ? mod.accent : "#252525"}`,
+                                position: "relative",
+                                cursor: isOn || canAfford ? "pointer" : "not-allowed",
+                                transition: "background-color 0.2s, border-color 0.2s",
+                              }}>
+                              <div style={{
+                                width: 14, height: 14, borderRadius: 7,
+                                backgroundColor: "#fff",
+                                position: "absolute", top: 3,
+                                right: isOn ? 3 : undefined,
+                                left: isOn ? undefined : 3,
+                                boxShadow: "0 1px 3px #0006",
+                                transition: "right 0.2s, left 0.2s",
+                              }} />
+                            </button>
 
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Footer: slot budget bar */}
+                    <div className="px-4 pb-3.5 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs" style={{ color: "#2A2A2A" }}>
+                          {availableSlots > 0 ? `${availableSlots - usedSlots} مقاعد متبقية` : "لا توجد مقاعد كافية"}
+                        </span>
+                        <span className="text-xs" style={{ color: "#2A2A2A" }}>
+                          {usedSlots}/{Math.max(availableSlots, 0)}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
+                      {availableSlots > 0 && (
+                        <div className="w-full h-px rounded-full overflow-hidden" style={{ backgroundColor: "#141414" }}>
+                          <div style={{
+                            height: "100%",
+                            width: `${Math.min(100, (usedSlots / availableSlots) * 100)}%`,
+                            backgroundColor: usedSlots >= availableSlots ? "#D32F2F" : "#2A2A2A",
+                            transition: "width 0.3s, background-color 0.2s",
+                          }} />
+                        </div>
+                      )}
+                    </div>
 
-                {/* Footer note */}
-                <div className="px-4 pb-3">
-                  <p className="text-xs text-right" style={{ color: "#2A2A2A" }}>
-                    الأدوار المفعّلة ستؤثر على التوزيع في الجلسة القادمة
-                  </p>
-                </div>
-
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })()}
 
         {/* ── Bottom: helper text + CTA + back ── */}
         <div className="flex flex-col gap-3">
