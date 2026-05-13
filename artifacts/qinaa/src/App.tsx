@@ -39,7 +39,6 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
-  Puzzle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -676,7 +675,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
 
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
-  const [isModsMenuOpen, setIsModsMenuOpen]   = useState(false);
+  const [isModsMenuOpen, setIsModsMenuOpen]   = useState(false); // accordion open/close
+  const [isModsEnabled, setIsModsEnabled]     = useState(false); // master ON/OFF toggle
   const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
     () => EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {})
   );
@@ -2377,71 +2377,83 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           const usedSlots = Object.entries(activeMods)
             .filter(([, on]) => on)
             .reduce((sum, [id]) => sum + (MOD_COST[id] ?? 1), 0);
+          const remaining = Math.max(0, availableSlots - usedSlots);
           const activeCount = Object.values(activeMods).filter(Boolean).length;
 
           return (
             <div className="flex flex-col rounded-2xl overflow-hidden"
-              style={{ border: `1px solid ${isModsMenuOpen ? "#252525" : "#1A1A1A"}`, backgroundColor: "#080808", transition: "border-color 0.3s" }}>
+              style={{
+                border: `1px solid ${isModsEnabled ? "#2A2A2A" : "#1A1A1A"}`,
+                backgroundColor: "#080808",
+                transition: "border-color 0.3s",
+              }}>
 
-              {/* Master header row */}
-              <button
+              {/* ── Header row — clicking anywhere opens/closes accordion ONLY ── */}
+              <div
+                role="button"
                 onClick={() => setIsModsMenuOpen(v => !v)}
-                className="flex items-center justify-between w-full px-4 py-3.5 transition-opacity active:opacity-70"
-                style={{ background: "none", border: "none", cursor: "pointer" }}>
+                className="flex items-center justify-between w-full px-4 py-3.5 select-none"
+                style={{ cursor: "pointer" }}>
 
-                {/* Right: icon + title + badge */}
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: "#0E0E0E", border: "1px solid #222222" }}>
-                    <Puzzle size={15} color="#888888" strokeWidth={1.8} />
-                  </div>
-                  <div className="flex flex-col items-start gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
-                        style={{ backgroundColor: "rgba(211,47,47,0.10)", color: "#D32F2F", border: "1px solid rgba(211,47,47,0.22)" }}>
-                        جديد
-                      </span>
-                      <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
-                    </div>
-                    <span className="text-xs" style={{ color: "#444444" }}>
-                      {isModsMenuOpen
-                        ? availableSlots > 0
-                          ? `${usedSlots} / ${availableSlots} مقاعد مستخدمة`
-                          : "أضف لاعبين للتفعيل"
-                        : activeCount > 0
-                          ? `${activeCount} ${activeCount === 1 ? "دور" : "أدوار"} مفعّلة`
-                          : "أدوار إضافية للتجربة"}
+                {/* Right: title + badge (first in DOM = rightmost in RTL) */}
+                <div className="flex flex-col items-start gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
+                      style={{
+                        backgroundColor: "rgba(211,47,47,0.10)",
+                        color: "#D32F2F",
+                        border: "1px solid rgba(211,47,47,0.22)",
+                      }}>
+                      جديد
                     </span>
+                    <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
                   </div>
+                  <span className="text-xs" style={{ color: "#3A3A3A" }}>
+                    {isModsMenuOpen
+                      ? availableSlots > 0
+                        ? `استهلاك الإضافات: ${usedSlots} / ${availableSlots}`
+                        : "أضف لاعبين للتفعيل"
+                      : activeCount > 0
+                        ? `${activeCount} ${activeCount === 1 ? "دور" : "أدوار"} مفعّلة`
+                        : "أدوار إضافية للتجربة"}
+                  </span>
                 </div>
 
-                {/* Left: master toggle pill + animated chevron */}
+                {/* Left: master toggle pill (independent) + chevron (last in DOM = leftmost in RTL) */}
                 <div className="flex items-center gap-2.5">
-                  <div style={{
-                    width: 44, height: 26, borderRadius: 13, flexShrink: 0,
-                    backgroundColor: isModsMenuOpen ? "#D32F2F" : "#1E1E1E",
-                    border: `1px solid ${isModsMenuOpen ? "#B71C1C" : "#2A2A2A"}`,
-                    position: "relative",
-                    transition: "background-color 0.22s, border-color 0.22s",
-                  }}>
+
+                  {/* Master ON/OFF pill — stopPropagation so row click never reaches it */}
+                  <button
+                    onClick={e => { e.stopPropagation(); e.preventDefault(); setIsModsEnabled(v => !v); }}
+                    style={{
+                      width: 44, height: 26, borderRadius: 13, flexShrink: 0,
+                      backgroundColor: isModsEnabled ? "#D32F2F" : "#1A1A1A",
+                      border: `1px solid ${isModsEnabled ? "#B71C1C" : "#2A2A2A"}`,
+                      position: "relative",
+                      cursor: "pointer",
+                      transition: "background-color 0.22s, border-color 0.22s",
+                    }}>
                     <div style={{
                       width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
                       position: "absolute", top: 3,
-                      right: isModsMenuOpen ? 3 : undefined,
-                      left: isModsMenuOpen ? undefined : 3,
+                      right: isModsEnabled ? 3 : undefined,
+                      left: isModsEnabled ? undefined : 3,
                       boxShadow: "0 1px 4px #0008",
                       transition: "right 0.22s, left 0.22s",
                     }} />
-                  </div>
+                  </button>
+
+                  {/* Chevron — rotates based on accordion state only */}
                   <motion.div
                     animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 22 }}>
-                    <ChevronDown size={16} color={isModsMenuOpen ? "#777777" : "#444444"} strokeWidth={2.5} />
+                    transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                    style={{ pointerEvents: "none" }}>
+                    <ChevronDown size={16} color={isModsMenuOpen ? "#666666" : "#3A3A3A"} strokeWidth={2.5} />
                   </motion.div>
                 </div>
-              </button>
+              </div>
 
-              {/* Expandable role cards */}
+              {/* ── Expandable role cards ── */}
               <AnimatePresence initial={false}>
                 {isModsMenuOpen && (
                   <motion.div
@@ -2465,12 +2477,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                              opacity: !isOn && !canAfford ? 0.4 : 1,
+                              opacity: !isOn && !canAfford ? 0.38 : 1,
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
                             }}>
 
-                            {/* Right: name + description — plain div, no onClick */}
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 pl-3">
+                            {/* Right: name + description — plain non-interactive div */}
+                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 pl-3" style={{ pointerEvents: "none" }}>
                               <div className="flex items-center gap-1.5 justify-end">
                                 {cost === 2 && (
                                   <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
@@ -2489,9 +2501,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                               </span>
                             </div>
 
-                            {/* Left: individual toggle — ONLY this element has onClick */}
+                            {/* Left: individual toggle — the ONLY interactive element on this row */}
                             <button
-                              onClick={() => toggleMod(mod.id)}
+                              onClick={e => { e.stopPropagation(); toggleMod(mod.id); }}
                               disabled={!isOn && !canAfford}
                               style={{
                                 width: 38, height: 22, borderRadius: 11, flexShrink: 0,
@@ -2517,25 +2529,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       })}
                     </div>
 
-                    {/* Footer: slot budget bar */}
-                    <div className="px-4 pb-3.5 flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs" style={{ color: "#2A2A2A" }}>
-                          {availableSlots > 0 ? `${availableSlots - usedSlots} مقاعد متبقية` : "لا توجد مقاعد كافية"}
-                        </span>
-                        <span className="text-xs" style={{ color: "#2A2A2A" }}>
-                          {usedSlots}/{Math.max(availableSlots, 0)}
-                        </span>
-                      </div>
+                    {/* Footer: remaining citizens */}
+                    <div className="px-4 pb-3.5 flex items-center justify-between">
+                      <span className="text-xs" style={{ color: "#252525" }}>
+                        {availableSlots > 0
+                          ? `المتبقي من المواطنين: ${remaining}`
+                          : "أضف لاعبين لتفعيل الإضافات"}
+                      </span>
                       {availableSlots > 0 && (
-                        <div className="w-full h-px rounded-full overflow-hidden" style={{ backgroundColor: "#141414" }}>
-                          <div style={{
-                            height: "100%",
-                            width: `${Math.min(100, (usedSlots / availableSlots) * 100)}%`,
-                            backgroundColor: usedSlots >= availableSlots ? "#D32F2F" : "#2A2A2A",
-                            transition: "width 0.3s, background-color 0.2s",
-                          }} />
-                        </div>
+                        <span className="text-xs" style={{ color: usedSlots >= availableSlots ? "#7A1A1A" : "#252525" }}>
+                          {usedSlots}/{availableSlots}
+                        </span>
                       )}
                     </div>
 
