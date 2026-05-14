@@ -2373,7 +2373,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <span className="text-xs font-semibold" style={{ color: p.isAlive ? "#AAAAAA" : "#3A3A3A" }}>{p.name}</span>
                 </div>
                 {/* Role name — last in DOM = far left in RTL */}
-                <span className="text-xs font-bold" style={{ color: pm.color }}>{p.role}</span>
+                <span className="text-xs font-bold" style={{ color: pm.color }}>{getRoleName(p.role)}</span>
               </div>
             );
           })}
