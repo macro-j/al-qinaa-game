@@ -721,7 +721,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
 
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
-  const [isModsMenuOpen, setIsModsMenuOpen]   = useState(false); // accordion open/close
   const [isModsEnabled, setIsModsEnabled]     = useState(false); // master ON/OFF toggle
   const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
     () => EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {})
@@ -2434,23 +2433,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 transition: "border-color 0.3s",
               }}>
 
-              {/* ── Header row — clicking anywhere opens/closes accordion ONLY ── */}
+              {/* ── Header row — non-interactive, master toggle is the sole control ── */}
               <div
-                role="button"
-                onClick={() => isModsEnabled && setIsModsMenuOpen(v => !v)}
                 dir="rtl"
-                className="flex items-center justify-between w-full px-4 py-3.5 select-none"
-                style={{ cursor: isModsEnabled ? "pointer" : "default" }}>
+                className="flex items-center justify-between w-full px-4 py-3.5 select-none">
 
-                {/* Right side in RTL — first in DOM = rightmost on screen
-                    DOM order: Icon → Title → Badge (right to left visually) */}
+                {/* Right side: Icon → Title → Badge */}
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    {/* 1. Icon — far right */}
                     <Layers size={20} color="#4A4A4A" strokeWidth={1.6} style={{ flexShrink: 0 }} />
-                    {/* 2. Title */}
                     <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
-                    {/* 3. Badge — sits just after title, before the gap */}
                     <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
                       style={{
                         backgroundColor: "rgba(211,47,47,0.10)",
@@ -2461,68 +2453,48 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     </span>
                   </div>
                   <span className="text-xs" style={{ color: "#3A3A3A" }}>
-                    {isModsEnabled && isModsMenuOpen
+                    {isModsEnabled
                       ? availableSlots > 0
                         ? `استهلاك الإضافات: ${usedSlots} / ${availableSlots}`
                         : "أضف لاعبين للتفعيل"
-                      : isModsEnabled && activeCount > 0
-                        ? `${activeCount} ${activeCount === 1 ? "دور" : "أدوار"} مفعّلة`
-                        : "أدوار إضافية للتجربة"}
+                      : "أدوار إضافية للتجربة"}
                   </span>
                 </div>
 
-                {/* Left side: master toggle pill + chevron (last in DOM = leftmost in RTL) */}
-                <div className="flex items-center gap-2.5">
-
-                  {/* Master ON/OFF pill — stopPropagation isolates it from accordion click */}
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      if (isModsEnabled) {
-                        // Turning OFF: reset all mods + collapse accordion
-                        setIsModsEnabled(false);
-                        setIsModsMenuOpen(false);
-                        setActiveMods(EXPANSION_MODS.reduce(
-                          (acc, m) => ({ ...acc, [m.id]: false }),
-                          {} as Record<string, boolean>
-                        ));
-                      } else {
-                        // Turning ON: enable + auto-open accordion
-                        setIsModsEnabled(true);
-                        setIsModsMenuOpen(true);
-                      }
-                    }}
-                    style={{
-                      width: 44, height: 26, borderRadius: 13, flexShrink: 0,
-                      backgroundColor: isModsEnabled ? "#D32F2F" : "#1A1A1A",
-                      border: `1px solid ${isModsEnabled ? "#B71C1C" : "#2A2A2A"}`,
-                      position: "relative", cursor: "pointer",
-                      transition: "background-color 0.22s, border-color 0.22s",
-                    }}>
-                    <div style={{
-                      width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
-                      position: "absolute", top: 3,
-                      right: isModsEnabled ? 3 : undefined,
-                      left: isModsEnabled ? undefined : 3,
-                      boxShadow: "0 1px 4px #0008",
-                      transition: "right 0.22s, left 0.22s",
-                    }} />
-                  </button>
-
-                  {/* Chevron — only visible and rotated when master is ON */}
-                  <motion.div
-                    animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 22 }}
-                    style={{ pointerEvents: "none", opacity: isModsEnabled ? 1 : 0.25, transition: "opacity 0.2s" }}>
-                    <ChevronDown size={16} color={isModsMenuOpen ? "#666666" : "#3A3A3A"} strokeWidth={2.5} />
-                  </motion.div>
-                </div>
+                {/* Left side: master toggle only — no chevron */}
+                <button
+                  onClick={() => {
+                    if (isModsEnabled) {
+                      setIsModsEnabled(false);
+                      setActiveMods(EXPANSION_MODS.reduce(
+                        (acc, m) => ({ ...acc, [m.id]: false }),
+                        {} as Record<string, boolean>
+                      ));
+                    } else {
+                      setIsModsEnabled(true);
+                    }
+                  }}
+                  style={{
+                    width: 44, height: 26, borderRadius: 13, flexShrink: 0,
+                    backgroundColor: isModsEnabled ? "#D32F2F" : "#1A1A1A",
+                    border: `1px solid ${isModsEnabled ? "#B71C1C" : "#2A2A2A"}`,
+                    position: "relative", cursor: "pointer",
+                    transition: "background-color 0.22s, border-color 0.22s",
+                  }}>
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
+                    position: "absolute", top: 3,
+                    right: isModsEnabled ? 3 : undefined,
+                    left: isModsEnabled ? undefined : 3,
+                    boxShadow: "0 1px 4px #0008",
+                    transition: "right 0.22s, left 0.22s",
+                  }} />
+                </button>
               </div>
 
-              {/* ── Expandable role cards — only renders when master ON + accordion open ── */}
+              {/* ── Expandable panel — strictly bound to isModsEnabled ── */}
               <AnimatePresence initial={false}>
-                {isModsEnabled && isModsMenuOpen && (
+                {isModsEnabled && (
                   <motion.div
                     key="mods-list"
                     initial={{ height: 0, opacity: 0 }}
@@ -2599,7 +2571,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     </div>
 
                     {/* Footer: remaining citizens count */}
-                    <div className="px-4 pb-3.5 flex items-center justify-between" dir="rtl">
+                    <div className="px-4 pb-3 flex items-center justify-between" dir="rtl">
                       <span className="text-xs" style={{ color: "#282828" }}>
                         {availableSlots > 0
                           ? `المتبقي من المواطنين: ${remaining}`
@@ -2612,6 +2584,30 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         </span>
                       )}
                     </div>
+
+                    {/* ── Remove Ads — inside panel, below roles ── */}
+                    <div style={{ height: 1, backgroundColor: "#111111", margin: "0 12px" }} />
+                    <button
+                      onClick={() => console.log("Remove Ads clicked")}
+                      dir="rtl"
+                      className="w-full flex items-center justify-between px-4 py-3.5 transition-all duration-150 active:scale-95"
+                      style={{ backgroundColor: "transparent" }}>
+                      <div className="flex items-center gap-2.5">
+                        <Crown size={15} color="#CA8A04" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                        <div className="flex flex-col gap-px">
+                          <span className="text-sm font-black" style={{ color: "#EAB308" }}>إزالة الإعلانات</span>
+                          <span className="text-xs" style={{ color: "#4A3800" }}>تجربة نقية بدون انقطاع</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
+                        style={{
+                          backgroundColor: "rgba(202,138,4,0.10)",
+                          color: "#92650A",
+                          border: "1px solid rgba(202,138,4,0.20)",
+                        }}>
+                        مميز
+                      </span>
+                    </button>
 
                   </motion.div>
                 )}
@@ -2654,33 +2650,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span>العودة للقائمة الرئيسية</span>
           </motion.button>
 
-          {/* ── Remove Ads — premium IAP placeholder ── */}
-          <button
-            onClick={() => console.log("Remove Ads clicked")}
-            dir="rtl"
-            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-150 active:scale-95"
-            style={{
-              backgroundColor: "rgba(161,128,0,0.05)",
-              border: "1px solid rgba(202,138,4,0.22)",
-            }}>
-            {/* Right side: icon + text */}
-            <div className="flex items-center gap-2.5">
-              <Crown size={16} color="#CA8A04" strokeWidth={1.8} style={{ flexShrink: 0 }} />
-              <div className="flex flex-col gap-px">
-                <span className="text-sm font-black" style={{ color: "#EAB308" }}>إزالة الإعلانات</span>
-                <span className="text-xs" style={{ color: "#6B5500" }}>تجربة نقية بدون انقطاع</span>
-              </div>
-            </div>
-            {/* Left side: premium pill */}
-            <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
-              style={{
-                backgroundColor: "rgba(202,138,4,0.12)",
-                color: "#CA8A04",
-                border: "1px solid rgba(202,138,4,0.25)",
-              }}>
-              مميز
-            </span>
-          </button>
         </div>
 
       </div>
