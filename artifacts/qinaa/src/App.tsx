@@ -40,6 +40,7 @@ import {
   VolumeX,
   ChevronDown,
   Layers,
+  Crown,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -2652,6 +2653,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <ArrowRight size={16} strokeWidth={2} />
             <span>العودة للقائمة الرئيسية</span>
           </motion.button>
+
+          {/* ── Remove Ads — premium IAP placeholder ── */}
+          <button
+            onClick={() => console.log("Remove Ads clicked")}
+            dir="rtl"
+            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-150 active:scale-95"
+            style={{
+              backgroundColor: "rgba(161,128,0,0.05)",
+              border: "1px solid rgba(202,138,4,0.22)",
+            }}>
+            {/* Right side: icon + text */}
+            <div className="flex items-center gap-2.5">
+              <Crown size={16} color="#CA8A04" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <div className="flex flex-col gap-px">
+                <span className="text-sm font-black" style={{ color: "#EAB308" }}>إزالة الإعلانات</span>
+                <span className="text-xs" style={{ color: "#6B5500" }}>تجربة نقية بدون انقطاع</span>
+              </div>
+            </div>
+            {/* Left side: premium pill */}
+            <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
+              style={{
+                backgroundColor: "rgba(202,138,4,0.12)",
+                color: "#CA8A04",
+                border: "1px solid rgba(202,138,4,0.25)",
+              }}>
+              مميز
+            </span>
+          </button>
         </div>
 
       </div>
