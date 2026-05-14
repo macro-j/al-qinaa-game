@@ -621,7 +621,7 @@ function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
 
 // ─── Expansion Pack — static mod definitions (UI only, no logic yet) ─────────
 
-const EXPANSION_MODS: { id: string; name: string; description: string; accent: string; border: string; glow: string }[] = [
+const EXPANSION_MODS: { id: string; name: string; description: string; accent: string; border: string; glow: string; minPlayers: number }[] = [
   {
     id: "madman",
     name: "المجنون",
@@ -629,6 +629,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     accent: "#E879F9",
     border: "rgba(112,26,117,0.35)",
     glow: "rgba(232,121,249,0.06)",
+    minPlayers: 6,
   },
   {
     id: "twins",
@@ -637,6 +638,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     accent: "#22D3EE",
     border: "rgba(8,51,68,0.35)",
     glow: "rgba(34,211,238,0.06)",
+    minPlayers: 8,
   },
   {
     id: "avenger",
@@ -645,6 +647,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     accent: "#F59E0B",
     border: "rgba(120,53,15,0.35)",
     glow: "rgba(245,158,11,0.06)",
+    minPlayers: 6,
   },
   {
     id: "magician",
@@ -653,6 +656,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     accent: "#A3E635",
     border: "rgba(54,83,20,0.35)",
     glow: "rgba(163,230,53,0.06)",
+    minPlayers: 7,
   },
 ];
 
@@ -737,9 +741,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     });
   };
 
-  // Auto-reset: if player count drops and active mods no longer fit, turn off the excess ones
+  // Auto-reset: turn off mods that no longer fit (slot budget OR minPlayers constraint)
   useEffect(() => {
-    const availableSlots = players.length - BASE_ROLES_COUNT;
+    const count = players.length;
+    const availableSlots = count - BASE_ROLES_COUNT;
     if (availableSlots <= 0) {
       setActiveMods(EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {} as Record<string, boolean>));
       return;
@@ -750,8 +755,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       for (const mod of EXPANSION_MODS) {
         if (next[mod.id]) {
           const cost = MOD_COST[mod.id] ?? 1;
-          if (used + cost > availableSlots) { next[mod.id] = false; }
-          else { used += cost; }
+          // Turn off if below minPlayers threshold OR over slot budget
+          if (count < mod.minPlayers || used + cost > availableSlots) {
+            next[mod.id] = false;
+          } else {
+            used += cost;
+          }
         }
       }
       return next;
@@ -2509,8 +2518,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {EXPANSION_MODS.map(mod => {
                         const isOn = activeMods[mod.id];
                         const cost = MOD_COST[mod.id] ?? 1;
+                        const belowMinPlayers = players.length < mod.minPlayers;
                         const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
-                        const isDisabled = !canAfford; // master already guaranteed ON here
+                        const isDisabled = belowMinPlayers || !canAfford;
                         return (
                           <div key={mod.id}
                             dir="rtl"
@@ -2518,7 +2528,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                              opacity: isDisabled ? 0.38 : 1,
+                              opacity: isDisabled ? 0.4 : 1,
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
                             }}>
 
@@ -2541,6 +2551,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                 style={{ color: isOn ? "#505050" : "#2A2A2A", transition: "color 0.2s" }}>
                                 {mod.description}
                               </span>
+                              {/* minPlayers warning — only shown when below threshold */}
+                              {belowMinPlayers && (
+                                <span className="text-xs mt-0.5" style={{ color: "#5A2020" }}>
+                                  يتطلب {mod.minPlayers} لاعبين كحد أدنى
+                                </span>
+                              )}
                             </div>
 
                             {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
