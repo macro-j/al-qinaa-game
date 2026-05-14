@@ -592,7 +592,7 @@ const ROLE_META: Record<string, { color: string; glow: string; desc: string }> =
   // ── Expansion Pack roles (Phase 1 — engine-level identity, behavior wired in later phases) ──
   "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
   "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
-  "avenger":  { color: "#800000", glow: "#80000033", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
+  "avenger":  { color: "#A0522D", glow: "#A0522D33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
   "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل." },
 };
 
@@ -694,9 +694,9 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     id: "avenger",
     name: "المنتقم",
     description: "إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر",
-    accent: "#800000",
-    border: "rgba(80,0,0,0.40)",
-    glow: "rgba(128,0,0,0.07)",
+    accent: "#A0522D",
+    border: "rgba(90,35,10,0.40)",
+    glow: "rgba(160,82,45,0.07)",
     minPlayers: 6,
   },
   {
