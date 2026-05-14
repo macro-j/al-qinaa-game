@@ -589,6 +589,11 @@ const ROLE_META: Record<string, { color: string; glow: string; desc: string }> =
   "الشايب":  { color: "#FF8F00", glow: "#FF8F0033", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
   "البنت":   { color: "#1565C0", glow: "#1565C033", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
   "المواطن": { color: "#555555", glow: "#55555522", desc: "من الشعب — ابحث عن المافيا وصوّت ضدهم." },
+  // ── Expansion Pack roles (Phase 1 — engine-level identity, behavior wired in later phases) ──
+  "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
+  "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
+  "avenger":  { color: "#F59E0B", glow: "#F59E0B33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
+  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل." },
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -600,22 +605,57 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function generateAndShuffleRoles(playerNames: string[]): AssignedRole[] {
-  // Exact same role priority order as the server's roleDefs
-  const defs: { role: string; color: string }[] = [
-    { role: "الولد",   color: "#D32F2F" },
-    { role: "الإكة",   color: "#B71C1C" },
-    { role: "الشايب",  color: "#FF8F00" },
-    { role: "البنت",   color: "#1565C0" },
+function generateAndShuffleRoles(
+  playerNames: string[],
+  activeMods: Record<string, boolean> = {}
+): AssignedRole[] {
+  // ── 1. Base roles (priority order — mirrors server roleDefs) ──
+  const baseDeck: { role: string; color: string }[] = [
+    { role: "الولد",  color: "#D32F2F" },
+    { role: "الإكة",  color: "#B71C1C" },
+    { role: "الشايب", color: "#FF8F00" },
+    { role: "البنت",  color: "#1565C0" },
   ];
-  // Mirror server: shuffle players, assign special roles in order, rest get المواطن
-  const shuffledPlayers = shuffle(playerNames);
-  const assigned = shuffledPlayers.map((name, i) =>
-    i < defs.length
-      ? { name, role: defs[i].role, color: defs[i].color }
-      : { name, role: "المواطن", color: "#555555" }
+
+  // ── 2. Inject mod roles per activeMods ──
+  // Twins = 2 identical entries. Madman/Avenger/Magician = 1 each.
+  // Distinct role IDs ('madman', 'twin', 'avenger', 'magician') so phases can identify them.
+  const modDeck: { role: string; color: string }[] = [];
+  if (activeMods.madman)   modDeck.push({ role: "madman",   color: ROLE_META["madman"].color });
+  if (activeMods.twins) {
+    modDeck.push({ role: "twin", color: ROLE_META["twin"].color });
+    modDeck.push({ role: "twin", color: ROLE_META["twin"].color }); // exactly two
+  }
+  if (activeMods.avenger)  modDeck.push({ role: "avenger",  color: ROLE_META["avenger"].color });
+  if (activeMods.magician) modDeck.push({ role: "magician", color: ROLE_META["magician"].color });
+
+  // ── 3. Fill remaining slots with citizens (vanilla reserve guarantees ≥1) ──
+  const totalUsed = baseDeck.length + modDeck.length;
+  const citizenCount = Math.max(0, playerNames.length - totalUsed);
+  const citizenDeck: { role: string; color: string }[] = Array.from(
+    { length: citizenCount },
+    () => ({ role: "المواطن", color: "#555555" })
   );
-  // Shuffle call order so intro night sequence is unpredictable
+
+  // ── 4. Shuffle the deck of role-cards, then deal one to each (shuffled) player ──
+  const deck = shuffle([...baseDeck, ...modDeck, ...citizenDeck]);
+  const shuffledPlayers = shuffle(playerNames);
+  const assigned: AssignedRole[] = shuffledPlayers.map((name, i) => ({
+    name,
+    role: deck[i].role,
+    color: deck[i].color,
+  }));
+
+  // Engine sanity log — confirms the deck math (e.g. 8 players + Twins+Madman = 4+2+1+1)
+  console.log("[Qinaa Deck] composition:", {
+    players: playerNames.length,
+    base: baseDeck.length,
+    mods: modDeck.map(m => m.role),
+    citizens: citizenCount,
+    total: deck.length,
+  });
+
+  // Shuffle deal order so intro night sequence is unpredictable
   return shuffle(assigned);
 }
 
@@ -956,7 +996,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setPlayers((prev) => prev.filter((p) => p !== name));
 
   const handleDistribute = () => {
-    const roles = generateAndShuffleRoles(players);
+    // Pass activeMods only when the master toggle is on; otherwise pure-vanilla deck
+    const modsForDeck = isModsEnabled ? activeMods : {};
+    const roles = generateAndShuffleRoles(players, modsForDeck);
     setAssignedRoles(roles);
     setCurrentIndex(0);
     setIsPressing(false);
