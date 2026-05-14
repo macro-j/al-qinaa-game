@@ -741,13 +741,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Game loop state ──
   const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => pick("livePlayers", [] as LivePlayer[]));
   const [nightStep, setNightStep]               = useState<string>(() => pick("nightStep", "الولد"));
-  const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null }>(() => pick("nightActions", { killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null }));
+  const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null; magicianHealTarget: string | null; magicianPoisonTarget: string | null }>(() => pick("nightActions", { killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null }));
   const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
   const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(() => pick("investigatedTarget", null as string | null));
   const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>(() => pick("dayResult", { died: false, name: null, silenced: null }));
   const [nightCount, setNightCount]             = useState(() => pick("nightCount", 1));
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
+
+  // ── Magician (الساحر) — persistent across nights, depletes over the game ──
+  const [magicianState, setMagicianState] = useState<{ hasHeal: boolean; hasPoison: boolean }>(
+    () => pick("magicianState", { hasHeal: true, hasPoison: true })
+  );
+  // Transient per-night UI choices (reset at the start of every magician turn)
+  const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
+  const [magicianPoisonTarget, setMagicianPoisonTarget]           = useState<string | null>(null);
+  const [magicianPickerOpen, setMagicianPickerOpen]               = useState(false);
 
   // ── Night cinematic transitions ──
   const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">(() => pick("nightTransition", "none" as const));
@@ -836,6 +845,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
+      magicianState,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -843,6 +853,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
+    magicianState,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1016,9 +1027,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setPhase("pre_distribution");
   };
 
-  // Mirrors the server's NIGHT_SEQUENCE: wolf → shadow → seer → guard
-  const getNightOrder = (lp: LivePlayer[]) =>
-    (["الولد", "الإكة", "الشايب", "البنت"] as const).filter(r =>
+  // Night order: wolf → shadow → magician → seer → guard
+  // Magician is inserted between shadow and seer per the expansion spec.
+  const getNightOrder = (lp: LivePlayer[]): string[] =>
+    (["الولد", "الإكة", "magician", "الشايب", "البنت"] as const).filter(r =>
       lp.some(p => p.role === r && p.deathReason !== "vote")
     );
 
@@ -1042,7 +1054,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const startNightWithTransition = (order: string[]) => {
     const firstRole = order[0] ?? "الولد";
     nightTransitionNextRef.current = () => {
-      setNightTransitionLabel(`${firstRole} ${roleWakes(firstRole)}`);
+      setNightTransitionLabel(`${getRoleName(firstRole)} ${roleWakes(firstRole)}`);
       nightTransitionNextRef.current = null;
       setNightTransition("role_wakes");
     };
@@ -1058,12 +1070,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const order = getNightOrder(lp);
       setLivePlayers(lp);
       setNightStep(order[0] ?? "الولد");
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
       setSelectedTarget(null);
       setIsPressing(false);
       setHasRevealedOnce(false);
       setIsCardFlipped(false);
       setNightCount(1);
+      // Reset magician potions for a fresh game
+      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianHealUsedThisNight(false);
+      setMagicianPoisonTarget(null);
+      setMagicianPickerOpen(false);
       startNightWithTransition(order);
       setPhase("night");
     } else {
@@ -1087,8 +1104,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (nightStep === "الشايب") newActions.investigateTarget = selectedTarget;
     if (nightStep === "البنت")  newActions.protectTarget     = selectedTarget;
 
+    if (nightStep === "magician") {
+      // TODO: Play Magician Voiceover
+      // Heal & poison are independent — committed only if the magician explicitly chose them
+      if (magicianHealUsedThisNight && nightActions.killTarget) {
+        newActions.magicianHealTarget = nightActions.killTarget;
+        setMagicianState(s => ({ ...s, hasHeal: false }));
+      }
+      if (magicianPoisonTarget) {
+        newActions.magicianPoisonTarget = magicianPoisonTarget;
+        setMagicianState(s => ({ ...s, hasPoison: false }));
+      }
+    }
+
     const order = getNightOrder(livePlayers);
-    const idx   = order.indexOf(nightStep as "الولد" | "الإكة" | "الشايب" | "البنت");
+    const idx   = order.indexOf(nightStep);
 
     if (idx < order.length - 1) {
       // ── role_sleeps → role_wakes → next action ──
@@ -1098,36 +1128,48 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setNightStep(nextRole);
         setSelectedTarget(null);
         setInvestigatedTarget(null);
-        setNightTransitionLabel(`${nextRole} ${roleWakes(nextRole)}`);
+        // Reset magician transients on entry to magician turn
+        if (nextRole === "magician") {
+          setMagicianHealUsedThisNight(false);
+          setMagicianPoisonTarget(null);
+          setMagicianPickerOpen(false);
+        }
+        setNightTransitionLabel(`${getRoleName(nextRole)} ${roleWakes(nextRole)}`);
         nightTransitionNextRef.current = null;
         setNightTransition("role_wakes");
       };
-      setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
+      setNightTransitionLabel(`${getRoleName(nightStep)} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
     } else {
       // ── role_sleeps → city_wakes → compute results → win check ──
-      // Always pass through role_sleeps so the last role's sleep audio plays
       const goToMorning = () => {
-        const { killTarget, protectTarget, silenceTarget } = newActions;
-        const died = (killTarget && killTarget !== protectTarget) ? killTarget : null;
+        const { killTarget, protectTarget, silenceTarget, magicianHealTarget, magicianPoisonTarget: poisonT } = newActions;
+        // Boy's victim survives if EITHER protected by Girl OR healed by Magician
+        const boyVictim    = (killTarget && killTarget !== protectTarget && killTarget !== magicianHealTarget) ? killTarget : null;
+        // Magician's poison: separate, unprotectable casualty
+        const poisonVictim = poisonT ?? null;
+        // Engine kills both; Day UI surfaces the primary (Phase 3 will surface both)
+        const deaths = new Set([boyVictim, poisonVictim].filter((x): x is string => x !== null));
+        const primaryVictim = boyVictim ?? poisonVictim;
+
         const updated = livePlayers.map(p => ({
           ...p,
-          isAlive:     p.name === died ? false : p.isAlive,
+          isAlive:     deaths.has(p.name) ? false : p.isAlive,
           isSilenced:  p.name === silenceTarget,
-          deathReason: p.name === died ? "night" as const : p.deathReason,
+          deathReason: deaths.has(p.name) ? "night" as const : p.deathReason,
         }));
         setLivePlayers(updated);
-        setDayResult({ died: died !== null, name: died, silenced: silenceTarget });
-        setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+        setDayResult({ died: primaryVictim !== null, name: primaryVictim, silenced: silenceTarget });
+        setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
         setSelectedTarget(null);
         const winner = checkWinCondition(updated);
         if (winner) {
           const killerName = updated.find(p => p.role === "الولد")?.name ?? null;
           setGameOver({ winner, killerName });
           setPhase("game_over");
-        } else if (died) {
-          const dp = updated.find(p => p.name === died)!;
-          setExecutionReveal({ name: died, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
+        } else if (primaryVictim) {
+          const dp = updated.find(p => p.name === primaryVictim)!;
+          setExecutionReveal({ name: primaryVictim, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
           postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
           triggerHaptic([200, 100, 200, 100, 400]);
           setIsNightKillReveal(true);
@@ -1143,7 +1185,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setNightTransitionLabel("الكل يصحى");
         setNightTransition("city_wakes");
       };
-      setNightTransitionLabel(`${nightStep} ${roleSleeps(nightStep)}..`);
+      setNightTransitionLabel(`${getRoleName(nightStep)} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
     }
   };
@@ -1155,7 +1197,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
-    setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+    setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
     setDayResult({ died: false, name: null, silenced: null });
     setNightCount(1);
     setInvestigatedTarget(null);
@@ -1170,6 +1212,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setAccusedPlayer(null);
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
+    // Reset magician potions
+    setMagicianState({ hasHeal: true, hasPoison: true });
+    setMagicianHealUsedThisNight(false);
+    setMagicianPoisonTarget(null);
+    setMagicianPickerOpen(false);
     setPhase("setup");
   };
 
@@ -1191,6 +1238,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setInvestigatedTarget(null);
     setDaySubPhase("results");
     setNightCount(n => n + 1);
+    // Reset magician transients only — magicianState (potions) carries over
+    setMagicianHealUsedThisNight(false);
+    setMagicianPoisonTarget(null);
+    setMagicianPickerOpen(false);
     resetVotingState();
     startNightWithTransition(order);
     setPhase("night");
@@ -1217,6 +1268,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setSelectedTarget(null);
         setInvestigatedTarget(null);
         setNightCount(n => n + 1);
+        // Reset magician transients only
+        setMagicianHealUsedThisNight(false);
+        setMagicianPoisonTarget(null);
+        setMagicianPickerOpen(false);
         startNightWithTransition(order);
         setPhase("night");
       };
@@ -1405,6 +1460,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   padding: "10px 14px",
                   border: `1px solid ${meta.color}22`,
                 }}>
+                  {/* Smart Twin reveal — show partner's name on the card itself */}
+                  {current.role === "twin" && (() => {
+                    const otherTwin = assignedRoles.find(r => r.role === "twin" && r.name !== current.name);
+                    if (!otherTwin) return null;
+                    return (
+                      <span style={{ color: "#CCCCCC", fontSize: 13, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl", marginBottom: 6, fontWeight: 700 }}>
+                        توأمك هو: <span style={{ color: meta.color, fontWeight: 900 }}>{otherTwin.name}</span>
+                      </span>
+                    );
+                  })()}
                   <span style={{ color: "#888888", fontSize: 11, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
                     {meta.desc}
                   </span>
@@ -1471,10 +1536,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const isSeerStep   = nightStep === "الشايب";
 
     const stepHint =
-      nightStep === "الولد"  ? "تذبح مين يا ولد؟" :
-      nightStep === "الإكة"  ? "تسكتين مين يا إكة؟" :
-      nightStep === "الشايب" ? "تسأل عن مين يا شايب؟" :
-                               "تحمين مين يا بنت؟";
+      nightStep === "الولد"   ? "تذبح مين يا ولد؟" :
+      nightStep === "الإكة"   ? "تسكتين مين يا إكة؟" :
+      nightStep === "الشايب"  ? "تسأل عن مين يا شايب؟" :
+      nightStep === "magician" ? "اختر إجراءك يا ساحر" :
+                                "تحمين مين يا بنت؟";
 
     const arabicNights = ["الأولى","الثانية","الثالثة","الرابعة","الخامسة","السادسة","السابعة","الثامنة","التاسعة","العاشرة"];
     const nightLabel = arabicNights[nightCount - 1] ?? String(nightCount);
@@ -1509,7 +1575,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: meta.color }}>دورك الآن</span>
-              <span className="text-2xl font-black" style={{ color: meta.color }}>{nightStep}</span>
+              <span className="text-2xl font-black" style={{ color: meta.color }}>{getRoleName(nightStep)}</span>
               <span className="text-sm font-semibold mt-1" style={{ color: "#CCCCCC" }}>{stepHint}</span>
             </div>
           </div>
@@ -1548,6 +1614,109 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <span className="text-2xl">👻</span>
                   <p className="text-xs text-center leading-relaxed font-semibold" style={{ color: "#888888" }}>
                     (هذا اللاعب مقتول. تظاهر بسؤاله وانتظر قليلاً للحفاظ على الغموض)
+                  </p>
+                </div>
+              );
+            }
+
+            // ── Magician (الساحر) — bespoke 3-action panel (Heal / Poison / Skip) ──
+            if (nightStep === "magician") {
+              const magMeta     = ROLE_META["magician"];
+              const mafiaTarget = nightActions.killTarget;
+              const canHeal     = magicianState.hasHeal && !!mafiaTarget;
+              const canPoison   = magicianState.hasPoison;
+
+              return (
+                <div className="flex flex-col gap-3">
+                  {/* Mafia plan banner — shown ONLY when the Mafia chose a victim (per spec) */}
+                  {mafiaTarget && (
+                    <div className="px-4 py-3 rounded-xl flex items-center gap-2"
+                      style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
+                      <span className="text-xs font-bold" style={{ color: "#FF8888" }}>المافيا تخطط لقتل:</span>
+                      <span className="text-sm font-black text-white">{mafiaTarget}</span>
+                    </div>
+                  )}
+
+                  {/* ── Action 1: Heal ── */}
+                  <button
+                    disabled={!canHeal}
+                    onClick={() => setMagicianHealUsedThisNight(v => !v)}
+                    className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed text-right"
+                    style={{
+                      backgroundColor: magicianHealUsedThisNight ? "#1B2A0E" : "#141414",
+                      color:           magicianHealUsedThisNight ? "#A3E635" : "#CCCCCC",
+                      border: `1px solid ${magicianHealUsedThisNight ? magMeta.color : "#222"}`,
+                      boxShadow: magicianHealUsedThisNight ? `0 0 16px ${magMeta.color}33` : "none",
+                    }}>
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {magicianHealUsedThisNight
+                          ? `تم — جرعة الحياة لـ ${mafiaTarget}`
+                          : "استخدام جرعة الحياة"}
+                      </span>
+                      {!magicianState.hasHeal && (
+                        <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* ── Action 2: Poison ── */}
+                  <button
+                    disabled={!canPoison}
+                    onClick={() => {
+                      if (magicianPoisonTarget) {
+                        // Tap again clears the choice
+                        setMagicianPoisonTarget(null);
+                        setMagicianPickerOpen(false);
+                      } else {
+                        setMagicianPickerOpen(v => !v);
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed text-right"
+                    style={{
+                      backgroundColor: magicianPoisonTarget ? "#2A0F0F" : "#141414",
+                      color:           magicianPoisonTarget ? "#FF8888" : "#CCCCCC",
+                      border: `1px solid ${magicianPoisonTarget ? "#D32F2F" : "#222"}`,
+                      boxShadow: magicianPoisonTarget ? "0 0 16px #D32F2F33" : "none",
+                    }}>
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {magicianPoisonTarget
+                          ? `تم — جرعة السم لـ ${magicianPoisonTarget}`
+                          : "استخدام جرعة السم"}
+                      </span>
+                      {!magicianState.hasPoison && (
+                        <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* ── Poison player picker — opens on poison button tap ── */}
+                  {magicianPickerOpen && canPoison && !magicianPoisonTarget && (
+                    <div className="grid grid-cols-2 gap-2 p-2 rounded-xl"
+                      style={{ backgroundColor: "#0A0A0A", border: "1px solid #222" }}>
+                      {livePlayers.filter(p => p.isAlive).map(p => (
+                        <button
+                          key={p.name}
+                          onClick={() => {
+                            setMagicianPoisonTarget(p.name);
+                            setMagicianPickerOpen(false);
+                          }}
+                          className="px-3 py-2 rounded-lg text-sm font-bold transition-all active:scale-95"
+                          style={{
+                            backgroundColor: "#141414",
+                            border: "1px solid #2A2A2A",
+                            color: "#DDDDDD",
+                          }}>
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Action 3: Skip note ── */}
+                  <p className="text-xs text-center" style={{ color: "#555" }}>
+                    اضغط زر "ينام الساحر" بالأسفل لتخطي الدور أو لتأكيد إجراءاتك
                   </p>
                 </div>
               );
@@ -1669,29 +1838,42 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {(() => {
             const currentPlayer       = livePlayers.find(p => p.role === nightStep) ?? null;
             const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
+            // Magician: button is always live (it doubles as "تخطي" when no action taken)
+            const isMagician          = nightStep === "magician";
+            const magicianHasAction   = isMagician && (magicianHealUsedThisNight || !!magicianPoisonTarget);
             return (
               <motion.button
                 onClick={handleNightStep}
-                disabled={!isCurrentPlayerDead && !selectedTarget && !nightTimerExpired}
+                disabled={!isMagician && !isCurrentPlayerDead && !selectedTarget && !nightTimerExpired}
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
                 style={{
-                  backgroundColor: isCurrentPlayerDead ? "#1A1A1A" : selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
-                  color:           isCurrentPlayerDead ? "#555555" : selectedTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
-                  border:          isCurrentPlayerDead ? "1px solid #333" : selectedTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
-                  boxShadow:       (!isCurrentPlayerDead && selectedTarget) ? `0 0 28px ${meta.glow}` : "none",
+                  backgroundColor: isMagician
+                    ? (magicianHasAction ? meta.color : "#1A1A1A")
+                    : isCurrentPlayerDead ? "#1A1A1A" : selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
+                  color: isMagician
+                    ? (magicianHasAction ? "#0A0A0A" : "#CCCCCC")
+                    : isCurrentPlayerDead ? "#555555" : selectedTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
+                  border: isMagician
+                    ? (magicianHasAction ? "none" : "1px solid #333")
+                    : isCurrentPlayerDead ? "1px solid #333" : selectedTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
+                  boxShadow: isMagician
+                    ? (magicianHasAction ? `0 0 28px ${meta.glow}` : "none")
+                    : (!isCurrentPlayerDead && selectedTarget) ? `0 0 28px ${meta.glow}` : "none",
                 }}>
                 <Moon size={20} strokeWidth={2} />
                 <span>
-                  {isCurrentPlayerDead
+                  {isMagician
+                    ? (magicianHasAction ? `${roleSleeps(nightStep)} ${getRoleName(nightStep)}` : `تخطي دور ${getRoleName(nightStep)}`)
+                    : isCurrentPlayerDead
                     ? `تخطي الدور (ميت)`
                     : selectedTarget
-                    ? `${roleSleeps(nightStep)} ${nightStep}`
+                    ? `${roleSleeps(nightStep)} ${getRoleName(nightStep)}`
                     : nightTimerExpired
-                    ? `تخطي دور ${nightStep}`
-                    : `${roleSleeps(nightStep)} ${nightStep}`}
+                    ? `تخطي دور ${getRoleName(nightStep)}`
+                    : `${roleSleeps(nightStep)} ${getRoleName(nightStep)}`}
                 </span>
               </motion.button>
             );
@@ -1796,7 +1978,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setCurrentIndex(0);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianHealUsedThisNight(false);
+      setMagicianPoisonTarget(null);
+      setMagicianPickerOpen(false);
       setDayResult({ died: false, name: null, silenced: null });
       setNightCount(1);
       setInvestigatedTarget(null);
@@ -1960,7 +2146,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setCurrentIndex(0);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianHealUsedThisNight(false);
+      setMagicianPoisonTarget(null);
+      setMagicianPickerOpen(false);
       setDayResult({ died: false, name: null, silenced: null });
       setNightCount(1);
       setInvestigatedTarget(null);
