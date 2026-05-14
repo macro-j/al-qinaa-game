@@ -39,6 +39,7 @@ import {
   Volume2,
   VolumeX,
   ChevronDown,
+  Layers,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -2391,11 +2392,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               {/* ── Header row — clicking anywhere opens/closes accordion ONLY ── */}
               <div
                 role="button"
-                onClick={() => setIsModsMenuOpen(v => !v)}
+                onClick={() => isModsEnabled && setIsModsMenuOpen(v => !v)}
                 className="flex items-center justify-between w-full px-4 py-3.5 select-none"
-                style={{ cursor: "pointer" }}>
+                style={{ cursor: isModsEnabled ? "pointer" : "default" }}>
 
-                {/* Right: title + badge (first in DOM = rightmost in RTL) */}
+                {/* Right side: icon + title + badge (first in DOM = rightmost in RTL) */}
                 <div className="flex flex-col items-start gap-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
@@ -2406,31 +2407,47 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       }}>
                       جديد
                     </span>
+                    <Layers size={14} color="#555555" strokeWidth={1.8} />
                     <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
                   </div>
                   <span className="text-xs" style={{ color: "#3A3A3A" }}>
-                    {isModsMenuOpen
+                    {isModsEnabled && isModsMenuOpen
                       ? availableSlots > 0
                         ? `استهلاك الإضافات: ${usedSlots} / ${availableSlots}`
                         : "أضف لاعبين للتفعيل"
-                      : activeCount > 0
+                      : isModsEnabled && activeCount > 0
                         ? `${activeCount} ${activeCount === 1 ? "دور" : "أدوار"} مفعّلة`
                         : "أدوار إضافية للتجربة"}
                   </span>
                 </div>
 
-                {/* Left: master toggle pill (independent) + chevron (last in DOM = leftmost in RTL) */}
+                {/* Left side: master toggle pill + chevron (last in DOM = leftmost in RTL) */}
                 <div className="flex items-center gap-2.5">
 
-                  {/* Master ON/OFF pill — stopPropagation so row click never reaches it */}
+                  {/* Master ON/OFF pill — stopPropagation isolates it from accordion click */}
                   <button
-                    onClick={e => { e.stopPropagation(); e.preventDefault(); setIsModsEnabled(v => !v); }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (isModsEnabled) {
+                        // Turning OFF: reset all mods + collapse accordion
+                        setIsModsEnabled(false);
+                        setIsModsMenuOpen(false);
+                        setActiveMods(EXPANSION_MODS.reduce(
+                          (acc, m) => ({ ...acc, [m.id]: false }),
+                          {} as Record<string, boolean>
+                        ));
+                      } else {
+                        // Turning ON: enable + auto-open accordion
+                        setIsModsEnabled(true);
+                        setIsModsMenuOpen(true);
+                      }
+                    }}
                     style={{
                       width: 44, height: 26, borderRadius: 13, flexShrink: 0,
                       backgroundColor: isModsEnabled ? "#D32F2F" : "#1A1A1A",
                       border: `1px solid ${isModsEnabled ? "#B71C1C" : "#2A2A2A"}`,
-                      position: "relative",
-                      cursor: "pointer",
+                      position: "relative", cursor: "pointer",
                       transition: "background-color 0.22s, border-color 0.22s",
                     }}>
                     <div style={{
@@ -2443,19 +2460,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     }} />
                   </button>
 
-                  {/* Chevron — rotates based on accordion state only */}
+                  {/* Chevron — only visible and rotated when master is ON */}
                   <motion.div
                     animate={{ rotate: isModsMenuOpen ? 180 : 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 22 }}
-                    style={{ pointerEvents: "none" }}>
+                    style={{ pointerEvents: "none", opacity: isModsEnabled ? 1 : 0.25, transition: "opacity 0.2s" }}>
                     <ChevronDown size={16} color={isModsMenuOpen ? "#666666" : "#3A3A3A"} strokeWidth={2.5} />
                   </motion.div>
                 </div>
               </div>
 
-              {/* ── Expandable role cards ── */}
+              {/* ── Expandable role cards — only renders when master ON + accordion open ── */}
               <AnimatePresence initial={false}>
-                {isModsMenuOpen && (
+                {isModsEnabled && isModsMenuOpen && (
                   <motion.div
                     key="mods-list"
                     initial={{ height: 0, opacity: 0 }}
@@ -2471,51 +2488,53 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         const isOn = activeMods[mod.id];
                         const cost = MOD_COST[mod.id] ?? 1;
                         const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
+                        const isDisabled = !canAfford; // master already guaranteed ON here
                         return (
                           <div key={mod.id}
+                            dir="rtl"
                             className="flex items-center justify-between rounded-xl px-3.5 py-3"
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                              opacity: !isOn && !canAfford ? 0.38 : 1,
+                              opacity: isDisabled ? 0.38 : 1,
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
                             }}>
 
-                            {/* Right: name + description — plain non-interactive div */}
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 pl-3" style={{ pointerEvents: "none" }}>
-                              <div className="flex items-center gap-1.5 justify-end">
-                                {cost === 2 && (
-                                  <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
-                                    style={{ backgroundColor: "#111111", color: "#444444", border: "1px solid #1E1E1E" }}>
-                                    ×2
-                                  </span>
-                                )}
-                                <span className="text-sm font-black text-right"
+                            {/* First in DOM = rightmost in RTL: name + description, non-interactive */}
+                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 ml-3"
+                              style={{ pointerEvents: "none" }}>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-black"
                                   style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
                                   {mod.name}
                                 </span>
+                                {cost === 2 && (
+                                  <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
+                                    style={{ backgroundColor: "#111111", color: "#3A3A3A", border: "1px solid #1E1E1E" }}>
+                                    ×2
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs text-right leading-relaxed"
+                              <span className="text-xs leading-relaxed"
                                 style={{ color: isOn ? "#505050" : "#2A2A2A", transition: "color 0.2s" }}>
                                 {mod.description}
                               </span>
                             </div>
 
-                            {/* Left: individual toggle — the ONLY interactive element on this row */}
+                            {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
                             <button
-                              onClick={e => { e.stopPropagation(); toggleMod(mod.id); }}
-                              disabled={!isOn && !canAfford}
+                              onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
+                              disabled={isDisabled}
                               style={{
                                 width: 38, height: 22, borderRadius: 11, flexShrink: 0,
                                 backgroundColor: isOn ? mod.accent : "#181818",
                                 border: `1px solid ${isOn ? mod.accent : "#252525"}`,
                                 position: "relative",
-                                cursor: isOn || canAfford ? "pointer" : "not-allowed",
+                                cursor: isDisabled ? "not-allowed" : "pointer",
                                 transition: "background-color 0.2s, border-color 0.2s",
                               }}>
                               <div style={{
-                                width: 14, height: 14, borderRadius: 7,
-                                backgroundColor: "#fff",
+                                width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
                                 position: "absolute", top: 3,
                                 right: isOn ? 3 : undefined,
                                 left: isOn ? undefined : 3,
@@ -2529,15 +2548,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       })}
                     </div>
 
-                    {/* Footer: remaining citizens */}
-                    <div className="px-4 pb-3.5 flex items-center justify-between">
-                      <span className="text-xs" style={{ color: "#252525" }}>
+                    {/* Footer: remaining citizens count */}
+                    <div className="px-4 pb-3.5 flex items-center justify-between" dir="rtl">
+                      <span className="text-xs" style={{ color: "#282828" }}>
                         {availableSlots > 0
                           ? `المتبقي من المواطنين: ${remaining}`
                           : "أضف لاعبين لتفعيل الإضافات"}
                       </span>
                       {availableSlots > 0 && (
-                        <span className="text-xs" style={{ color: usedSlots >= availableSlots ? "#7A1A1A" : "#252525" }}>
+                        <span className="text-xs font-mono"
+                          style={{ color: usedSlots >= availableSlots ? "#7A1A1A" : "#282828" }}>
                           {usedSlots}/{availableSlots}
                         </span>
                       )}
