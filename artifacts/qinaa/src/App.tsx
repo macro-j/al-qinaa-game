@@ -524,47 +524,47 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             </div>
 
             {/* ── Expansion Roles ── */}
-            <div className="flex flex-col gap-2" dir="rtl">
-              {/* Divider + section label */}
-              <div className="flex items-center gap-3 pt-1">
-                <div style={{ flex: 1, height: 1, backgroundColor: "#1A1A1A" }} />
-                <span className="text-xs font-bold tracking-widest uppercase flex-shrink-0"
-                  style={{ color: "#333333" }}>
-                  أدوار الإضافات
-                </span>
-                <div style={{ flex: 1, height: 1, backgroundColor: "#1A1A1A" }} />
-              </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>أدوار الإضافات</span>
 
               {/* المجنون */}
-              <div className="flex flex-col gap-0.5 px-1 py-2">
-                <span className="text-sm font-black text-fuchsia-400">المجنون</span>
-                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
-                  لاعب مستقل، هدفه إقناع المجلس بإعدامه نهاراً ليفوز وحده وتخسر القرية.
-                </span>
+              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #E879F922" }}>
+                <VenetianMask size={20} color="#E879F9" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col items-start gap-0.5 flex-1">
+                  <span className="font-black text-sm" style={{ color: "#E879F9", fontFamily: "serif" }}>المجنون</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>لاعب مستقل، هدفه إقناع المجلس بالتصويت ضده وإعدامه في النهار ليفوز وحده وتخسر القرية.</span>
+                </div>
               </div>
 
               {/* التوأم */}
-              <div className="flex flex-col gap-0.5 px-1 py-2">
-                <span className="text-sm font-black text-cyan-400">التوأم</span>
-                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
-                  قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً.
-                </span>
+              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #22D3EE22" }}>
+                <VenetianMask size={20} color="#22D3EE" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col items-start gap-0.5 flex-1">
+                  <span className="font-black text-sm" style={{ color: "#22D3EE", fontFamily: "serif" }}>التوأم</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً.</span>
+                </div>
               </div>
 
               {/* المنتقم */}
-              <div className="flex flex-col gap-0.5 px-1 py-2">
-                <span className="text-sm font-black text-amber-500">المنتقم</span>
-                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
-                  قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر.
-                </span>
+              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #F59E0B22" }}>
+                <VenetianMask size={20} color="#F59E0B" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col items-start gap-0.5 flex-1">
+                  <span className="font-black text-sm" style={{ color: "#F59E0B", fontFamily: "serif" }}>المنتقم</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر.</span>
+                </div>
               </div>
 
               {/* الساحر */}
-              <div className="flex flex-col gap-0.5 px-1 py-2">
-                <span className="text-sm font-black text-lime-400">الساحر</span>
-                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
-                  قروي يملك قدرات، لديه جرعة حياة واحدة لإنقاذ ضحية وجرعة سم واحدة للقتل.
-                </span>
+              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #84CC1622" }}>
+                <VenetianMask size={20} color="#84CC16" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
+                <div className="flex flex-col items-start gap-0.5 flex-1">
+                  <span className="font-black text-sm" style={{ color: "#84CC16", fontFamily: "serif" }}>الساحر</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قروي يملك قدرات، لديه جرعة حياة واحدة لإنقاذ ضحية وجرعة سم واحدة للقتل.</span>
+                </div>
               </div>
             </div>
 
