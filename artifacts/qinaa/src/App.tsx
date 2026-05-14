@@ -2393,12 +2393,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <div
                 role="button"
                 onClick={() => isModsEnabled && setIsModsMenuOpen(v => !v)}
+                dir="rtl"
                 className="flex items-center justify-between w-full px-4 py-3.5 select-none"
                 style={{ cursor: isModsEnabled ? "pointer" : "default" }}>
 
-                {/* Right side: icon + title + badge (first in DOM = rightmost in RTL) */}
-                <div className="flex flex-col items-start gap-1">
+                {/* Right side in RTL — first in DOM = rightmost on screen
+                    DOM order: Icon → Title → Badge (right to left visually) */}
+                <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
+                    {/* 1. Icon — far right */}
+                    <Layers size={20} color="#4A4A4A" strokeWidth={1.6} style={{ flexShrink: 0 }} />
+                    {/* 2. Title */}
+                    <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
+                    {/* 3. Badge — sits just after title, before the gap */}
                     <span className="text-xs font-bold px-2 py-0.5 rounded-md flex-shrink-0"
                       style={{
                         backgroundColor: "rgba(211,47,47,0.10)",
@@ -2407,8 +2414,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       }}>
                       جديد
                     </span>
-                    <Layers size={14} color="#555555" strokeWidth={1.8} />
-                    <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إضافات القناع</span>
                   </div>
                   <span className="text-xs" style={{ color: "#3A3A3A" }}>
                     {isModsEnabled && isModsMenuOpen
