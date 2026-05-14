@@ -2236,7 +2236,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const bgColor   = isMadmanWin ? "#0A001A" : (isTownWin ? "#000D1A" : "#0D0000");
     const borderCol = isMadmanWin ? "#E879F966" : (isTownWin ? "#1565C066" : "#D32F2F66");
     const glowCol   = isMadmanWin ? "#E879F922" : (isTownWin ? "#1565C022" : "#D32F2F22");
-    const headLabel = isMadmanWin ? "فوز المجنون" : (isTownWin ? "انتصرت المدينة" : "انتصرت المافيا");
+    const headLabel = isMadmanWin ? "فاز المجنون" : (isTownWin ? "فازت القرية" : "فازت المافيا");
     const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
 
     const resetCore = () => {
