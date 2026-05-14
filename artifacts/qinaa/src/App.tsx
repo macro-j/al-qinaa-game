@@ -732,20 +732,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const toggleMod = (id: string) => {
     setActiveMods(prev => {
       if (prev[id]) return { ...prev, [id]: false }; // always allow turning off
-      const availableSlots = players.length - BASE_ROLES_COUNT;
+      // minPlayers guard — hard block regardless of UI state
+      const mod = EXPANSION_MODS.find(m => m.id === id);
+      if (mod && players.length < mod.minPlayers) return prev;
+      // Vanilla reserve: always keep at least 1 citizen slot free
+      const capacity = players.length - BASE_ROLES_COUNT - 1;
+      if (capacity <= 0) return prev;
       const usedSlots = Object.entries(prev)
         .filter(([, on]) => on)
         .reduce((sum, [modId]) => sum + (MOD_COST[modId] ?? 1), 0);
-      if (usedSlots + (MOD_COST[id] ?? 1) > availableSlots) return prev; // budget exceeded
+      if (usedSlots + (MOD_COST[id] ?? 1) > capacity) return prev; // budget exceeded
       return { ...prev, [id]: true };
     });
   };
 
-  // Auto-reset: turn off mods that no longer fit (slot budget OR minPlayers constraint)
+  // Auto-reset: turn off mods that violate minPlayers or exceed vanilla-reserve capacity
   useEffect(() => {
     const count = players.length;
-    const availableSlots = count - BASE_ROLES_COUNT;
-    if (availableSlots <= 0) {
+    // capacity = player slots minus base roles minus 1 vanilla citizen reserve
+    const capacity = count - BASE_ROLES_COUNT - 1;
+    if (capacity <= 0) {
       setActiveMods(EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {} as Record<string, boolean>));
       return;
     }
@@ -755,8 +761,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       for (const mod of EXPANSION_MODS) {
         if (next[mod.id]) {
           const cost = MOD_COST[mod.id] ?? 1;
-          // Turn off if below minPlayers threshold OR over slot budget
-          if (count < mod.minPlayers || used + cost > availableSlots) {
+          // First: minPlayers check — then: slot budget check
+          if (count < mod.minPlayers || used + cost > capacity) {
             next[mod.id] = false;
           } else {
             used += cost;
@@ -2427,7 +2433,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
         {/* ── Expansion Pack — fully interactive ── */}
         {(() => {
-          const availableSlots = players.length - BASE_ROLES_COUNT;
+          // capacity reserves 1 citizen slot at all times (vanilla reserve rule)
+          const availableSlots = Math.max(0, players.length - BASE_ROLES_COUNT - 1);
           const usedSlots = Object.entries(activeMods)
             .filter(([, on]) => on)
             .reduce((sum, [id]) => sum + (MOD_COST[id] ?? 1), 0);
