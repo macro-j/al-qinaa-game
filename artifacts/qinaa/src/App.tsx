@@ -600,6 +600,20 @@ const DEATH_CAUSE_LABEL: Record<DeathCause, string> = {
   avenger: "أخذه المنتقم معه",
 };
 
+// Arabic pluralization helper for corpse counts.
+// Arabic uses distinct grammatical forms for 1 (singular), 2 (dual),
+// 3-10 (small plural — feminine numeral + plural noun), and 11+ (number + plural).
+const formatCorpsesCount = (count: number): string => {
+  switch (count) {
+    case 1:  return "جثة واحدة";
+    case 2:  return "جثتان";
+    case 3:  return "ثلاث جثث";
+    case 4:  return "أربع جثث";
+    case 5:  return "خمس جثث";
+    default: return `${count} جثث`;
+  }
+};
+
 const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
   "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
   "الإكة":   { color: "#B71C1C", glow: "#B71C1C33", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
@@ -2483,7 +2497,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <p className="text-sm font-bold" style={{ color: hasDeaths ? "#FF6B6B" : "#8BC34A" }}>
             {!hasDeaths
               ? "مرت الليلة بسلام.. لم يمت أحد."
-              : (deathCount === 1 ? "استيقظت المدينة على جثة" : `استيقظت المدينة على ${deathCount} جثث`)}
+              : `استيقظت المدينة على ${formatCorpsesCount(deathCount)}`}
           </p>
         </div>
         {hasDeaths && (
