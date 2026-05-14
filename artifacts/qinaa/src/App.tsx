@@ -583,6 +583,23 @@ const MIN_PLAYERS = 5;
 type AssignedRole = { name: string; role: string; color: string };
 type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean; deathReason: "vote" | "night" | null };
 
+// ── Phase 3: Death pipeline ──
+// "mafia"   = killed by الولد at night
+// "poison"  = poisoned by Magician at night
+// "vote"    = executed by day vote
+// "twin"    = died because their twin partner died (cascading link)
+// "avenger" = killed by an Avenger's revenge pick
+type DeathCause = "mafia" | "poison" | "vote" | "twin" | "avenger";
+type DeathEntry = { name: string; cause: DeathCause };
+
+const DEATH_CAUSE_LABEL: Record<DeathCause, string> = {
+  mafia:   "قتلته المافيا",
+  poison:  "مات مسموماً",
+  vote:    "أعدمته المدينة",
+  twin:    "فقد توأمه فلحق به",
+  avenger: "أخذه المنتقم معه",
+};
+
 const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
   "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
   "الإكة":   { color: "#B71C1C", glow: "#B71C1C33", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
@@ -730,7 +747,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "game_over">(() => pick("phase", "setup" as const));
+  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "game_over">(() => pick("phase", "setup" as const));
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
@@ -744,7 +761,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [nightActions, setNightActions]         = useState<{ killTarget: string | null; silenceTarget: string | null; investigateTarget: string | null; protectTarget: string | null; magicianHealTarget: string | null; magicianPoisonTarget: string | null }>(() => pick("nightActions", { killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null }));
   const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
   const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(() => pick("investigatedTarget", null as string | null));
-  const [dayResult, setDayResult]               = useState<{ died: boolean; name: string | null; silenced: string | null }>(() => pick("dayResult", { died: false, name: null, silenced: null }));
+  // dayResult shape changed for Phase 3 (multi-death). Storage key bumped to V2 so legacy sessions hydrate clean.
+  const [dayResult, setDayResult]               = useState<{ deaths: DeathEntry[]; silenced: string | null }>(() => pick("dayResultV2", { deaths: [] as DeathEntry[], silenced: null as string | null }));
   const [nightCount, setNightCount]             = useState(() => pick("nightCount", 1));
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
@@ -775,7 +793,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [finalVoteAgainst, setFinalVoteAgainst] = useState(() => pick("finalVoteAgainst", 0));
 
   // ── Win condition + post-execution screens ──
-  const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia"; killerName: string | null } | null>(() => pick("gameOver", null as { winner: "town" | "mafia"; killerName: string | null } | null));
+  const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia" | "madman"; killerName: string | null } | null>(() => pick("gameOver", null as { winner: "town" | "mafia" | "madman"; killerName: string | null } | null));
+
+  // ── Phase 3: Avenger interrupt flow ──
+  // When an avenger dies, the normal flow pauses and we collect their revenge pick(s)
+  // before resuming to either morning announcement (resumeTo="morning") or night start (resumeTo="night").
+  const [avengerFlow, setAvengerFlow] = useState<{
+    queue: string[];                  // names of avengers awaiting revenge (FIFO)
+    deaths: DeathEntry[];             // accumulated deaths so far this resolution
+    silenced: string | null;          // silence carries over to morning UI
+    resumeTo: "morning" | "night";    // where to land after the queue drains
+    primaryName: string | null;       // for the post-execution reveal cinematic
+  } | null>(() => pick("avengerFlow", null as any));
   const [executionReveal, setExecutionReveal] = useState<{ name: string; role: string; color: string } | null>(() => pick("executionReveal", null as { name: string; role: string; color: string } | null));
 
   // ── Night 15-second action timer ──
@@ -842,10 +871,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     saveNarratorState({
       phase, players, assignedRoles, currentIndex, hasRevealedOnce,
       livePlayers, nightStep, nightActions, investigatedTarget,
-      dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
+      dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianState,
+      magicianState, avengerFlow,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -853,7 +882,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState,
+    magicianState, avengerFlow,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -893,6 +922,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Victory audio — fires once when entering game_over ──
   useEffect(() => {
     if (phase !== "game_over" || !gameOver) return;
+    if (gameOver.winner === "madman") {
+      // TODO: Play Madman Win Audio
+      return;
+    }
     playGameAudio(gameOver.winner === "mafia" ? "mafia_win.mp3" : "town_win.mp3");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, gameOver?.winner]);
@@ -916,7 +949,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       }
     } else if (phase === "reveal" && isNightKillReveal) {
       playGameAudio("success.m4a");
-    } else if (phase === "day" && daySubPhase === "results" && !dayResult.died) {
+    } else if (phase === "day" && daySubPhase === "results" && dayResult.deaths.length === 0) {
       playGameAudio("fail.m4a");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1097,6 +1130,185 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // ── Phase 3: centralized death pipeline ──
+  // resolveDeaths: takes a seed list of deaths, cascades twin links until
+  // stable, and returns (a) the full death list with causes and (b) the
+  // subset of avengers (alive at start) whose revenge needs to fire.
+  // ─────────────────────────────────────────────────────────────────────────
+  const resolveDeaths = (initial: DeathEntry[], players: LivePlayer[]): { deaths: DeathEntry[]; avengers: string[] } => {
+    const deathMap = new Map<string, DeathEntry>();
+    for (const d of initial) {
+      const p = players.find(pl => pl.name === d.name);
+      if (p?.isAlive && !deathMap.has(d.name)) deathMap.set(d.name, d);
+    }
+    // Twin cascade — loop until no new partners are added (handles edge chains)
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const name of Array.from(deathMap.keys())) {
+        const player = players.find(pl => pl.name === name);
+        if (!player || player.role !== "twin") continue;
+        const partner = players.find(pl => pl.role === "twin" && pl.name !== name && pl.isAlive);
+        if (partner && !deathMap.has(partner.name)) {
+          deathMap.set(partner.name, { name: partner.name, cause: "twin" });
+          changed = true;
+        }
+      }
+    }
+    // Avengers — only those who were alive at the start of this resolution
+    const avengers: string[] = [];
+    for (const name of deathMap.keys()) {
+      const p = players.find(pl => pl.name === name);
+      if (p?.role === "avenger" && p.isAlive) avengers.push(name);
+    }
+    return { deaths: Array.from(deathMap.values()), avengers };
+  };
+
+  // Apply a death set to livePlayers with a single deathReason; optionally apply silence.
+  // silenceTarget=null means "do not modify silence" — for revenge picks mid-flow we don't re-silence.
+  const applyDeaths = (
+    players: LivePlayer[],
+    deaths: DeathEntry[],
+    reason: "vote" | "night",
+    silenceTarget: string | null,
+    overrideSilence: boolean,
+  ): LivePlayer[] => {
+    const deathSet = new Set(deaths.map(d => d.name));
+    return players.map(p => {
+      const dying = deathSet.has(p.name);
+      return {
+        ...p,
+        isAlive:     dying ? false : p.isAlive,
+        isSilenced:  overrideSilence
+          ? (silenceTarget !== null && p.name === silenceTarget && !dying)
+          : p.isSilenced,
+        deathReason: dying ? reason : p.deathReason,
+      };
+    });
+  };
+
+  // Finalize a morning resolution: surface the death list, run win check,
+  // play the cinematic reveal of the first victim if any, then land on the day phase.
+  const finalizeMorning = (deaths: DeathEntry[], silenced: string | null, players: LivePlayer[]) => {
+    setDayResult({ deaths, silenced });
+    const winner = checkWinCondition(players);
+    if (winner) {
+      const killerName = players.find(p => p.role === "الولد")?.name ?? null;
+      setGameOver({ winner, killerName });
+      setPhase("game_over");
+      return;
+    }
+    if (deaths.length > 0) {
+      const first = deaths[0];
+      const dp = players.find(pl => pl.name === first.name);
+      if (dp) {
+        setExecutionReveal({ name: first.name, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
+        postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
+        triggerHaptic([200, 100, 200, 100, 400]);
+        setIsNightKillReveal(true);
+        setPhase("reveal");
+        return;
+      }
+    }
+    setDaySubPhase("results");
+    setPhase("day");
+  };
+
+  // Finalize a day-execution resolution: win check, then cinematic reveal of
+  // the executed player and transition into the next night.
+  const finalizeAfterExecution = (deaths: DeathEntry[], players: LivePlayer[], primaryName: string) => {
+    const winner = checkWinCondition(players);
+    if (winner) {
+      const killerName = players.find(p => p.role === "الولد")?.name ?? null;
+      setGameOver({ winner, killerName });
+      setPhase("game_over");
+      return;
+    }
+    const dp = players.find(p => p.name === primaryName);
+    if (!dp) {
+      // Defensive: no player to reveal — jump straight to next night
+      const order = getNightOrder(players);
+      setNightStep(order[0] ?? "الولد");
+      setSelectedTarget(null);
+      setInvestigatedTarget(null);
+      setNightCount(n => n + 1);
+      setMagicianHealUsedThisNight(false);
+      setMagicianPoisonTarget(null);
+      setMagicianPickerOpen(false);
+      startNightWithTransition(order);
+      setPhase("night");
+      return;
+    }
+    setExecutionReveal({ name: primaryName, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
+    const order = getNightOrder(players);
+    const firstStep = order[0] ?? "الولد";
+    postRevealRef.current = () => {
+      setNightStep(firstStep);
+      setSelectedTarget(null);
+      setInvestigatedTarget(null);
+      setNightCount(n => n + 1);
+      setMagicianHealUsedThisNight(false);
+      setMagicianPoisonTarget(null);
+      setMagicianPickerOpen(false);
+      startNightWithTransition(order);
+      setPhase("night");
+    };
+    triggerHaptic([200, 100, 200, 100, 400]);
+    setIsNightKillReveal(false);
+    setPhase("reveal");
+  };
+
+  // Enter (or re-enter) the avenger interrupt phase.
+  // Filters out avengers with NO valid targets (auto-skip — they get no
+  // revenge but the flow doesn't deadlock). If every queued avenger is
+  // skipped, jumps straight to the finalize path instead of stalling.
+  const enterAvengerFlow = (
+    queue: string[],
+    deaths: DeathEntry[],
+    silenced: string | null,
+    resumeTo: "morning" | "night",
+    primaryName: string | null,
+    players: LivePlayer[],
+  ) => {
+    const viable = queue.filter(name => players.some(p => p.isAlive && p.name !== name));
+    if (viable.length === 0) {
+      setAvengerFlow(null);
+      if (resumeTo === "morning") {
+        finalizeMorning(deaths, silenced, players);
+      } else {
+        finalizeAfterExecution(deaths, players, primaryName ?? deaths[0]?.name ?? "");
+      }
+      return;
+    }
+    setAvengerFlow({ queue: viable, deaths, silenced, resumeTo, primaryName });
+    setPhase("avenger_revenge");
+  };
+
+  // Process a single Avenger's revenge pick. Cascades twin link on the
+  // chosen target, applies the death, then either continues the queue
+  // (via enterAvengerFlow, which handles auto-skip) or resumes the
+  // original flow (morning or night).
+  const handleAvengerPick = (targetName: string) => {
+    if (!avengerFlow) return;
+    const reason: "vote" | "night" = avengerFlow.resumeTo === "night" ? "vote" : "night";
+    const initial: DeathEntry[] = [{ name: targetName, cause: "avenger" }];
+    const { deaths: cascaded, avengers: newAvengers } = resolveDeaths(initial, livePlayers);
+    const updated = applyDeaths(livePlayers, cascaded, reason, null, false);
+    setLivePlayers(updated);
+    // Merge into the accumulated death list (dedup by name; first cause wins)
+    const merged: DeathEntry[] = [...avengerFlow.deaths];
+    for (const d of cascaded) {
+      if (!merged.some(m => m.name === d.name)) merged.push(d);
+    }
+    // Drop the current avenger; append any newly discovered avengers
+    const remainingQueue = [
+      ...avengerFlow.queue.slice(1),
+      ...newAvengers.filter(n => !avengerFlow.queue.includes(n) && n !== avengerFlow.queue[0]),
+    ];
+    enterAvengerFlow(remainingQueue, merged, avengerFlow.silenced, avengerFlow.resumeTo, avengerFlow.primaryName, updated);
+  };
+
   const handleNightStep = () => {
     const newActions = { ...nightActions };
     if (nightStep === "الولد")  newActions.killTarget        = selectedTarget;
@@ -1148,36 +1360,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         const boyVictim    = (killTarget && killTarget !== protectTarget && killTarget !== magicianHealTarget) ? killTarget : null;
         // Magician's poison: separate, unprotectable casualty
         const poisonVictim = poisonT ?? null;
-        // Engine kills both; Day UI surfaces the primary (Phase 3 will surface both)
-        const deaths = new Set([boyVictim, poisonVictim].filter((x): x is string => x !== null));
-        const primaryVictim = boyVictim ?? poisonVictim;
-
-        const updated = livePlayers.map(p => ({
-          ...p,
-          isAlive:     deaths.has(p.name) ? false : p.isAlive,
-          isSilenced:  p.name === silenceTarget,
-          deathReason: deaths.has(p.name) ? "night" as const : p.deathReason,
-        }));
+        // Build seed deaths for the centralized pipeline (twin cascade + avenger interrupt handled there)
+        const seed: DeathEntry[] = [];
+        if (boyVictim)    seed.push({ name: boyVictim,    cause: "mafia"  });
+        if (poisonVictim && poisonVictim !== boyVictim) seed.push({ name: poisonVictim, cause: "poison" });
+        const { deaths, avengers } = resolveDeaths(seed, livePlayers);
+        const updated = applyDeaths(livePlayers, deaths, "night", silenceTarget, true);
         setLivePlayers(updated);
-        setDayResult({ died: primaryVictim !== null, name: primaryVictim, silenced: silenceTarget });
         setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
         setSelectedTarget(null);
-        const winner = checkWinCondition(updated);
-        if (winner) {
-          const killerName = updated.find(p => p.role === "الولد")?.name ?? null;
-          setGameOver({ winner, killerName });
-          setPhase("game_over");
-        } else if (primaryVictim) {
-          const dp = updated.find(p => p.name === primaryVictim)!;
-          setExecutionReveal({ name: primaryVictim, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
-          postRevealRef.current = () => { setDaySubPhase("results"); setPhase("day"); };
-          triggerHaptic([200, 100, 200, 100, 400]);
-          setIsNightKillReveal(true);
-          setPhase("reveal");
-        } else {
-          setDaySubPhase("results");
-          setPhase("day");
+        if (avengers.length > 0) {
+          // Pause the morning announcement until every dead avenger has chosen revenge
+          // (auto-skips avengers with no valid targets via enterAvengerFlow)
+          enterAvengerFlow(avengers, deaths, silenceTarget, "morning", null, updated);
+          return;
         }
+        finalizeMorning(deaths, silenceTarget, updated);
       };
       // role_sleeps fires first, its callback chains into city_wakes
       nightTransitionNextRef.current = () => {
@@ -1198,7 +1396,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setIsPressing(false);
     setHasRevealedOnce(false);
     setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
-    setDayResult({ died: false, name: null, silenced: null });
+    setDayResult({ deaths: [], silenced: null });
     setNightCount(1);
     setInvestigatedTarget(null);
     setDaySubPhase("results");
@@ -1217,6 +1415,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
     setMagicianPickerOpen(false);
+    // Reset avenger interrupt flow
+    setAvengerFlow(null);
     setPhase("setup");
   };
 
@@ -1248,37 +1448,39 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   };
 
   const handleExecute = (name: string) => {
-    const updatedPlayers = livePlayers.map(p =>
-      p.name === name ? { ...p, isAlive: false, deathReason: "vote" as const } : { ...p, isSilenced: false }
-    );
-    setLivePlayers(updatedPlayers);
-    const winner = checkWinCondition(updatedPlayers);
-    resetVotingState();
-    if (winner) {
-      const killerName = updatedPlayers.find(p => p.role === "الولد")?.name ?? null;
-      setGameOver({ winner, killerName });
+    const executedPlayer = livePlayers.find(p => p.name === name);
+    if (!executedPlayer) return;
+
+    // ── Madman Win — INSTANT bypass of all standard win/cascade logic ──
+    // Per spec: if the executed player is the madman, the game ends immediately.
+    if (executedPlayer.role === "madman") {
+      // TODO: Play Madman Win Audio
+      const updated = livePlayers.map(p =>
+        p.name === name
+          ? { ...p, isAlive: false, deathReason: "vote" as const, isSilenced: false }
+          : { ...p, isSilenced: false }
+      );
+      setLivePlayers(updated);
+      resetVotingState();
+      setGameOver({ winner: "madman", killerName: name });
       setPhase("game_over");
-    } else {
-      const dp = updatedPlayers.find(p => p.name === name)!;
-      setExecutionReveal({ name, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
-      const order = getNightOrder(updatedPlayers);
-      const firstStep = order[0] ?? "الولد";
-      postRevealRef.current = () => {
-        setNightStep(firstStep);
-        setSelectedTarget(null);
-        setInvestigatedTarget(null);
-        setNightCount(n => n + 1);
-        // Reset magician transients only
-        setMagicianHealUsedThisNight(false);
-        setMagicianPoisonTarget(null);
-        setMagicianPickerOpen(false);
-        startNightWithTransition(order);
-        setPhase("night");
-      };
-      triggerHaptic([200, 100, 200, 100, 400]);
-      setIsNightKillReveal(false);
-      setPhase("reveal");
+      return;
     }
+
+    // ── Standard execution: cascade twin link, queue avenger revenge, then resolve ──
+    const seed: DeathEntry[] = [{ name, cause: "vote" }];
+    const { deaths, avengers } = resolveDeaths(seed, livePlayers);
+    const updated = applyDeaths(livePlayers, deaths, "vote", null, true);
+    setLivePlayers(updated);
+    resetVotingState();
+
+    if (avengers.length > 0) {
+      // Pause execution flow until every avenger picks; resume into next night.
+      // (auto-skips avengers with no valid targets via enterAvengerFlow)
+      enterAvengerFlow(avengers, deaths, null, "night", name, updated);
+      return;
+    }
+    finalizeAfterExecution(deaths, updated, name);
   };
 
   const remaining     = Math.max(0, MIN_PLAYERS - players.length);
@@ -1885,6 +2087,69 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: avenger_revenge — Avenger picks one alive player to take to the grave.
+  // Renders a separate UI per pending avenger; loops until the queue drains.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "avenger_revenge" && avengerFlow && avengerFlow.queue.length > 0) {
+    const currentAvenger = avengerFlow.queue[0];
+    const targets        = livePlayers.filter(p => p.isAlive && p.name !== currentAvenger);
+    const accent         = ROLE_META["avenger"]?.color ?? "#A0522D";
+    const accentGlow     = ROLE_META["avenger"]?.glow  ?? "#A0522D33";
+    return (
+      <div className="min-h-screen w-full flex flex-col px-5 py-8 gap-6" style={{ ...ROOT_STYLE, backgroundColor: "#0A0500" }}>
+        {globalControls}
+        <div className="flex flex-col items-center gap-2 text-center pt-2">
+          <div style={{ filter: `drop-shadow(0 0 24px ${accent}99)` }}>
+            <Skull size={44} color={accent} strokeWidth={1.2} />
+          </div>
+          <span className="text-xs font-bold tracking-widest mt-1" style={{ color: accent, letterSpacing: "0.18em" }}>ثأر المنتقم</span>
+          <h1 className="text-2xl font-black text-white">المنتقم يختار ضحيته</h1>
+          <p className="text-sm font-semibold mt-1" style={{ color: "#888" }}>
+            مات <span style={{ color: accent, fontWeight: 900 }}>{currentAvenger}</span> — يأخذ شخصاً واحداً معه للقبر
+          </p>
+        </div>
+
+        <div className="w-full max-w-sm mx-auto px-4 py-3 rounded-2xl flex items-center gap-3"
+          style={{ backgroundColor: "#1A0A00", border: `1px solid ${accent}44` }}>
+          <VenetianMask size={18} color={accent} strokeWidth={1.5} />
+          <span className="text-xs font-semibold" style={{ color: "#AAA" }}>اختر لاعباً واحداً ليلحق به الموت فوراً.</span>
+        </div>
+
+        <div className="flex flex-col gap-2 w-full max-w-sm mx-auto">
+          {targets.length === 0 ? (
+            <p className="text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
+          ) : (
+            targets.map(p => (
+              <button
+                key={p.name}
+                onClick={() => {
+                  triggerHaptic([100, 50, 100]);
+                  handleAvengerPick(p.name);
+                }}
+                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all active:scale-95"
+                style={{
+                  backgroundColor: "#0D0500",
+                  border: `1px solid ${accent}55`,
+                  boxShadow: `0 0 14px ${accentGlow}`,
+                }}>
+                {/* Name first in DOM = far right in RTL */}
+                <span className="text-sm font-semibold text-white">{p.name}</span>
+                <ChevronRight size={16} color={accent} />
+              </button>
+            ))
+          )}
+        </div>
+
+        {avengerFlow.queue.length > 1 && (
+          <p className="text-xs text-center" style={{ color: "#444" }}>
+            منتقمون آخرون في الانتظار: {avengerFlow.queue.length - 1}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PHASE: reveal — cinematic reveal of eliminated player's role
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "reveal" && executionReveal) {
@@ -1964,12 +2229,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: game_over — final win/loss screen
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "game_over" && gameOver) {
-    const isTownWin = gameOver.winner === "town";
-    const accent    = isTownWin ? "#1565C0" : "#D32F2F";
-    const bgColor   = isTownWin ? "#000D1A" : "#0D0000";
-    const borderCol = isTownWin ? "#1565C066" : "#D32F2F66";
-    const glowCol   = isTownWin ? "#1565C022" : "#D32F2F22";
-    const headLabel = isTownWin ? "انتصرت المدينة" : "انتصرت المافيا";
+    const isTownWin   = gameOver.winner === "town";
+    const isMadmanWin = gameOver.winner === "madman";
+    // Madman win uses bright magenta to clearly distinguish it from town/mafia outcomes
+    const accent    = isMadmanWin ? "#E879F9" : (isTownWin ? "#1565C0" : "#D32F2F");
+    const bgColor   = isMadmanWin ? "#0A001A" : (isTownWin ? "#000D1A" : "#0D0000");
+    const borderCol = isMadmanWin ? "#E879F966" : (isTownWin ? "#1565C066" : "#D32F2F66");
+    const glowCol   = isMadmanWin ? "#E879F922" : (isTownWin ? "#1565C022" : "#D32F2F22");
+    const headLabel = isMadmanWin ? "فوز المجنون" : (isTownWin ? "انتصرت المدينة" : "انتصرت المافيا");
     const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
 
     const resetCore = () => {
@@ -1983,7 +2250,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
-      setDayResult({ died: false, name: null, silenced: null });
+      setAvengerFlow(null);
+      setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
       setInvestigatedTarget(null);
       setDaySubPhase("results");
@@ -2029,13 +2297,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span className="text-4xl font-black" style={{ color: accent, fontFamily: "serif", textShadow: `0 0 28px ${accent}55`, letterSpacing: "0.04em" }}>
               {headLabel}
             </span>
+            {isMadmanWin && gameOver.killerName && (
+              <p className="text-sm leading-loose" style={{ color: "#666" }}>
+                أعدمت المدينة المجنون<br />
+                <span className="text-base font-black" style={{ color: accent }}>{gameOver.killerName}</span>
+                <br />
+                <span className="text-xs" style={{ color: "#666" }}>وانتصر بمفرده على الجميع</span>
+              </p>
+            )}
             {isTownWin && gameOver.killerName && (
               <p className="text-sm leading-loose" style={{ color: "#666" }}>
                 تم كشف القاتل<br />
                 <span className="text-base font-black" style={{ color: accent }}>{gameOver.killerName}</span>
               </p>
             )}
-            {!isTownWin && (
+            {!isTownWin && !isMadmanWin && (
               <p className="text-xs font-semibold" style={{ color: "#444", letterSpacing: "0.18em" }}>
                 المافيا تسيطر على المدينة
               </p>
@@ -2043,8 +2319,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* ── Last night's victims (Mafia win only, when casualties exist) ── */}
-        {!isTownWin && (dayResult.name || dayResult.silenced) && (
+        {/* ── Last night's victims (shown for Mafia win; lists each casualty + cause) ── */}
+        {!isTownWin && !isMadmanWin && (dayResult.deaths.length > 0 || dayResult.silenced) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2059,20 +2335,23 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               ضحايا الليلة الأخيرة
             </p>
             <div className="flex flex-col gap-2">
-              {dayResult.name && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+              {dayResult.deaths.map(d => (
+                <div key={d.name} className="flex items-center justify-between px-3 py-2 rounded-xl"
                   style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F33" }}>
                   {/* Name first in DOM = far right in RTL */}
-                  <span className="text-sm font-bold" style={{ color: "#FF6B6B" }}>{dayResult.name}</span>
-                  <span className="text-xs font-semibold" style={{ color: "#888" }}>💀 المقتول</span>
+                  <div className="flex items-center gap-2">
+                    <Skull size={12} color="#D32F2F" />
+                    <span className="text-sm font-bold" style={{ color: "#FF6B6B" }}>{d.name}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold" style={{ color: "#888" }}>{DEATH_CAUSE_LABEL[d.cause]}</span>
                 </div>
-              )}
+              ))}
               {dayResult.silenced && (
                 <div className="flex items-center justify-between px-3 py-2 rounded-xl"
                   style={{ backgroundColor: "#0D0700", border: "1px solid #FF8F0033" }}>
                   {/* Name first in DOM = far right in RTL */}
                   <span className="text-sm font-bold" style={{ color: "#FFB300" }}>{dayResult.silenced}</span>
-                  <span className="text-xs font-semibold" style={{ color: "#888" }}>🤐 الساكت</span>
+                  <span className="text-[10px] font-semibold" style={{ color: "#888" }}>الساكت</span>
                 </div>
               )}
             </div>
@@ -2151,7 +2430,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
-      setDayResult({ died: false, name: null, silenced: null });
+      setAvengerFlow(null);
+      setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
       setInvestigatedTarget(null);
       setDaySubPhase("results");
@@ -2188,19 +2468,39 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       </motion.button>
     );
 
+    // ── Multi-death morning banner: lists every casualty with its cause ──
+    const deathCount   = dayResult.deaths.length;
+    const hasDeaths    = deathCount > 0;
     const morningBanner = (
-      <div className="w-full rounded-2xl flex flex-col gap-2 p-4"
+      <div className="w-full rounded-2xl flex flex-col gap-3 p-4"
         style={{
-          backgroundColor: dayResult.died ? "#1A0000" : "#001A0A",
-          border: `1px solid ${dayResult.died ? "#D32F2F" : "#33691E"}`,
+          backgroundColor: hasDeaths ? "#1A0000" : "#001A0A",
+          border: `1px solid ${hasDeaths ? "#D32F2F" : "#33691E"}`,
         }}>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0"
-            style={{ backgroundColor: dayResult.died ? "#D32F2F" : "#4CAF50" }} />
-          <p className="text-sm font-bold" style={{ color: dayResult.died ? "#FF6B6B" : "#8BC34A" }}>
-            {dayResult.died ? `اكتشفنا جثة المقتول: ${dayResult.name}` : "مرت الليلة بسلام.. لم يمت أحد."}
+            style={{ backgroundColor: hasDeaths ? "#D32F2F" : "#4CAF50" }} />
+          <p className="text-sm font-bold" style={{ color: hasDeaths ? "#FF6B6B" : "#8BC34A" }}>
+            {!hasDeaths
+              ? "مرت الليلة بسلام.. لم يمت أحد."
+              : (deathCount === 1 ? "استيقظت المدينة على جثة" : `استيقظت المدينة على ${deathCount} جثث`)}
           </p>
         </div>
+        {hasDeaths && (
+          <div className="flex flex-col gap-1.5">
+            {dayResult.deaths.map(d => (
+              <div key={d.name} className="flex items-center justify-between px-3 py-2 rounded-lg"
+                style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F33" }}>
+                {/* Name first in DOM = far right in RTL */}
+                <div className="flex items-center gap-2">
+                  <Skull size={12} color="#D32F2F" />
+                  <span className="text-sm font-bold text-white">{d.name}</span>
+                </div>
+                <span className="text-[10px] font-semibold" style={{ color: "#FF8888", letterSpacing: "0.04em" }}>{DEATH_CAUSE_LABEL[d.cause]}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {dayResult.silenced && (
           <p className="text-xs font-semibold" style={{ color: "#FF8F00" }}>والساكت: {dayResult.silenced}</p>
         )}
