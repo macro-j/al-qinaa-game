@@ -596,6 +596,16 @@ const ROLE_META: Record<string, { color: string; glow: string; desc: string }> =
   "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل." },
 };
 
+// Maps English logic keys → Arabic display names for the expansion roles.
+// Base roles use their Arabic name as the key itself, so they fall through to key.
+const ROLE_DISPLAY_NAME: Record<string, string> = {
+  madman:   "المجنون",
+  twin:     "التوأم",
+  avenger:  "المنتقم",
+  magician: "الساحر",
+};
+const getRoleName = (role: string): string => ROLE_DISPLAY_NAME[role] ?? role;
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -1384,7 +1394,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
                   textShadow: `0 0 24px ${meta.color}66`,
                 }}>
-                  {current.role}
+                  {getRoleName(current.role)}
                 </span>
 
                 {/* Description box — extra slot below the 4 mirrored elements */}
@@ -1755,7 +1765,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-3xl font-black text-white">{executionReveal.name}</span>
               <span className="text-xs tracking-widest font-semibold" style={{ color: "#555" }}>كان دوره</span>
               <span className="text-2xl font-black" style={{ color: revealMeta.color, fontFamily: "serif" }}>
-                {executionReveal.role}
+                {getRoleName(executionReveal.role)}
               </span>
               <span className="text-xs text-center px-4 leading-relaxed" style={{ color: "#444" }}>
                 {revealMeta.desc}
