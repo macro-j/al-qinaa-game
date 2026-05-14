@@ -523,6 +523,50 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </div>
             </div>
 
+            {/* ── Expansion Roles ── */}
+            <div className="flex flex-col gap-2" dir="rtl">
+              {/* Divider + section label */}
+              <div className="flex items-center gap-3 pt-1">
+                <div style={{ flex: 1, height: 1, backgroundColor: "#1A1A1A" }} />
+                <span className="text-xs font-bold tracking-widest uppercase flex-shrink-0"
+                  style={{ color: "#333333" }}>
+                  أدوار الإضافات
+                </span>
+                <div style={{ flex: 1, height: 1, backgroundColor: "#1A1A1A" }} />
+              </div>
+
+              {/* المجنون */}
+              <div className="flex flex-col gap-0.5 px-1 py-2">
+                <span className="text-sm font-black text-fuchsia-400">المجنون</span>
+                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
+                  لاعب مستقل، هدفه إقناع المجلس بإعدامه نهاراً ليفوز وحده وتخسر القرية.
+                </span>
+              </div>
+
+              {/* التوأم */}
+              <div className="flex flex-col gap-0.5 px-1 py-2">
+                <span className="text-sm font-black text-cyan-400">التوأم</span>
+                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
+                  قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً.
+                </span>
+              </div>
+
+              {/* المنتقم */}
+              <div className="flex flex-col gap-0.5 px-1 py-2">
+                <span className="text-sm font-black text-amber-500">المنتقم</span>
+                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
+                  قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر.
+                </span>
+              </div>
+
+              {/* الساحر */}
+              <div className="flex flex-col gap-0.5 px-1 py-2">
+                <span className="text-sm font-black text-lime-400">الساحر</span>
+                <span className="text-xs leading-relaxed" style={{ color: "#555555" }}>
+                  قروي يملك قدرات، لديه جرعة حياة واحدة لإنقاذ ضحية وجرعة سم واحدة للقتل.
+                </span>
+              </div>
+            </div>
 
           </div>
         </div>
