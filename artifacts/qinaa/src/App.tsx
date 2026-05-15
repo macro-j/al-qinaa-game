@@ -1256,8 +1256,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // announce every casualty to the village BEFORE night begins. Otherwise
   // proceed directly to night after the reveal.
   const finalizeAfterExecution = (deaths: DeathEntry[], players: LivePlayer[], primaryName: string) => {
+    const hasExtraDeaths = deaths.length > 1;
     const winner = checkWinCondition(players);
-    if (winner) {
+    // Win check is DEFERRED when a cascade produced extra deaths (twin link
+    // or avenger revenge). Even if the cascade ends the game, the narrator
+    // must first see the multi-death summary so the village hears every
+    // casualty announced. The execution_results screen re-runs the win check
+    // when the narrator advances and routes to game_over there if needed.
+    if (winner && !hasExtraDeaths) {
       const killerName = players.find(p => p.role === "الولد")?.name ?? null;
       setGameOver({ winner, killerName });
       setPhase("game_over");
@@ -1265,12 +1271,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
     const dp = players.find(p => p.name === primaryName);
     if (!dp) {
-      // Defensive: no player to reveal — jump straight to next night
-      proceedToNextNight(players);
+      // Defensive: no player to reveal. Honor the same rule — show the
+      // summary first if there were extra deaths, otherwise resolve directly.
+      if (hasExtraDeaths) {
+        setExecutionResult({ deaths, primaryName });
+        setPhase("execution_results");
+      } else if (winner) {
+        const killerName = players.find(p => p.role === "الولد")?.name ?? null;
+        setGameOver({ winner, killerName });
+        setPhase("game_over");
+      } else {
+        proceedToNextNight(players);
+      }
       return;
     }
     setExecutionReveal({ name: primaryName, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
-    const hasExtraDeaths = deaths.length > 1;
     postRevealRef.current = () => {
       if (hasExtraDeaths) {
         setExecutionResult({ deaths, primaryName });
@@ -2254,11 +2269,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE: execution_results — multi-death summary after a day execution
   // cascade (twin link or avenger revenge). The narrator sees every casualty
-  // with its cause, then taps "بدء الليلة التالية" to advance into night.
-  // Win is already checked in finalizeAfterExecution before landing here.
+  // with its cause, then taps the advance button. Win check is DEFERRED to
+  // this screen for cascades, so the village always hears the casualties
+  // before any game_over routing happens. The button re-runs checkWinCondition
+  // on click and routes to game_over (label flips to "إنهاء اللعبة") or night.
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "execution_results" && executionResult) {
     const deathCount = executionResult.deaths.length;
+    // Re-evaluate win on the latest snapshot — the cascade that brought us
+    // here may have ended the game. If so, the next-button advances to
+    // game_over instead of night, and its label flips to "إنهاء اللعبة".
+    const pendingWinner = checkWinCondition(livePlayers);
+    const advanceLabel  = pendingWinner ? "إنهاء اللعبة" : "بدء الليلة التالية";
+    const AdvanceIcon   = pendingWinner ? Skull : Moon;
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
@@ -2294,6 +2317,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             onClick={() => {
               const snapshot = livePlayers;
               setExecutionResult(null);
+              // Re-check on the latest snapshot at click time — guarantees
+              // the village always sees this summary, then routes correctly.
+              const winner = checkWinCondition(snapshot);
+              if (winner) {
+                const killerName = snapshot.find(p => p.role === "الولد")?.name ?? null;
+                setGameOver({ winner, killerName });
+                setPhase("game_over");
+                return;
+              }
               proceedToNextNight(snapshot);
             }}
             whileTap={{ scale: 0.95 }}
@@ -2301,8 +2333,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
-            <Moon size={20} strokeWidth={2} />
-            <span>بدء الليلة التالية</span>
+            <AdvanceIcon size={20} strokeWidth={2} />
+            <span>{advanceLabel}</span>
           </motion.button>
         </div>
       </div>
