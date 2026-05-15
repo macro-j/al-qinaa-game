@@ -761,7 +761,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
-  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "game_over">(() => pick("phase", "setup" as const));
+  const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "execution_results" | "game_over">(() => pick("phase", "setup" as const));
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
@@ -820,6 +820,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     primaryName: string | null;       // for the post-execution reveal cinematic
   } | null>(() => pick("avengerFlow", null as any));
   const [executionReveal, setExecutionReveal] = useState<{ name: string; role: string; color: string } | null>(() => pick("executionReveal", null as { name: string; role: string; color: string } | null));
+  // Day-execution multi-death summary: shown after the primary execution reveal
+  // when a cascade (twin link or avenger revenge) produced extra casualties,
+  // so the narrator can announce ALL deaths to the village before night begins.
+  const [executionResult, setExecutionResult] = useState<{ deaths: DeathEntry[]; primaryName: string } | null>(() => pick("executionResult", null as { deaths: DeathEntry[]; primaryName: string } | null));
 
   // ── Night 15-second action timer ──
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
@@ -888,7 +892,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianState, avengerFlow,
+      magicianState, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -896,7 +900,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState, avengerFlow,
+    magicianState, avengerFlow, executionResult,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1229,8 +1233,28 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setPhase("day");
   };
 
-  // Finalize a day-execution resolution: win check, then cinematic reveal of
-  // the executed player and transition into the next night.
+  // Begin the next night for the given player snapshot. Centralized so both
+  // single-death (post-reveal) and multi-death (post-results-screen) execution
+  // flows enter the night the same way.
+  const proceedToNextNight = (players: LivePlayer[]) => {
+    const order = getNightOrder(players);
+    setNightStep(order[0] ?? "الولد");
+    setSelectedTarget(null);
+    setInvestigatedTarget(null);
+    setNightCount(n => n + 1);
+    setMagicianHealUsedThisNight(false);
+    setMagicianPoisonTarget(null);
+    setMagicianPickerOpen(false);
+    startNightWithTransition(order);
+    setPhase("night");
+  };
+
+  // Finalize a day-execution resolution. Win check first (covers Avenger
+  // revenge that flips the game), then cinematic reveal of the executed
+  // player. If the cascade produced extra deaths (twin link or avenger
+  // revenge), land on a multi-death summary screen so the narrator can
+  // announce every casualty to the village BEFORE night begins. Otherwise
+  // proceed directly to night after the reveal.
   const finalizeAfterExecution = (deaths: DeathEntry[], players: LivePlayer[], primaryName: string) => {
     const winner = checkWinCondition(players);
     if (winner) {
@@ -1242,31 +1266,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const dp = players.find(p => p.name === primaryName);
     if (!dp) {
       // Defensive: no player to reveal — jump straight to next night
-      const order = getNightOrder(players);
-      setNightStep(order[0] ?? "الولد");
-      setSelectedTarget(null);
-      setInvestigatedTarget(null);
-      setNightCount(n => n + 1);
-      setMagicianHealUsedThisNight(false);
-      setMagicianPoisonTarget(null);
-      setMagicianPickerOpen(false);
-      startNightWithTransition(order);
-      setPhase("night");
+      proceedToNextNight(players);
       return;
     }
     setExecutionReveal({ name: primaryName, role: dp.role, color: ROLE_META[dp.role]?.color ?? "#555555" });
-    const order = getNightOrder(players);
-    const firstStep = order[0] ?? "الولد";
+    const hasExtraDeaths = deaths.length > 1;
     postRevealRef.current = () => {
-      setNightStep(firstStep);
-      setSelectedTarget(null);
-      setInvestigatedTarget(null);
-      setNightCount(n => n + 1);
-      setMagicianHealUsedThisNight(false);
-      setMagicianPoisonTarget(null);
-      setMagicianPickerOpen(false);
-      startNightWithTransition(order);
-      setPhase("night");
+      if (hasExtraDeaths) {
+        setExecutionResult({ deaths, primaryName });
+        setPhase("execution_results");
+      } else {
+        proceedToNextNight(players);
+      }
     };
     triggerHaptic([200, 100, 200, 100, 400]);
     setIsNightKillReveal(false);
@@ -1418,6 +1429,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     nightTransitionNextRef.current = null;
     setGameOver(null);
     setExecutionReveal(null);
+    setExecutionResult(null);
     setNightTimerExpired(false);
     setTimerEndsAt(null);
     setVoteCounts({});
@@ -2240,6 +2252,64 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PHASE: execution_results — multi-death summary after a day execution
+  // cascade (twin link or avenger revenge). The narrator sees every casualty
+  // with its cause, then taps "بدء الليلة التالية" to advance into night.
+  // Win is already checked in finalizeAfterExecution before landing here.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (phase === "execution_results" && executionResult) {
+    const deathCount = executionResult.deaths.length;
+    return (
+      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        {globalControls}
+        <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+          <div className="flex flex-col items-center gap-1 text-center pt-1">
+            <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
+            <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#D32F2F" }}>نتيجة الإعدام</span>
+            <h1 className="text-2xl font-black text-white">سقط أكثر من ضحية</h1>
+          </div>
+          <div className="w-full rounded-2xl flex flex-col gap-3 p-4"
+            style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F" }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />
+              <p className="text-sm font-bold" style={{ color: "#FF6B6B" }}>
+                {`بعد الإعدام، سقطت في المدينة ${formatCorpsesCount(deathCount)}`}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {executionResult.deaths.map(d => (
+                <div key={d.name} className="flex items-center justify-between px-3 py-2 rounded-lg"
+                  style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F33" }}>
+                  <div className="flex items-center gap-2">
+                    <Skull size={12} color="#D32F2F" />
+                    <span className="text-sm font-bold text-white">{d.name}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold" style={{ color: "#FF8888", letterSpacing: "0.04em" }}>{DEATH_CAUSE_LABEL[d.cause]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1" />
+          <motion.button
+            onClick={() => {
+              const snapshot = livePlayers;
+              setExecutionResult(null);
+              proceedToNextNight(snapshot);
+            }}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+            <Moon size={20} strokeWidth={2} />
+            <span>بدء الليلة التالية</span>
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PHASE: game_over — final win/loss screen
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "game_over" && gameOver) {
@@ -2272,6 +2342,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightTransition("none");
       setGameOver(null);
       setExecutionReveal(null);
+      setExecutionResult(null);
       setNightTimerExpired(false);
       resetVotingState();
     };
@@ -2452,6 +2523,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightTransition("none");
       setGameOver(null);
       setExecutionReveal(null);
+      setExecutionResult(null);
       setNightTimerExpired(false);
       resetVotingState();
     };
