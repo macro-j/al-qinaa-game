@@ -564,7 +564,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 <VenetianMask size={20} color="#84CC16" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
                 <div className="flex flex-col items-start gap-0.5 flex-1">
                   <span className="font-black text-sm" style={{ color: "#84CC16", fontFamily: "serif" }}>الساحر</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قروي يملك قدرات، لديه جرعة حياة واحدة لإنقاذ ضحية وجرعة سم واحدة للقتل.</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم.</span>
                 </div>
               </div>
             </div>
@@ -733,7 +733,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
   {
     id: "magician",
     name: "الساحر",
-    description: "يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل",
+    description: "يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم",
     accent: "#A3E635",
     border: "rgba(54,83,20,0.35)",
     glow: "rgba(163,230,53,0.06)",
@@ -1366,12 +1366,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (nightStep === "magician") {
       // TODO: Play Magician Voiceover
       // Single-use potion: the magician spends it on EITHER heal or poison.
-      // Whichever is committed permanently exhausts the potion for the game.
-      if (magicianHealUsedThisNight && nightActions.killTarget) {
+      // The potion is consumed ONLY when an explicit action is committed.
+      // A passive skip / timeout / "ينام الساحر" without selection leaves
+      // hasPotion untouched so the magician can act on a later night.
+      const healCommitted   = magicianHealUsedThisNight && !!nightActions.killTarget;
+      const poisonCommitted = !!magicianPoisonTarget;
+      const consumedPotion  = healCommitted || poisonCommitted;
+
+      if (healCommitted) {
         newActions.magicianHealTarget = nightActions.killTarget;
-        setMagicianState({ hasPotion: false });
-      } else if (magicianPoisonTarget) {
+      } else if (poisonCommitted) {
         newActions.magicianPoisonTarget = magicianPoisonTarget;
+      }
+      if (consumedPotion) {
         setMagicianState({ hasPotion: false });
       }
     }
