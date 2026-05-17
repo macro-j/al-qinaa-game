@@ -624,7 +624,7 @@ const ROLE_META: Record<string, { color: string; glow: string; desc: string }> =
   "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
   "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
   "avenger":  { color: "#A0522D", glow: "#A0522D33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
-  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة لإنقاذ شخص، وجرعة واحدة لقتل شخص بالليل." },
+  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم." },
 };
 
 // Maps English logic keys → Arabic display names for the expansion roles.
@@ -781,9 +781,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
 
-  // ── Magician (الساحر) — persistent across nights, depletes over the game ──
-  const [magicianState, setMagicianState] = useState<{ hasHeal: boolean; hasPoison: boolean }>(
-    () => pick("magicianState", { hasHeal: true, hasPoison: true })
+  // ── Magician (الساحر) — single-use potion for the WHOLE game ──
+  // The magician owns one potion that they may spend as either Heal OR Poison.
+  // Using either option permanently locks both. Persistence key bumped to V2
+  // so legacy sessions (which stored `{hasHeal, hasPoison}`) hydrate clean.
+  const [magicianState, setMagicianState] = useState<{ hasPotion: boolean }>(
+    () => pick("magicianStateV2", { hasPotion: true })
   );
   // Transient per-night UI choices (reset at the start of every magician turn)
   const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
@@ -892,7 +895,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianState, avengerFlow, executionResult,
+      magicianStateV2: magicianState, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -1080,10 +1083,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // Night order: wolf → shadow → magician → seer → guard
   // Magician is inserted between shadow and seer per the expansion spec.
+  // Once the magician has spent their one potion, their phase is skipped
+  // entirely on every subsequent night — no UI, no pause, no waste of time.
   const getNightOrder = (lp: LivePlayer[]): string[] =>
-    (["الولد", "الإكة", "magician", "الشايب", "البنت"] as const).filter(r =>
-      lp.some(p => p.role === r && p.deathReason !== "vote")
-    );
+    (["الولد", "الإكة", "magician", "الشايب", "البنت"] as const).filter(r => {
+      if (!lp.some(p => p.role === r && p.deathReason !== "vote")) return false;
+      if (r === "magician" && !magicianState.hasPotion) return false;
+      return true;
+    });
 
   // ── Win condition checker — called after every death ──
   const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
@@ -1128,7 +1135,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsCardFlipped(false);
       setNightCount(1);
       // Reset magician potions for a fresh game
-      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianState({ hasPotion: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
@@ -1358,14 +1365,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     if (nightStep === "magician") {
       // TODO: Play Magician Voiceover
-      // Heal & poison are independent — committed only if the magician explicitly chose them
+      // Single-use potion: the magician spends it on EITHER heal or poison.
+      // Whichever is committed permanently exhausts the potion for the game.
       if (magicianHealUsedThisNight && nightActions.killTarget) {
         newActions.magicianHealTarget = nightActions.killTarget;
-        setMagicianState(s => ({ ...s, hasHeal: false }));
-      }
-      if (magicianPoisonTarget) {
+        setMagicianState({ hasPotion: false });
+      } else if (magicianPoisonTarget) {
         newActions.magicianPoisonTarget = magicianPoisonTarget;
-        setMagicianState(s => ({ ...s, hasPoison: false }));
+        setMagicianState({ hasPotion: false });
       }
     }
 
@@ -1452,7 +1459,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
     // Reset magician potions
-    setMagicianState({ hasHeal: true, hasPoison: true });
+    setMagicianState({ hasPotion: true });
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
     setMagicianPickerOpen(false);
@@ -1863,11 +1870,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }
 
             // ── Magician (الساحر) — bespoke 3-action panel (Heal / Poison / Skip) ──
+            // Single-use potion: choosing Heal locks Poison and vice versa.
+            // The whole panel only renders when the magician still has the potion;
+            // an exhausted magician is filtered out of getNightOrder upstream.
             if (nightStep === "magician") {
               const magMeta     = ROLE_META["magician"];
               const mafiaTarget = nightActions.killTarget;
-              const canHeal     = magicianState.hasHeal && !!mafiaTarget;
-              const canPoison   = magicianState.hasPoison;
+              const poisonChosen = !!magicianPoisonTarget;
+              const healChosen   = magicianHealUsedThisNight;
+              const canHeal     = magicianState.hasPotion && !!mafiaTarget && !poisonChosen;
+              const canPoison   = magicianState.hasPotion && !healChosen;
 
               return (
                 <div className="flex flex-col gap-3">
@@ -1897,7 +1909,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           ? `تم — جرعة الحياة لـ ${mafiaTarget}`
                           : "استخدام جرعة الحياة"}
                       </span>
-                      {!magicianState.hasHeal && (
+                      {!magicianState.hasPotion && (
                         <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
                       )}
                     </div>
@@ -1928,31 +1940,50 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           ? `تم — جرعة السم لـ ${magicianPoisonTarget}`
                           : "استخدام جرعة السم"}
                       </span>
-                      {!magicianState.hasPoison && (
+                      {!magicianState.hasPotion && (
                         <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
                       )}
                     </div>
                   </button>
 
-                  {/* ── Poison player picker — opens on poison button tap ── */}
+                  {/* ── Poison player picker — numbered vertical list to match the
+                          standard target-selection layout used by other roles ── */}
                   {magicianPickerOpen && canPoison && !magicianPoisonTarget && (
-                    <div className="grid grid-cols-2 gap-2 p-2 rounded-xl"
+                    <div className="flex flex-col gap-2 p-2 rounded-xl"
                       style={{ backgroundColor: "#0A0A0A", border: "1px solid #222" }}>
-                      {livePlayers.filter(p => p.isAlive).map(p => (
-                        <button
-                          key={p.name}
-                          onClick={() => {
-                            setMagicianPoisonTarget(p.name);
-                            setMagicianPickerOpen(false);
-                          }}
-                          className="px-3 py-2 rounded-lg text-sm font-bold transition-all active:scale-95"
-                          style={{
-                            backgroundColor: "#141414",
-                            border: "1px solid #2A2A2A",
-                            color: "#DDDDDD",
-                          }}>
-                          {p.name}
-                        </button>
+                      {livePlayers.filter(p => p.isAlive).map((p, idx) => (
+                        <div key={p.name}
+                          className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                          style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
+                          {/* RIGHT (first in DOM = rightmost in RTL): number + name */}
+                          <div className="flex items-center gap-3">
+                            <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
+                              style={{
+                                backgroundColor: "rgba(255,255,255,0.06)",
+                                color:           "#888888",
+                                border:          "1px solid rgba(255,255,255,0.08)",
+                              }}>
+                              {idx + 1}
+                            </span>
+                            <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>
+                              {p.name}
+                            </span>
+                          </div>
+                          {/* LEFT: select action */}
+                          <button
+                            onClick={() => {
+                              setMagicianPoisonTarget(p.name);
+                              setMagicianPickerOpen(false);
+                            }}
+                            className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
+                            style={{
+                              backgroundColor: "#1A1A1A",
+                              color:           "#888888",
+                              border:          "1px solid #333333",
+                            }}>
+                            اختر
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -2362,7 +2393,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
-      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianState({ hasPotion: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
@@ -2543,7 +2574,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
-      setMagicianState({ hasHeal: true, hasPoison: true });
+      setMagicianState({ hasPotion: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
