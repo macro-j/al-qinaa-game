@@ -421,40 +421,36 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 صُنّاع القناع
               </span>
 
-              <div className="grid grid-cols-2 gap-3">
-                {/* Mohammed */}
+              {/* Minimalist credits — zero chrome, name-as-link only. The
+                  entire vertical block is a single anchor so the role line
+                  is part of the tappable target. Hover/tap collapses the
+                  white name into the crimson accent for instant affordance. */}
+              <div className="grid grid-cols-2 gap-6 text-center">
                 <a
                   href="https://www.tiktok.com/@ll_f7"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex flex-col items-center text-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-150 active:scale-95"
-                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
-                  <span className="text-sm font-black text-white tracking-wide">Mohammed</span>
-                  <span className="text-[10px] font-medium leading-snug" style={{ color: "#666666" }}>
+                  className="group block transition-all duration-200 active:scale-95"
+                  style={{ textDecoration: "none" }}>
+                  <div className="text-sm font-black tracking-wide text-white transition-colors duration-200 group-hover:text-[#D32F2F] group-active:text-[#D32F2F]">
+                    Mohammed
+                  </div>
+                  <div className="text-xs text-white/50 mt-1 leading-snug">
                     التطوير والتصميم البصري
-                  </span>
-                  <div className="flex items-center gap-1 mt-1 pt-1.5 w-full justify-center"
-                    style={{ borderTop: "1px solid #1A1A1A", color: "#555555" }}>
-                    <ExternalLink size={11} strokeWidth={2} />
-                    <span className="text-[10px] tracking-wide">TikTok</span>
                   </div>
                 </a>
 
-                {/* Abdullah */}
                 <a
                   href="https://www.tiktok.com/@abdullah.jj57"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex flex-col items-center text-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-150 active:scale-95"
-                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
-                  <span className="text-sm font-black text-white tracking-wide">Abdullah</span>
-                  <span className="text-[10px] font-medium leading-snug" style={{ color: "#666666" }}>
+                  className="group block transition-all duration-200 active:scale-95"
+                  style={{ textDecoration: "none" }}>
+                  <div className="text-sm font-black tracking-wide text-white transition-colors duration-200 group-hover:text-[#D32F2F] group-active:text-[#D32F2F]">
+                    Abdullah
+                  </div>
+                  <div className="text-xs text-white/50 mt-1 leading-snug">
                     تصميم اللعب وقوانين المجلس
-                  </span>
-                  <div className="flex items-center gap-1 mt-1 pt-1.5 w-full justify-center"
-                    style={{ borderTop: "1px solid #1A1A1A", color: "#555555" }}>
-                    <ExternalLink size={11} strokeWidth={2} />
-                    <span className="text-[10px] tracking-wide">TikTok</span>
                   </div>
                 </a>
               </div>
