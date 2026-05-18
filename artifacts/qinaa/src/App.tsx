@@ -800,6 +800,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [magicianPoisonTarget, setMagicianPoisonTarget]           = useState<string | null>(null);
   const [magicianPickerOpen, setMagicianPickerOpen]               = useState(false);
 
+  // ── House Rules (إعدادات المجلس) ──
+  // boyInheritsAce: when true, if the Ace (الإكة) is dead, the Boy (الولد)
+  // inherits her silence ability and may perform BOTH a kill and a silence in
+  // a single combined screen on his turn. Default false. Persists as a user
+  // preference for subsequent games.
+  const [boyInheritsAce, setBoyInheritsAce] = useState<boolean>(
+    () => pick("boyInheritsAce", false)
+  );
+  // Transient per-night boy picks (only used in inheritance mode — the standard
+  // boy still uses the shared `selectedTarget`). Reset on entry to the boy turn
+  // and on every game-reset path.
+  const [boyKillTarget, setBoyKillTarget]       = useState<string | null>(null);
+  const [boySilenceTarget, setBoySilenceTarget] = useState<string | null>(null);
+
   // ── Night cinematic transitions ──
   const [nightTransition, setNightTransition]         = useState<"none" | "city_sleeps" | "role_wakes" | "role_sleeps" | "city_wakes">(() => pick("nightTransition", "none" as const));
   const [nightTransitionLabel, setNightTransitionLabel] = useState<string>(() => pick("nightTransitionLabel", ""));
@@ -902,7 +916,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianStateV3: magicianState, magicianPotionMode, avengerFlow, executionResult,
+      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -910,7 +924,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState, magicianPotionMode, avengerFlow, executionResult,
+    magicianState, magicianPotionMode, boyInheritsAce, avengerFlow, executionResult,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1139,6 +1153,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightStep(order[0] ?? "الولد");
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
       setSelectedTarget(null);
+      setBoyKillTarget(null);
+      setBoySilenceTarget(null);
       setIsPressing(false);
       setHasRevealedOnce(false);
       setIsCardFlipped(false);
@@ -1367,8 +1383,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   const handleNightStep = () => {
     const newActions = { ...nightActions };
-    if (nightStep === "الولد")  newActions.killTarget        = selectedTarget;
-    if (nightStep === "الإكة")  newActions.silenceTarget     = selectedTarget;
+    // ── Boy inheritance: if Ace is dead AND house rule is on, the Boy commits
+    // BOTH kill and silence from his combined screen on his turn. Otherwise
+    // the boy step is a vanilla kill-only commit using `selectedTarget`.
+    const aceDead = !livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+    const boyInheritActive = nightStep === "الولد" && boyInheritsAce && aceDead;
+    if (nightStep === "الولد") {
+      if (boyInheritActive) {
+        newActions.killTarget    = boyKillTarget;
+        newActions.silenceTarget = boySilenceTarget;
+      } else {
+        newActions.killTarget    = selectedTarget;
+      }
+    }
+    if (nightStep === "الإكة") {
+      // Guard: if Ace is dead (e.g. cycling as a phantom step on a non-vote
+      // death), do NOT clobber a silenceTarget previously written by the Boy
+      // during inheritance mode. Only a living Ace may set her own silence.
+      const aceIsAlive = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+      if (aceIsAlive) newActions.silenceTarget = selectedTarget;
+    }
     if (nightStep === "الشايب") newActions.investigateTarget = selectedTarget;
     if (nightStep === "البنت")  newActions.protectTarget     = selectedTarget;
 
@@ -1413,6 +1447,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setNightActions(newActions);
         setNightStep(nextRole);
         setSelectedTarget(null);
+      setBoyKillTarget(null);
+      setBoySilenceTarget(null);
         setInvestigatedTarget(null);
         // Reset magician transients on entry to magician turn
         if (nextRole === "magician") {
@@ -1443,6 +1479,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setLivePlayers(updated);
         setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
         setSelectedTarget(null);
+      setBoyKillTarget(null);
+      setBoySilenceTarget(null);
         if (avengers.length > 0) {
           // Pause the morning announcement until every dead avenger has chosen revenge
           // (auto-skips avengers with no valid targets via enterAvengerFlow)
@@ -1490,6 +1528,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
     setMagicianPickerOpen(false);
+    // Reset boy inheritance transients
+    setBoyKillTarget(null);
+    setBoySilenceTarget(null);
     // Reset avenger interrupt flow
     setAvengerFlow(null);
     setPhase("setup");
@@ -1812,12 +1853,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Seer (الشايب) step: reveal مافيا vs بريء for each player
     const isSeerStep   = nightStep === "الشايب";
 
+    // Boy inheritance: shared across header label, stepHint, panel, and confirm
+    // button. Activates only when the house rule is on AND the Ace is dead.
+    const aceAlive          = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+    const boyInheritActiveTop = nightStep === "الولد" && boyInheritsAce && !aceAlive;
+    const boyInheritReady     = boyInheritActiveTop && !!boyKillTarget && !!boySilenceTarget;
+
     const stepHint =
-      nightStep === "الولد"   ? "تذبح مين يا ولد؟" :
+      nightStep === "الولد"   ? (boyInheritActiveTop ? "تذبح وتسكت مين يا ولد؟" : "تذبح مين يا ولد؟") :
       nightStep === "الإكة"   ? "تسكتين مين يا إكة؟" :
       nightStep === "الشايب"  ? "تسأل عن مين يا شايب؟" :
       nightStep === "magician" ? "اختر إجراءك يا ساحر" :
                                 "تحمين مين يا بنت؟";
+    // Header label gets a special "وريث الزعامة" tag in inheritance mode.
+    const roleHeaderLabel = boyInheritActiveTop
+      ? `${getRoleName(nightStep)} (وريث الزعامة)`
+      : getRoleName(nightStep);
 
     const arabicNights = ["الأولى","الثانية","الثالثة","الرابعة","الخامسة","السادسة","السابعة","الثامنة","التاسعة","العاشرة"];
     const nightLabel = arabicNights[nightCount - 1] ?? String(nightCount);
@@ -1852,7 +1903,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: meta.color }}>دورك الآن</span>
-              <span className="text-2xl font-black" style={{ color: meta.color }}>{getRoleName(nightStep)}</span>
+              <span className="text-2xl font-black" style={{ color: meta.color }}>{roleHeaderLabel}</span>
               <span className="text-sm font-semibold mt-1" style={{ color: "#CCCCCC" }}>{stepHint}</span>
             </div>
           </div>
@@ -2025,6 +2076,103 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               );
             }
 
+            // ── Boy Inheritance (وريث الزعامة) — combined Kill + Silence panel ──
+            // Triggered only when the house rule is enabled AND the Ace is dead.
+            // Renders two stacked target lists with a clear visual divider so
+            // the narrator can pick both victims before pressing the sleep button.
+            const aceAliveNow      = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+            const boyInheritActive = nightStep === "الولد" && boyInheritsAce && !aceAliveNow;
+            if (boyInheritActive) {
+              const boyMeta   = ROLE_META["الولد"];
+              const boyAlive  = livePlayers.filter(p => p.isAlive);
+              const killList  = boyAlive.filter(p => p.role !== "الولد"); // no self
+              const silenceList = boyAlive.filter(p => p.role !== "الولد"); // no self
+              const renderTargetList = (
+                list: typeof boyAlive,
+                selected: string | null,
+                onPick: (name: string) => void,
+                accent: string,
+              ) => (
+                <div className="flex flex-col gap-2">
+                  {list.map((p, idx) => {
+                    const isSelected = selected === p.name;
+                    const rowBg     = isSelected ? "#1A0000" : "#141414";
+                    const rowBorder = isSelected ? accent   : "#222222";
+                    return (
+                      <div key={p.name}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                        style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
+                            style={{
+                              backgroundColor: isSelected ? `${accent}22` : "rgba(255,255,255,0.06)",
+                              color:           isSelected ? "#ffffff"     : "#888888",
+                              border:          `1px solid ${isSelected ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
+                            }}>
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm font-semibold"
+                            style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                            {p.name}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => onPick(p.name)}
+                          className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
+                          style={{
+                            backgroundColor: isSelected ? accent   : "#1A1A1A",
+                            color:           isSelected ? "#ffffff" : "#888888",
+                            border:          `1px solid ${isSelected ? accent : "#333333"}`,
+                          }}>
+                          {isSelected ? "تم الاختيار" : "اختر"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+              return (
+                <div className="flex flex-col gap-4">
+                  {/* Inheritance banner */}
+                  <div className="px-3 py-2 rounded-xl text-center"
+                    style={{ backgroundColor: "#1A0000", border: `1px solid ${boyMeta.color}55` }}>
+                    <span className="text-xs font-bold tracking-wide" style={{ color: "#FF8888" }}>
+                      وريث الزعامة — الإكة ماتت
+                    </span>
+                  </div>
+
+                  {/* ── Section A: Kill ── */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="text-sm font-black" style={{ color: boyMeta.color }}>تذبح مين يا ولد؟</span>
+                      {boyKillTarget && (
+                        <span className="text-xs font-bold" style={{ color: "#666" }}>· {boyKillTarget}</span>
+                      )}
+                    </div>
+                    {renderTargetList(killList, boyKillTarget, setBoyKillTarget, "#D32F2F")}
+                  </div>
+
+                  {/* Clean visual divider between the two sections */}
+                  <div className="flex items-center gap-2 px-1">
+                    <div className="flex-1 h-px" style={{ backgroundColor: "#1A1A1A" }} />
+                    <span className="text-xs font-semibold" style={{ color: "#3A3A3A" }}>ثم</span>
+                    <div className="flex-1 h-px" style={{ backgroundColor: "#1A1A1A" }} />
+                  </div>
+
+                  {/* ── Section B: Silence ── */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="text-sm font-black" style={{ color: "#FFB347" }}>تسكت مين يا ولد؟</span>
+                      {boySilenceTarget && (
+                        <span className="text-xs font-bold" style={{ color: "#666" }}>· {boySilenceTarget}</span>
+                      )}
+                    </div>
+                    {renderTargetList(silenceList, boySilenceTarget, setBoySilenceTarget, "#FFB347")}
+                  </div>
+                </div>
+              );
+            }
+
             // Per-role filter rules:
             // الولد: cannot target himself OR his teammate الإكة (no friendly fire)
             // الشايب: cannot investigate himself
@@ -2144,10 +2292,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             // Magician: button is always live (it doubles as "تخطي" when no action taken)
             const isMagician          = nightStep === "magician";
             const magicianHasAction   = isMagician && (magicianHealUsedThisNight || !!magicianPoisonTarget);
+            // Boy inheritance: confirm requires BOTH targets selected.
+            const hasTarget = boyInheritActiveTop ? boyInheritReady : !!selectedTarget;
             return (
               <motion.button
                 onClick={handleNightStep}
-                disabled={!isMagician && !isCurrentPlayerDead && !selectedTarget && !nightTimerExpired}
+                disabled={!isMagician && !isCurrentPlayerDead && !hasTarget && !nightTimerExpired}
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -2155,16 +2305,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 style={{
                   backgroundColor: isMagician
                     ? (magicianHasAction ? meta.color : "#1A1A1A")
-                    : isCurrentPlayerDead ? "#1A1A1A" : selectedTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
+                    : isCurrentPlayerDead ? "#1A1A1A" : hasTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
                   color: isMagician
                     ? (magicianHasAction ? "#0A0A0A" : "#CCCCCC")
-                    : isCurrentPlayerDead ? "#555555" : selectedTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
+                    : isCurrentPlayerDead ? "#555555" : hasTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
                   border: isMagician
                     ? (magicianHasAction ? "none" : "1px solid #333")
-                    : isCurrentPlayerDead ? "1px solid #333" : selectedTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
+                    : isCurrentPlayerDead ? "1px solid #333" : hasTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
                   boxShadow: isMagician
                     ? (magicianHasAction ? `0 0 28px ${meta.glow}` : "none")
-                    : (!isCurrentPlayerDead && selectedTarget) ? `0 0 28px ${meta.glow}` : "none",
+                    : (!isCurrentPlayerDead && hasTarget) ? `0 0 28px ${meta.glow}` : "none",
                 }}>
                 <Moon size={20} strokeWidth={2} />
                 <span>
@@ -3411,6 +3561,46 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           );
         })()}
 
+        {/* ── إعدادات المجلس (House Rules) ─────────────────────────────────
+            Optional rule tweaks that change how a role behaves. Kept in its
+            own card so it reads distinctly from the expansion mods above. */}
+        <div className="flex flex-col gap-2 p-4 rounded-2xl"
+          style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إعدادات المجلس</span>
+            <span className="text-[10px] font-bold" style={{ color: "#444" }}>· قواعد البيت</span>
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "#666" }}>
+            تعديلات اختيارية على سلوك الأدوار. اختر ما يناسب طاولتكم.
+          </p>
+
+          {/* ── Toggle: توريث الزعامة (الولد) ── */}
+          <button
+            onClick={() => setBoyInheritsAce(v => !v)}
+            className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl transition-colors duration-200 active:scale-[0.99]"
+            style={{
+              backgroundColor: boyInheritsAce ? "#1A0000" : "#0F0F0F",
+              border: `1px solid ${boyInheritsAce ? "#D32F2F55" : "#1A1A1A"}`,
+            }}>
+            <div className="flex flex-col items-start gap-1 text-right flex-1">
+              <span className="text-sm font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
+                توريث الزعامة (الولد)
+              </span>
+              <span className="text-[11px] leading-snug" style={{ color: "#666" }}>
+                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة)
+              </span>
+            </div>
+            <div className="w-10 h-6 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: boyInheritsAce ? "#D32F2F" : "#222" }}>
+              <div className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  right: boyInheritsAce ? "0.125rem" : "1.125rem",
+                }} />
+            </div>
+          </button>
+        </div>
+
         {/* ── Bottom: helper text + CTA + back ── */}
         <div className="flex flex-col gap-3">
           {!canDistribute && (
@@ -3460,7 +3650,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   return (
     <motion.div
       initial={false}
-      animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as React.CSSProperties}
+      animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as unknown as Record<string, string>}
       transition={{ duration: 1.5, ease: "easeInOut" }}
       style={{ "--n-bg": "#000000", minHeight: "100vh", width: "100%" } as React.CSSProperties}
     >
