@@ -3031,15 +3031,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const perPlayerCap = alivePlayers.length;
 
       const handleCountVotes = () => {
-        const maxVotes = Math.max(...alivePlayers.map(p => voteCounts[p.name] ?? 0));
+        // ── Absolute-majority rule (النصف + 1) ─────────────────────────────
+        // Justification is gated by THREE requirements; failing any one of
+        // them skips trial entirely and the day ends straight into night
+        // (الجميع ينام) via the existing 4s vote_tie cinematic.
+        //   1. At least one vote was cast (maxVotes > 0)
+        //   2. The top vote count meets the majority threshold
+        //      (Math.floor(alive / 2) + 1 — e.g. 5 of 8, 4 of 7)
+        //   3. A SINGLE player owns that top count (no deadlock at threshold)
+        const majorityThreshold = Math.floor(alivePlayers.length / 2) + 1;
+        const maxVotes = Math.max(0, ...alivePlayers.map(p => voteCounts[p.name] ?? 0));
         const nominees = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
-        if (nominees.length !== 1) {
-          // Tie (or no votes) → cinematic, then night
-          setDaySubPhase("vote_tie");
-        } else {
+        const hasUniqueWinner = nominees.length === 1;
+        const reachesMajority = maxVotes >= majorityThreshold;
+        if (hasUniqueWinner && reachesMajority) {
           setAccusedPlayer(nominees[0].name);
           setTimerEndsAt(Date.now() + speedPreset.lastWords * 1000);
           setDaySubPhase("justification");
+        } else {
+          // Below threshold, no votes, or tie at threshold → no trial today.
+          setDaySubPhase("vote_tie");
         }
       };
       return (
@@ -3184,22 +3195,25 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict (shared cap: agree + disagree ≤ alive players)
     // ════════════════════════════════════════════
+    // ── Absolute-majority execution rule (النصف + 1) ──────────────────────
+    // The accused is executed ONLY if approving votes meet the majority
+    // threshold of ALL live players (e.g. 5 of 8). One opposing vote that
+    // drops approvals below the threshold = the accused survives.
     const finalTotalVoters = alivePlayers.length;
     const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
-    // Strict majority rule: accused cannot vote, so eligible voters = alive - 1
-    const eligibleVoters   = finalTotalVoters - 1; // accused cannot vote
-    const requiredVotes    = Math.floor(eligibleVoters / 2) + 1;
+    const requiredVotes    = Math.floor(finalTotalVoters / 2) + 1;
     const canExecute       = finalVoteFor >= requiredVotes;
-    const canPardon        = !canExecute && finalVoteAgainst >= requiredVotes;
-    const canTie           = !canExecute && !canPardon && finalVotesUsed >= eligibleVoters;
+    // Pardon = execution is mathematically impossible even if every remaining
+    // unused vote were to flip to "approve". This locks the button green and
+    // lets the narrator end the trial early without padding the tally.
+    const remainingVotes   = Math.max(0, finalTotalVoters - finalVotesUsed);
+    const canPardon        = !canExecute && (finalVoteFor + remainingVotes) < requiredVotes;
 
     const handleFinalVerdict = () => {
-      if (finalVoteFor > finalVoteAgainst) {
+      if (canExecute) {
         handleExecute(accusedPlayer!);
-      } else if (finalVoteFor === finalVoteAgainst) {
-        // Tied final vote → cinematic then night
-        setDaySubPhase("vote_tie");
       } else {
+        // Below the majority threshold → accused survives, straight to night.
         handleStartNextNight();
       }
     };
@@ -3264,19 +3278,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <motion.button
             onClick={
               canExecute ? () => handleExecute(accusedPlayer!)
-              : (canPardon || canTie) ? handleStartNextNight
+              : canPardon ? handleFinalVerdict
               : undefined
             }
-            disabled={!canExecute && !canPardon && !canTie}
-            whileTap={canExecute || canPardon || canTie ? { scale: 0.95 } : {}}
-            whileHover={canExecute || canPardon || canTie ? { scale: 1.02 } : {}}
+            disabled={!canExecute && !canPardon}
+            whileTap={canExecute || canPardon ? { scale: 0.95 } : {}}
+            whileHover={canExecute || canPardon ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
             style={{
-              backgroundColor: canExecute ? "#D32F2F" : (canPardon || canTie) ? "#1B5E20" : "#1A1A1A",
-              color: canExecute || canPardon || canTie ? "#fff" : "#555555",
-              boxShadow: canExecute ? "0 0 32px #D32F2F55" : (canPardon || canTie) ? "0 0 32px #2E7D3255" : "none",
-              cursor: canExecute || canPardon || canTie ? "pointer" : "not-allowed",
+              backgroundColor: canExecute ? "#D32F2F" : canPardon ? "#1B5E20" : "#1A1A1A",
+              color: canExecute || canPardon ? "#fff" : "#555555",
+              boxShadow: canExecute ? "0 0 32px #D32F2F55" : canPardon ? "0 0 32px #2E7D3255" : "none",
+              cursor: canExecute || canPardon ? "pointer" : "not-allowed",
             }}>
             <Users size={20} strokeWidth={2} />
             <span>
@@ -3284,8 +3298,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 ? `إعدام ${accusedPlayer} ⚖️`
                 : canPardon
                 ? `العفو عن ${accusedPlayer} 🕊️`
-                : canTie
-                ? `العفو (تعادل) 🕊️`
                 : (() => {
                     const missing = requiredVotes - finalVoteFor;
                     if (missing === 1) return "ناقص صوت واحد للإعدام ⚖️";
