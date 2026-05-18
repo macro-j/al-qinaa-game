@@ -564,7 +564,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 <VenetianMask size={20} color="#84CC16" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
                 <div className="flex flex-col items-start gap-0.5 flex-1">
                   <span className="font-black text-sm" style={{ color: "#84CC16", fontFamily: "serif" }}>الساحر</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم.</span>
+                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب.</span>
                 </div>
               </div>
             </div>
@@ -624,7 +624,7 @@ const ROLE_META: Record<string, { color: string; glow: string; desc: string }> =
   "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
   "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
   "avenger":  { color: "#A0522D", glow: "#A0522D33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
-  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم." },
+  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب." },
 };
 
 // Maps English logic keys → Arabic display names for the expansion roles.
@@ -733,7 +733,7 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
   {
     id: "magician",
     name: "الساحر",
-    description: "يملك جرعة واحدة فقط طوال اللعبة، يستخدمها إما لإنقاذ ضحية المافيا أو لقتل لاعب بالسم",
+    description: "يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب",
     accent: "#A3E635",
     border: "rgba(54,83,20,0.35)",
     glow: "rgba(163,230,53,0.06)",
@@ -781,12 +781,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
 
-  // ── Magician (الساحر) — single-use potion for the WHOLE game ──
-  // The magician owns one potion that they may spend as either Heal OR Poison.
-  // Using either option permanently locks both. Persistence key bumped to V2
-  // so legacy sessions (which stored `{hasHeal, hasPoison}`) hydrate clean.
-  const [magicianState, setMagicianState] = useState<{ hasPotion: boolean }>(
-    () => pick("magicianStateV2", { hasPotion: true })
+  // ── Magician (الساحر) — configurable potion capacity ──
+  // The magician owns two independent flags. Depending on `magicianPotionMode`
+  // chosen in setup, they behave either as two separate potions ("dual") or as
+  // a single shared potion that locks both flags on first use ("single").
+  // Persistence key bumped to V3 since the shape changed again.
+  const [magicianState, setMagicianState] = useState<{ hasHeal: boolean; hasPoison: boolean }>(
+    () => pick("magicianStateV3", { hasHeal: true, hasPoison: true })
+  );
+  // Setup-time configuration: "dual" (default — two separate potions) or
+  // "single" (one shared potion). Persists so the user's preference carries
+  // across new games until they change it.
+  const [magicianPotionMode, setMagicianPotionMode] = useState<"dual" | "single">(
+    () => pick("magicianPotionMode", "dual" as const)
   );
   // Transient per-night UI choices (reset at the start of every magician turn)
   const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
@@ -895,7 +902,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianStateV2: magicianState, avengerFlow, executionResult,
+      magicianStateV3: magicianState, magicianPotionMode, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -903,7 +910,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState, avengerFlow, executionResult,
+    magicianState, magicianPotionMode, avengerFlow, executionResult,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1088,7 +1095,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const getNightOrder = (lp: LivePlayer[]): string[] =>
     (["الولد", "الإكة", "magician", "الشايب", "البنت"] as const).filter(r => {
       if (!lp.some(p => p.role === r && p.deathReason !== "vote")) return false;
-      if (r === "magician" && !magicianState.hasPotion) return false;
+      // Skip magician only when BOTH flags are exhausted. In dual mode each
+      // potion is independent, so the phase keeps coming until both are spent.
+      if (r === "magician" && !magicianState.hasHeal && !magicianState.hasPoison) return false;
       return true;
     });
 
@@ -1135,7 +1144,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsCardFlipped(false);
       setNightCount(1);
       // Reset magician potions for a fresh game
-      setMagicianState({ hasPotion: true });
+      setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
@@ -1365,21 +1374,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     if (nightStep === "magician") {
       // TODO: Play Magician Voiceover
-      // Single-use potion: the magician spends it on EITHER heal or poison.
-      // The potion is consumed ONLY when an explicit action is committed.
-      // A passive skip / timeout / "ينام الساحر" without selection leaves
-      // hasPotion untouched so the magician can act on a later night.
+      // Potion consumption depends on `magicianPotionMode`:
+      //   • "dual"   — heal and poison are independent. Each click only
+      //                burns its own flag, and both may fire in the same night.
+      //   • "single" — heal and poison share one potion. Either click
+      //                permanently locks BOTH flags for the rest of the game.
+      // Either way, a passive skip / timeout / "ينام الساحر" with no
+      // explicit selection leaves both flags untouched.
       const healCommitted   = magicianHealUsedThisNight && !!nightActions.killTarget;
       const poisonCommitted = !!magicianPoisonTarget;
-      const consumedPotion  = healCommitted || poisonCommitted;
 
       if (healCommitted) {
         newActions.magicianHealTarget = nightActions.killTarget;
-      } else if (poisonCommitted) {
+      }
+      if (poisonCommitted) {
         newActions.magicianPoisonTarget = magicianPoisonTarget;
       }
-      if (consumedPotion) {
-        setMagicianState({ hasPotion: false });
+
+      if (healCommitted || poisonCommitted) {
+        if (magicianPotionMode === "single") {
+          setMagicianState({ hasHeal: false, hasPoison: false });
+        } else {
+          setMagicianState(prev => ({
+            hasHeal:   prev.hasHeal   && !healCommitted,
+            hasPoison: prev.hasPoison && !poisonCommitted,
+          }));
+        }
       }
     }
 
@@ -1466,7 +1486,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
     // Reset magician potions
-    setMagicianState({ hasPotion: true });
+    setMagicianState({ hasHeal: true, hasPoison: true });
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
     setMagicianPickerOpen(false);
@@ -1877,16 +1897,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }
 
             // ── Magician (الساحر) — bespoke 3-action panel (Heal / Poison / Skip) ──
-            // Single-use potion: choosing Heal locks Poison and vice versa.
-            // The whole panel only renders when the magician still has the potion;
-            // an exhausted magician is filtered out of getNightOrder upstream.
+            // In "single" mode the two actions mutually lock (one shared potion);
+            // in "dual" mode both actions can fire in the same night.
+            // The panel renders as long as the magician still owns AT LEAST one
+            // flag; getNightOrder filters out the phase once both are spent.
             if (nightStep === "magician") {
               const magMeta     = ROLE_META["magician"];
               const mafiaTarget = nightActions.killTarget;
               const poisonChosen = !!magicianPoisonTarget;
               const healChosen   = magicianHealUsedThisNight;
-              const canHeal     = magicianState.hasPotion && !!mafiaTarget && !poisonChosen;
-              const canPoison   = magicianState.hasPotion && !healChosen;
+              const isSingle    = magicianPotionMode === "single";
+              const canHeal     = magicianState.hasHeal && !!mafiaTarget && !(isSingle && poisonChosen);
+              const canPoison   = magicianState.hasPoison && !(isSingle && healChosen);
 
               return (
                 <div className="flex flex-col gap-3">
@@ -1916,8 +1938,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           ? `تم — جرعة الحياة لـ ${mafiaTarget}`
                           : "استخدام جرعة الحياة"}
                       </span>
-                      {!magicianState.hasPotion && (
-                        <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
+                      {!magicianState.hasHeal && (
+                        <span className="text-xs" style={{ color: "#666" }}>(جرعة الحياة مُستهلكة)</span>
                       )}
                     </div>
                   </button>
@@ -1947,8 +1969,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           ? `تم — جرعة السم لـ ${magicianPoisonTarget}`
                           : "استخدام جرعة السم"}
                       </span>
-                      {!magicianState.hasPotion && (
-                        <span className="text-xs" style={{ color: "#666" }}>(الجرعة مُستهلكة)</span>
+                      {!magicianState.hasPoison && (
+                        <span className="text-xs" style={{ color: "#666" }}>(جرعة السم مُستهلكة)</span>
                       )}
                     </div>
                   </button>
@@ -2400,7 +2422,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
-      setMagicianState({ hasPotion: true });
+      setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
@@ -2581,7 +2603,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsPressing(false);
       setHasRevealedOnce(false);
       setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
-      setMagicianState({ hasPotion: true });
+      setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
       setMagicianPickerOpen(false);
@@ -3229,7 +3251,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         return (
                           <div key={mod.id}
                             dir="rtl"
-                            className="flex items-center justify-between rounded-xl px-3.5 py-3"
+                            className="flex flex-col rounded-xl"
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
@@ -3237,54 +3259,106 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
                             }}>
 
-                            {/* First in DOM = rightmost in RTL: name + description, non-interactive */}
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0 ml-3"
-                              style={{ pointerEvents: "none" }}>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-black"
-                                  style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
-                                  {mod.name}
+                            <div className="flex items-center justify-between px-3.5 py-3">
+                              {/* First in DOM = rightmost in RTL: name + description, non-interactive */}
+                              <div className="flex flex-col gap-0.5 flex-1 min-w-0 ml-3"
+                                style={{ pointerEvents: "none" }}>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-black"
+                                    style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
+                                    {mod.name}
+                                  </span>
+                                  {cost === 2 && (
+                                    <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
+                                      style={{ backgroundColor: "#111111", color: "#3A3A3A", border: "1px solid #1E1E1E" }}>
+                                      ×2
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs leading-relaxed"
+                                  style={{ color: isOn ? "#505050" : "#2A2A2A", transition: "color 0.2s" }}>
+                                  {mod.description}
                                 </span>
-                                {cost === 2 && (
-                                  <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
-                                    style={{ backgroundColor: "#111111", color: "#3A3A3A", border: "1px solid #1E1E1E" }}>
-                                    ×2
+                                {/* minPlayers warning — only shown when below threshold */}
+                                {belowMinPlayers && (
+                                  <span className="text-xs mt-0.5" style={{ color: "#5A2020" }}>
+                                    يتطلب {mod.minPlayers} لاعبين كحد أدنى
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs leading-relaxed"
-                                style={{ color: isOn ? "#505050" : "#2A2A2A", transition: "color 0.2s" }}>
-                                {mod.description}
-                              </span>
-                              {/* minPlayers warning — only shown when below threshold */}
-                              {belowMinPlayers && (
-                                <span className="text-xs mt-0.5" style={{ color: "#5A2020" }}>
-                                  يتطلب {mod.minPlayers} لاعبين كحد أدنى
-                                </span>
-                              )}
+
+                              {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
+                              <button
+                                onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
+                                disabled={isDisabled}
+                                style={{
+                                  width: 38, height: 22, borderRadius: 11, flexShrink: 0,
+                                  backgroundColor: isOn ? mod.accent : "#181818",
+                                  border: `1px solid ${isOn ? mod.accent : "#252525"}`,
+                                  position: "relative",
+                                  cursor: isDisabled ? "not-allowed" : "pointer",
+                                  transition: "background-color 0.2s, border-color 0.2s",
+                                }}>
+                                <div style={{
+                                  width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
+                                  position: "absolute", top: 3,
+                                  right: isOn ? 3 : undefined,
+                                  left: isOn ? undefined : 3,
+                                  boxShadow: "0 1px 3px #0006",
+                                  transition: "right 0.2s, left 0.2s",
+                                }} />
+                              </button>
                             </div>
 
-                            {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
-                            <button
-                              onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
-                              disabled={isDisabled}
-                              style={{
-                                width: 38, height: 22, borderRadius: 11, flexShrink: 0,
-                                backgroundColor: isOn ? mod.accent : "#181818",
-                                border: `1px solid ${isOn ? mod.accent : "#252525"}`,
-                                position: "relative",
-                                cursor: isDisabled ? "not-allowed" : "pointer",
-                                transition: "background-color 0.2s, border-color 0.2s",
-                              }}>
-                              <div style={{
-                                width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
-                                position: "absolute", top: 3,
-                                right: isOn ? 3 : undefined,
-                                left: isOn ? undefined : 3,
-                                boxShadow: "0 1px 3px #0006",
-                                transition: "right 0.2s, left 0.2s",
-                              }} />
-                            </button>
+                            {/* ── Magician potion-mode sub-config ──
+                                Only appears when the Magician mod is toggled ON.
+                                Two mutually exclusive options matching the dark theme. */}
+                            {mod.id === "magician" && isOn && (
+                              <div className="flex flex-col gap-1.5 px-3.5 pb-3 pt-1">
+                                <span className="text-xs font-semibold" style={{ color: "#666666" }}>
+                                  سعة الجرعات
+                                </span>
+                                <div className="flex flex-col gap-1.5">
+                                  {([
+                                    { id: "dual",   label: "جرعتين منفصلة",      sub: "جرعة حياة وجرعة سم مستقلتان" },
+                                    { id: "single", label: "جرعة واحدة مشتركة", sub: "استخدام أي منهما يستنفد الاثنتين" },
+                                  ] as const).map(opt => {
+                                    const selected = magicianPotionMode === opt.id;
+                                    return (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={e => { e.stopPropagation(); setMagicianPotionMode(opt.id); }}
+                                        className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-all duration-150 active:scale-[0.99] text-right"
+                                        style={{
+                                          backgroundColor: selected ? "#0E1604" : "#0A0A0A",
+                                          border: `1px solid ${selected ? mod.accent : "#1A1A1A"}`,
+                                          boxShadow: selected ? `0 0 14px ${mod.accent}22` : "none",
+                                        }}>
+                                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                                          <span className="text-sm font-bold"
+                                            style={{ color: selected ? mod.accent : "#888888" }}>
+                                            {opt.label}
+                                          </span>
+                                          <span className="text-xs"
+                                            style={{ color: selected ? "#5A7A2E" : "#3A3A3A" }}>
+                                            {opt.sub}
+                                          </span>
+                                        </div>
+                                        <span
+                                          style={{
+                                            width: 16, height: 16, borderRadius: 8, flexShrink: 0,
+                                            border: `2px solid ${selected ? mod.accent : "#333333"}`,
+                                            backgroundColor: selected ? mod.accent : "transparent",
+                                            transition: "background-color 0.15s, border-color 0.15s",
+                                          }}
+                                        />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
 
                           </div>
                         );
