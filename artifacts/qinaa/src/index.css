@@ -140,7 +140,7 @@
   --chart-4: 0 0% 40%;
   --chart-5: 0 0% 60%;
 
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
   --radius: .5rem; /* 8px */
