@@ -216,7 +216,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
       ) : <div />}
       <div className="flex items-center gap-2">
         <VenetianMask size={26} color="#D32F2F" strokeWidth={1.5} />
-        <span className="font-black text-lg" style={{ color: "#D32F2F", fontFamily: "serif" }}>
+        <span className="font-black text-lg" style={{ color: "#D32F2F" }}>
           {label ?? "القناع"}
         </span>
       </div>
@@ -301,7 +301,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
-          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h1>
           <p className="text-sm text-center tracking-wide font-light" style={{ color: "rgba(255,255,255,0.55)" }}>المدينة تنام والقاتل يصحو..</p>
         </div>
 
@@ -402,7 +402,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               <div style={{ filter: "drop-shadow(0 0 28px #D32F2F55)" }}>
                 <VenetianMask size={56} color="#D32F2F" strokeWidth={0.9} />
               </div>
-              <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h2>
+              <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h2>
               <p className="text-xs text-center leading-relaxed" style={{ color: "#666666" }}>
                 لعبة استنتاج وخداع صُنعت للمجالس
               </p>
@@ -823,7 +823,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   );
   // Game speed preset (drives the 3 timers). Persists across sessions.
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(
-    () => pick("gameSpeedV1", "fast" as GameSpeed)
+    () => pick("gameSpeedV1", "medium" as GameSpeed)
   );
   const speedPreset = SPEED_PRESETS[gameSpeed];
   // Transient per-night boy picks (only used in inheritance mode — the standard
@@ -1550,6 +1550,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Reset boy inheritance transients
     setBoyKillTarget(null);
     setBoySilenceTarget(null);
+    // Reset House Rules to documented defaults so the next game starts from
+    // a known baseline that matches the "(افتراضي)" labels in the UI.
+    setGameSpeed("medium");
+    setBoyInheritsAce(false);
     // Reset avenger interrupt flow
     setAvengerFlow(null);
     setPhase("setup");
@@ -3752,7 +3756,7 @@ function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => vo
           <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
-          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F", fontFamily: "serif" }}>القناع</h1>
+          <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h1>
           <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
         </div>
         <div className="flex flex-col gap-5 w-full">
