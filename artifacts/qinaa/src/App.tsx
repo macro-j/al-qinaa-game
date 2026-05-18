@@ -1851,7 +1851,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 {/* Slot 4 — role name, mirrors instruction text slot */}
                 <span style={{
                   color: "#FFFFFF", fontSize: 28, fontWeight: 900,
-                  fontFamily: "serif", textAlign: "center", lineHeight: 1.2,
+                  textAlign: "center", lineHeight: 1.2,
                   textShadow: `0 0 24px ${meta.color}66`,
                 }}>
                   {getRoleName(current.role)}
@@ -2549,7 +2549,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-2 text-center">
               <span className="text-3xl font-black text-white">{executionReveal.name}</span>
               <span className="text-xs tracking-widest font-semibold" style={{ color: "#555" }}>كان دوره</span>
-              <span className="text-2xl font-black" style={{ color: revealMeta.color, fontFamily: "serif" }}>
+              <span className="text-2xl font-black" style={{ color: revealMeta.color }}>
                 {getRoleName(executionReveal.role)}
               </span>
               <span className="text-xs text-center px-4 leading-relaxed" style={{ color: "#444" }}>
@@ -2710,7 +2710,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             {headIcon}
           </div>
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="text-4xl font-black" style={{ color: accent, fontFamily: "serif", textShadow: `0 0 28px ${accent}55`, letterSpacing: "0.04em" }}>
+            <span className="text-4xl font-black" style={{ color: accent, textShadow: `0 0 28px ${accent}55`, letterSpacing: "0.04em" }}>
               {headLabel}
             </span>
             {isMadmanWin && gameOver.killerName && (
@@ -3626,7 +3626,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           : "أضف لاعبين لتفعيل الإضافات"}
                       </span>
                       {availableSlots > 0 && (
-                        <span className="text-xs font-mono"
+                        <span className="text-xs tabular-nums"
                           style={{ color: usedSlots >= availableSlots ? "#7A1A1A" : "#282828" }}>
                           {usedSlots}/{availableSlots}
                         </span>
@@ -3965,7 +3965,7 @@ function JoinRoomScreen({ onBack, onSubmit, initialCode = "" }: {
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
             onKeyDown={(e) => e.key === "Enter" && handle()}
             placeholder="0000"
-            className="w-full rounded-xl font-black font-mono outline-none border-2"
+            className="w-full rounded-xl font-black tabular-nums outline-none border-2"
             style={{
               backgroundColor: "#111111",
               borderColor: code.length > 0 ? "#D32F2F" : "#2A2A2A",
@@ -4111,7 +4111,7 @@ function LobbyScreen({
           </div>
           <div
             dir="ltr"
-            className="w-full rounded-xl border-2 font-black font-mono flex items-center justify-center"
+            className="w-full rounded-xl border-2 font-black tabular-nums flex items-center justify-center"
             style={{
               backgroundColor: "#0D0D0D",
               borderColor: "#D32F2F",
@@ -4482,7 +4482,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 <div className="flex flex-col items-center gap-2">
                   <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
                   <span className="text-3xl font-black text-center leading-tight"
-                    style={{ color: role.color, fontFamily: "serif", direction: "rtl" }}>
+                    style={{ color: role.color, direction: "rtl" }}>
                     {role.label}
                   </span>
                   <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
@@ -4877,7 +4877,7 @@ function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | n
       <div className="flex items-center gap-1.5">
         <Timer size={13} style={{ color: isUrgent ? "#D32F2F" : "#555" }} />
         <motion.span
-          className="text-base font-mono font-black tabular-nums"
+          className="text-base font-black tabular-nums"
           animate={isUrgent ? { opacity: [1, 0.45, 1] } : { opacity: 1 }}
           transition={isUrgent ? { repeat: Infinity, duration: 0.75, ease: "easeInOut" } : {}}
           style={{ color: isUrgent ? "#D32F2F" : "#AAAAAA" }}
@@ -4927,7 +4927,7 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
   return (
     <div className={`flex items-center justify-center gap-1.5${urgent ? " animate-pulse" : ""}`}>
       <Timer size={12} style={{ color: urgent ? "#D32F2F" : "#555555" }} />
-      <span className="text-xs font-mono font-bold tabular-nums" style={{ color: urgent ? "#D32F2F" : "#555555" }}>
+      <span className="text-xs font-bold tabular-nums" style={{ color: urgent ? "#D32F2F" : "#555555" }}>
         {String(Math.floor(secs / 60)).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}
       </span>
     </div>
@@ -4991,7 +4991,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
         <div className="flex flex-col items-center gap-3 text-center">
           <span
             className="text-5xl font-black leading-tight"
-            style={{ color: wolvesWon ? "#D32F2F" : "#4CAF50", fontFamily: "serif" }}>
+            style={{ color: wolvesWon ? "#D32F2F" : "#4CAF50" }}>
             {wolvesWon ? "انتصرت المافيا" : "انتصر الشعب"}
           </span>
           <p className="text-base font-semibold" style={{ color: wolvesWon ? "#FF6B6B" : "#8BC34A" }}>
@@ -5209,7 +5209,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                   <div className="flex flex-col items-center gap-2">
                     <span className="text-xs tracking-widest font-semibold" style={{ color: "#666666" }}>قناعك</span>
                     <span className="text-3xl font-black text-center leading-tight"
-                      style={{ color: myRoleColor, fontFamily: "serif", direction: "rtl" }}>
+                      style={{ color: myRoleColor, direction: "rtl" }}>
                       {myRoleLabel}
                     </span>
                     <span className="text-xs text-center px-2 leading-relaxed" style={{ color: "#888888" }}>
@@ -5275,7 +5275,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                   <VenetianMask size={32} color={myRoleColor} strokeWidth={1.3} className="flex-shrink-0" />
                   <div className="flex flex-col items-end flex-1 min-w-0">
                     <span className="text-xs" style={{ color: "#666666" }}>قناعك</span>
-                    <span className="text-base font-black leading-tight text-right" style={{ color: myRoleColor, fontFamily: "serif" }}>
+                    <span className="text-base font-black leading-tight text-right" style={{ color: myRoleColor }}>
                       {myRoleLabel}
                     </span>
                     {hostIsMafia && game.wolfAllies.length > 0 && (

@@ -141,8 +141,10 @@
   --chart-5: 0 0% 60%;
 
   --app-font-sans: 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
+  /* Defensive: alias serif/mono to the same Tajawal stack so any stray
+     `font-serif` or `font-mono` utility class can never escape global typography. */
+  --app-font-serif: 'Tajawal', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --app-font-mono: 'Tajawal', ui-monospace, Menlo, monospace;
   --radius: .5rem; /* 8px */
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
