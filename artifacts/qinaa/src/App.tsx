@@ -3285,6 +3285,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
+        {/* ── Players Counter — sits just above the (scrollable) list so the
+            narrator can see the current roster size at a glance even when the
+            list is scrolled. ── */}
+        {players.length > 0 && (
+          <div className="flex items-center justify-end px-1 -mb-1">
+            <span className="text-[11px] font-semibold tracking-wide" style={{ color: "#666666" }}>
+              {`عدد اللاعبين: ${players.length}`}
+            </span>
+          </div>
+        )}
+
         {/* ── Players List — capped scroll height keeps the bottom CTA visible
             on small screens regardless of roster size. ── */}
         {players.length > 0 ? (
@@ -3622,7 +3633,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       border:          `1px solid ${isActive ? "#D32F2F" : "transparent"}`,
                       boxShadow:       isActive ? "0 0 14px #D32F2F33" : "none",
                     }}>
-                    {preset.labelAr}
+                    <span className="flex flex-col items-center gap-0.5 leading-none">
+                      <span>{preset.labelAr}</span>
+                      {id === "medium" && (
+                        <span className="text-[9px] font-bold"
+                          style={{ color: isActive ? "#FFFFFFB3" : "#5C5C5C" }}>
+                          (افتراضي)
+                        </span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
@@ -3647,7 +3666,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 توريث الزعامة (الولد)
               </span>
               <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
-                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة)
+                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة) · (الافتراضي: مغلق)
               </span>
             </div>
           </button>
