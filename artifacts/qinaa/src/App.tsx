@@ -614,6 +614,19 @@ const formatCorpsesCount = (count: number): string => {
   }
 };
 
+// ── سرعة المجلس (Game Speed presets) ──────────────────────────────────────
+// Three pacing profiles for the table. Each preset drives THREE timers:
+//   • turn      — per-role night action window (seconds)
+//   • discuss   — open day discussion window  (seconds)
+//   • lastWords — accused player's final defense window (seconds)
+// Tweak in one place; every timer site reads from the active preset.
+type GameSpeed = "fast" | "medium" | "slow";
+const SPEED_PRESETS: Record<GameSpeed, { turn: number; discuss: number; lastWords: number; labelAr: string }> = {
+  fast:   { turn: 15, discuss: 60,  lastWords: 30, labelAr: "سريع"  },
+  medium: { turn: 30, discuss: 90,  lastWords: 45, labelAr: "متوسط" },
+  slow:   { turn: 45, discuss: 120, lastWords: 60, labelAr: "بطيء"  },
+};
+
 const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
   "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
   "الإكة":   { color: "#B71C1C", glow: "#B71C1C33", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
@@ -808,6 +821,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [boyInheritsAce, setBoyInheritsAce] = useState<boolean>(
     () => pick("boyInheritsAce", false)
   );
+  // Game speed preset (drives the 3 timers). Persists across sessions.
+  const [gameSpeed, setGameSpeed] = useState<GameSpeed>(
+    () => pick("gameSpeedV1", "fast" as GameSpeed)
+  );
+  const speedPreset = SPEED_PRESETS[gameSpeed];
   // Transient per-night boy picks (only used in inheritance mode — the standard
   // boy still uses the shared `selectedTarget`). Reset on entry to the boy turn
   // and on every game-reset path.
@@ -916,7 +934,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, avengerFlow, executionResult,
+      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -924,7 +942,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState, magicianPotionMode, boyInheritsAce, avengerFlow, executionResult,
+    magicianState, magicianPotionMode, boyInheritsAce, gameSpeed, avengerFlow, executionResult,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1022,10 +1040,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (phase !== "night" || nightTransition !== "none") return;
     setNightTimerExpired(false);
-    setTimerEndsAt(Date.now() + 15_000);
-    const t = setTimeout(() => setNightTimerExpired(true), 15_000);
+    const turnMs = speedPreset.turn * 1000;
+    setTimerEndsAt(Date.now() + turnMs);
+    const t = setTimeout(() => setNightTimerExpired(true), turnMs);
     return () => clearTimeout(t);
-  }, [nightStep, nightTransition, phase]);
+  }, [nightStep, nightTransition, phase, speedPreset.turn]);
 
   // ── Auto-skip: when night timer hits 0, fire the same action as the skip button ──
   useEffect(() => {
@@ -1889,7 +1908,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D",
                   border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}`,
                 }}>
-                <DayTimerBar endsAt={timerEndsAt} maxSeconds={15} urgentAt={5} />
+                <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.turn} urgentAt={Math.max(3, Math.floor(speedPreset.turn / 3))} />
               </div>
             )}
           </div>
@@ -2852,7 +2871,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <motion.button
               onClick={() => {
-                setTimerEndsAt(Date.now() + 60_000);
+                setTimerEndsAt(Date.now() + speedPreset.discuss * 1000);
                 setDaySubPhase("discussion");
               }}
               whileTap={{ scale: 0.95 }}
@@ -2892,7 +2911,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
                 <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
                 <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={60} />
+                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.discuss} />
                 </div>
               </div>
               {morningBanner}
@@ -2947,7 +2966,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           setDaySubPhase("vote_tie");
         } else {
           setAccusedPlayer(nominees[0].name);
-          setTimerEndsAt(Date.now() + 30_000);
+          setTimerEndsAt(Date.now() + speedPreset.lastWords * 1000);
           setDaySubPhase("justification");
         }
       };
@@ -3067,9 +3086,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F44" }}>
               <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
               <span className="text-lg font-black text-white">{accusedPlayer}</span>
-              <p className="text-xs text-center" style={{ color: "#555" }}>لديه 30 ثانية للدفاع عن نفسه</p>
+              <p className="text-xs text-center" style={{ color: "#555" }}>{`لديه ${speedPreset.lastWords} ثانية للدفاع عن نفسه`}</p>
               <div className="mt-2 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
-                <DayTimerBar endsAt={timerEndsAt} maxSeconds={30} />
+                <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.lastWords} />
               </div>
             </div>
             <div className="flex-1" />
@@ -3266,10 +3285,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
-        {/* ── Players List ── */}
+        {/* ── Players List — capped scroll height keeps the bottom CTA visible
+            on small screens regardless of roster size. ── */}
         {players.length > 0 ? (
-          <div className="flex flex-col rounded-2xl overflow-hidden"
-            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A" }}>
+          <div className="flex flex-col rounded-2xl overflow-y-auto"
+            style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A", maxHeight: "min(42vh, 360px)" }}>
             {players.map((name, idx) => (
               <div key={name} className="flex items-center justify-between px-4 py-3.5"
                 style={{ borderBottom: idx < players.length - 1 ? "1px solid #141414" : "none" }}>
@@ -3561,42 +3581,74 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           );
         })()}
 
-        {/* ── إعدادات المجلس (House Rules) ─────────────────────────────────
-            Optional rule tweaks that change how a role behaves. Kept in its
-            own card so it reads distinctly from the expansion mods above. */}
-        <div className="flex flex-col gap-2 p-4 rounded-2xl"
-          style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-black" style={{ color: "#CCCCCC" }}>إعدادات المجلس</span>
-            <span className="text-[10px] font-bold" style={{ color: "#444" }}>· قواعد البيت</span>
-          </div>
-          <p className="text-xs leading-relaxed" style={{ color: "#666" }}>
-            تعديلات اختيارية على سلوك الأدوار. اختر ما يناسب طاولتكم.
-          </p>
+        {/* ── إعدادات المجلس — compact premium card ────────────────────────
+            One unified container with a slim header, a segmented "سرعة"
+            control, and a low-profile inheritance row. Tight vertical
+            rhythm keeps the bottom CTA in view on small screens. */}
+        <div className="flex flex-col rounded-2xl overflow-hidden"
+          style={{ backgroundColor: "#141414", border: "1px solid #1F1F1F" }}>
 
-          {/* ── Toggle: توريث الزعامة (الولد) ── */}
+          {/* Header */}
+          <div className="flex flex-col gap-0.5 px-3.5 pt-3 pb-2.5"
+            style={{ borderBottom: "1px solid #1A1A1A" }}>
+            <span className="text-sm font-black text-white text-right">إعدادات المجلس</span>
+            <span className="text-[11px] leading-snug text-right" style={{ color: "#666" }}>
+              تعديلات اختيارية على اللعبة. اختر ما يناسب مجلسكم.
+            </span>
+          </div>
+
+          {/* ── Row 1: سرعة المجلس (segmented radio) ── */}
+          <div className="flex flex-col gap-2 px-3.5 py-3"
+            style={{ borderBottom: "1px solid #1A1A1A" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold tracking-wide" style={{ color: "#888" }}>
+                {`دور: ${speedPreset.turn}ث · نقاش: ${speedPreset.discuss}ث · دفاع: ${speedPreset.lastWords}ث`}
+              </span>
+              <span className="text-xs font-bold text-white">سرعة المجلس</span>
+            </div>
+            <div className="flex flex-row-reverse gap-1.5 rounded-xl p-1"
+              style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
+              {(["fast", "medium", "slow"] as GameSpeed[]).map((id) => {
+                const isActive = gameSpeed === id;
+                const preset   = SPEED_PRESETS[id];
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setGameSpeed(id)}
+                    className="flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
+                    style={{
+                      backgroundColor: isActive ? "#D32F2F" : "transparent",
+                      color:           isActive ? "#FFFFFF" : "#777777",
+                      border:          `1px solid ${isActive ? "#D32F2F" : "transparent"}`,
+                      boxShadow:       isActive ? "0 0 14px #D32F2F33" : "none",
+                    }}>
+                    {preset.labelAr}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Row 2: توريث الزعامة (slim inline toggle) ── */}
           <button
             onClick={() => setBoyInheritsAce(v => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3 py-3 rounded-xl transition-colors duration-200 active:scale-[0.99]"
-            style={{
-              backgroundColor: boyInheritsAce ? "#1A0000" : "#0F0F0F",
-              border: `1px solid ${boyInheritsAce ? "#D32F2F55" : "#1A1A1A"}`,
-            }}>
-            <div className="flex flex-col items-start gap-1 text-right flex-1">
-              <span className="text-sm font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
-                توريث الزعامة (الولد)
-              </span>
-              <span className="text-[11px] leading-snug" style={{ color: "#666" }}>
-                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة)
-              </span>
-            </div>
-            <div className="w-10 h-6 rounded-full relative transition-colors duration-200 flex-shrink-0"
-              style={{ backgroundColor: boyInheritsAce ? "#D32F2F" : "#222" }}>
-              <div className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200"
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: boyInheritsAce ? "#170000" : "transparent" }}>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: boyInheritsAce ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
                 style={{
                   backgroundColor: "#FFFFFF",
                   right: boyInheritsAce ? "0.125rem" : "1.125rem",
                 }} />
+            </div>
+            <div className="flex flex-col items-end gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
+                توريث الزعامة (الولد)
+              </span>
+              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
+                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة)
+              </span>
             </div>
           </button>
         </div>
