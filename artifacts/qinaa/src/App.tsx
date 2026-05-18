@@ -473,7 +473,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           style={{ backgroundColor: "rgba(0,0,0,0.88)" }}
           onClick={() => setShowGuide(false)}>
           <div
-            className="w-full max-w-sm rounded-2xl flex flex-col gap-5 p-6 overflow-y-auto max-h-[90vh]"
+            className="w-full max-w-sm rounded-2xl flex flex-col gap-4 p-5 overflow-y-auto max-h-[90vh] font-sans"
             style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
             onClick={(e) => e.stopPropagation()}>
             {/* Header */}
@@ -490,85 +490,81 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </button>
             </div>
 
-            {/* Objective */}
-            <div className="rounded-xl px-4 py-4 flex flex-col gap-2"
+            {/* Objective — compact */}
+            <div className="rounded-xl px-3.5 py-3 flex flex-col gap-1"
               style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+              <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
+              <p className="text-[13px] leading-snug text-right" style={{ color: "#CCCCCC" }}>
                 أنت في قرية غامضة، لكل فريق هدف واحد:
               </p>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+              <p className="text-[13px] leading-snug text-right" style={{ color: "#CCCCCC" }}>
                 • الشعب: اكشفوا المافيا وصوّتوا ضدهم للنجاة.
               </p>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
+              <p className="text-[13px] leading-snug text-right" style={{ color: "#CCCCCC" }}>
                 • المافيا: تصفية الشعب والسيطرة على القرية دون الانكشاف.
               </p>
             </div>
 
-            {/* Role cards */}
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
-              {GUIDE_ROLES.map((r) => (
-                <div key={r.label} className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                  style={{ backgroundColor: "#0D0D0D", border: `1px solid ${r.color}22` }}>
-                  <VenetianMask size={20} color={r.color} strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                  <div className="flex flex-col items-start gap-0.5 flex-1">
-                    <span className="font-black text-sm" style={{ color: r.color, fontFamily: "serif" }}>{r.label}</span>
-                    <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>{r.desc}</span>
+            {/* ── Main Roles — unified container ── */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold tracking-[0.25em] uppercase px-1" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
+              <div className="rounded-xl overflow-hidden divide-y divide-white/5"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E" }}>
+                {GUIDE_ROLES.map((r) => (
+                  <div key={r.label} className="flex flex-col gap-1 px-3.5 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <VenetianMask size={15} color={r.color} strokeWidth={1.6} className="flex-shrink-0" />
+                      <span className="font-black text-[13px]" style={{ color: r.color }}>{r.label}</span>
+                    </div>
+                    <span className="text-[12px] leading-snug text-right" style={{ color: "#888888" }}>{r.desc}</span>
                   </div>
-                </div>
-              ))}
-              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #33333322" }}>
-                <VenetianMask size={20} color="#555555" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-start gap-0.5 flex-1">
-                  <span className="font-black text-sm" style={{ color: "#777777", fontFamily: "serif" }}>المواطن</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب، لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
+                ))}
+                <div className="flex flex-col gap-1 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <VenetianMask size={15} color="#555555" strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="font-black text-[13px]" style={{ color: "#777777" }}>المواطن</span>
+                  </div>
+                  <span className="text-[12px] leading-snug text-right" style={{ color: "#666666" }}>من الشعب، لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
                 </div>
               </div>
             </div>
 
-            {/* ── Expansion Roles ── */}
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#555555" }}>أدوار الإضافات</span>
-
-              {/* المجنون */}
-              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #E879F922" }}>
-                <VenetianMask size={20} color="#E879F9" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-start gap-0.5 flex-1">
-                  <span className="font-black text-sm" style={{ color: "#E879F9", fontFamily: "serif" }}>المجنون</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>لاعب مستقل، هدفه إقناع المجلس بالتصويت ضده وإعدامه في النهار ليفوز وحده وتخسر القرية.</span>
+            {/* ── Expansion Roles — unified container ── */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold tracking-[0.25em] uppercase px-1" style={{ color: "#555555" }}>أدوار الإضافات</span>
+              <div className="rounded-xl overflow-hidden divide-y divide-white/5"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E" }}>
+                {/* المجنون */}
+                <div className="flex flex-col gap-1 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <VenetianMask size={15} color="#E879F9" strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="font-black text-[13px]" style={{ color: "#E879F9" }}>المجنون</span>
+                  </div>
+                  <span className="text-[12px] leading-snug text-right" style={{ color: "#888888" }}>لاعب مستقل، هدفه إقناع المجلس بالتصويت ضده وإعدامه في النهار ليفوز وحده وتخسر القرية.</span>
                 </div>
-              </div>
-
-              {/* التوأم */}
-              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #22D3EE22" }}>
-                <VenetianMask size={20} color="#22D3EE" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-start gap-0.5 flex-1">
-                  <span className="font-black text-sm" style={{ color: "#22D3EE", fontFamily: "serif" }}>التوأم</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً.</span>
+                {/* التوأم */}
+                <div className="flex flex-col gap-1 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <VenetianMask size={15} color="#22D3EE" strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="font-black text-[13px]" style={{ color: "#22D3EE" }}>التوأم</span>
+                  </div>
+                  <span className="text-[12px] leading-snug text-right" style={{ color: "#888888" }}>قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً.</span>
                 </div>
-              </div>
-
-              {/* المنتقم */}
-              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #F59E0B22" }}>
-                <VenetianMask size={20} color="#F59E0B" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-start gap-0.5 flex-1">
-                  <span className="font-black text-sm" style={{ color: "#F59E0B", fontFamily: "serif" }}>المنتقم</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر.</span>
+                {/* المنتقم */}
+                <div className="flex flex-col gap-1 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <VenetianMask size={15} color="#F59E0B" strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="font-black text-[13px]" style={{ color: "#F59E0B" }}>المنتقم</span>
+                  </div>
+                  <span className="text-[12px] leading-snug text-right" style={{ color: "#888888" }}>قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر.</span>
                 </div>
-              </div>
-
-              {/* الساحر */}
-              <div className="flex flex-row items-start gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #84CC1622" }}>
-                <VenetianMask size={20} color="#84CC16" strokeWidth={1.5} className="flex-shrink-0 mt-0.5" />
-                <div className="flex flex-col items-start gap-0.5 flex-1">
-                  <span className="font-black text-sm" style={{ color: "#84CC16", fontFamily: "serif" }}>الساحر</span>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#999999" }}>يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب.</span>
+                {/* الساحر */}
+                <div className="flex flex-col gap-1 px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <VenetianMask size={15} color="#84CC16" strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="font-black text-[13px]" style={{ color: "#84CC16" }}>الساحر</span>
+                  </div>
+                  <span className="text-[12px] leading-snug text-right" style={{ color: "#888888" }}>يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب.</span>
                 </div>
               </div>
             </div>
