@@ -1186,16 +1186,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       startNightWithTransition(order);
       setPhase("night");
     } else {
-      // ── Spoiler-safe sequencing ──
-      // 1) Close the card first; `disabled={!isCardFlipped}` instantly locks the button.
-      // 2) Wait for the 0.55s flip-back animation to fully complete BEFORE advancing
-      //    the index, otherwise the next player's role peeks through mid-rotation.
+      // ── Snappy, spoiler-safe transition ──
+      // The flip card is keyed by `currentIndex`, so bumping the index
+      // unmounts the old motion.div and mounts a fresh one at rotateY:0
+      // (front face). No mid-flip role peek, no lingering name — the new
+      // player's card appears instantly, already hidden.
       setIsCardFlipped(false);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
-      }, 600);
+      setCurrentIndex((i) => i + 1);
     }
   };
 
@@ -1701,15 +1700,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </p>
           </div>
 
-          {/* ── Call-out ── */}
-          <div className="flex flex-col items-center gap-2 py-4 rounded-2xl"
+          {/* ── Call-out ── keyed by index so the name swaps instantly on Next */}
+          <div key={`callout-${currentIndex}`} className="flex flex-col items-center gap-2 py-4 rounded-2xl"
             style={{ backgroundColor: "#0A0A0A", border: "1px solid #1E1E1E" }}>
             <span className="text-sm font-semibold" style={{ color: "#555555" }}>يستيقظ الآن :</span>
             <span className="text-3xl font-black text-white">{current.name}</span>
           </div>
 
-          {/* ── 3D Flip Card ── */}
+          {/* ── 3D Flip Card ──
+              key={currentIndex} forces a clean unmount/remount on Next so the
+              previous player's flip animation and back-face content can't
+              linger or peek through during the transition. */}
           <div
+            key={currentIndex}
             onClick={() => !isCardFlipped && setIsCardFlipped(true)}
             style={{ perspective: "900px", height: CARD_HEIGHT, cursor: isCardFlipped ? "default" : "pointer" }}
             className="w-full select-none">
