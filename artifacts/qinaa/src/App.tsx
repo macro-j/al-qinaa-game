@@ -964,6 +964,29 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       audio.preload = "auto";
       audioCache.current[file] = audio;
     });
+
+    // ── One-time audio unlock on first user interaction ───────────────────
+    // Browsers (esp. iOS Safari) block audio until a user gesture resumes
+    // the AudioContext. We resume it + call .load() on every cached element
+    // to warm the media pipeline, so subsequent .play() calls from async
+    // effects/timers don't get silently rejected.
+    const unlock = () => {
+      try {
+        type ACtor = typeof AudioContext;
+        const Ctx: ACtor | undefined =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext?: ACtor }).webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          if (ctx.state === "suspended") void ctx.resume();
+        }
+      } catch { /* ignored — best-effort unlock */ }
+      Object.values(audioCache.current).forEach(a => {
+        try { a.load(); } catch { /* ignored */ }
+      });
+    };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    return () => document.removeEventListener("pointerdown", unlock);
   }, []);
 
   const playGameAudio = (fileName: string) => {
@@ -979,6 +1002,42 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     audio.play().catch(() => {});
   };
 
+  // Hard-stop any playing cue. Called by every game-reset path so a returning
+  // narrator never hears a pending transition cue leak into the setup screen.
+  const stopAllAudio = () => {
+    if (currentPlaying.current) {
+      currentPlaying.current.pause();
+      currentPlaying.current.currentTime = 0;
+      currentPlaying.current = null;
+    }
+  };
+
+  // ── Night-phase audio maps — used by inline triggers at every
+  // setNightTransition() site so audio fires in the same callstack frame
+  // as the state change (no decoupled effect, no race conditions).
+  const NIGHT_WAKE_AUDIO:   Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
+  const NIGHT_PROMPT_AUDIO: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
+  const NIGHT_SLEEP_AUDIO:  Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
+  const playRoleAudio = (kind: "wake" | "prompt" | "sleep", role: string) => {
+    const map = kind === "wake" ? NIGHT_WAKE_AUDIO : kind === "prompt" ? NIGHT_PROMPT_AUDIO : NIGHT_SLEEP_AUDIO;
+    const file = map[role];
+    if (file) playGameAudio(file);
+  };
+
+  // ── Rehydration recovery — fires once on mount if state was restored
+  // mid-transition from localStorage. Night audio is otherwise only emitted
+  // at setNightTransition() callsites, which never re-run on reload, so
+  // without this a resumed session would silently skip its current cue.
+  useEffect(() => {
+    if (phase !== "night") return;
+    if (nightTransition === "city_sleeps")      playGameAudio("start.m4a");
+    else if (nightTransition === "role_wakes")  playRoleAudio("wake", nightStep);
+    else if (nightTransition === "role_sleeps") playRoleAudio("sleep", nightStep);
+    else if (nightTransition === "city_wakes")  playGameAudio("morning.m4a");
+    else                                        playRoleAudio("prompt", nightStep);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Victory audio — fires once when entering game_over ──
   useEffect(() => {
     if (phase !== "game_over" || !gameOver) return;
@@ -990,30 +1049,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, gameOver?.winner]);
 
-  // ── State-to-audio mapping ──
+  // ── State-to-audio mapping (reveal/day only) ──
+  // Night-phase audio is no longer driven here. It is now triggered inline
+  // at every setNightTransition() call site so the .play() request fires in
+  // the same callstack as the state change — eliminating the duplicate
+  // "start.m4a" race and ensuring audio aligns 1:1 with the UI transition.
   useEffect(() => {
-    if (phase === "night") {
-      if (nightTransition === "city_sleeps") {
-        playGameAudio("start.m4a");
-      } else if (nightTransition === "role_wakes") {
-        const map: Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
-        if (map[nightStep]) playGameAudio(map[nightStep]);
-      } else if (nightTransition === "none") {
-        const map: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
-        if (map[nightStep]) playGameAudio(map[nightStep]);
-      } else if (nightTransition === "role_sleeps") {
-        const map: Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
-        if (map[nightStep]) playGameAudio(map[nightStep]);
-      } else if (nightTransition === "city_wakes") {
-        playGameAudio("morning.m4a");
-      }
-    } else if (phase === "reveal" && isNightKillReveal) {
+    if (phase === "reveal" && isNightKillReveal) {
       playGameAudio("success.m4a");
     } else if (phase === "day" && daySubPhase === "results" && dayResult.deaths.length === 0) {
       playGameAudio("fail.m4a");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, nightTransition, nightStep, daySubPhase]);
+  }, [phase, daySubPhase]);
 
   // ── Auto-advance night transitions after delay ──
   useEffect(() => {
@@ -1031,9 +1079,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const next = nightTransitionNextRef.current;
       nightTransitionNextRef.current = null;
       setNightTransition("none");
+      // If there's no follow-up transition queued, we've landed on the role
+      // action prompt — play the role's "prompt" cue (w2/e2/s2/b2). Otherwise
+      // the chained `next()` callback below will trigger its own audio.
+      if (!next) {
+        playRoleAudio("prompt", nightStep);
+      }
       next?.();
     }, delay);
     return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nightTransition]);
 
   // ── 15-second night action timer — resets when role changes ──
@@ -1157,6 +1212,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightTransitionLabel(`${getRoleName(firstRole)} ${roleWakes(firstRole)}`);
       nightTransitionNextRef.current = null;
       setNightTransition("role_wakes");
+      playRoleAudio("wake", firstRole);
     };
     setNightTransitionLabel("الجميع ينام الكل يغمض عينه");
     setNightTransition("city_sleeps");
@@ -1477,9 +1533,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         setNightTransitionLabel(`${getRoleName(nextRole)} ${roleWakes(nextRole)}`);
         nightTransitionNextRef.current = null;
         setNightTransition("role_wakes");
+        playRoleAudio("wake", nextRole);
       };
       setNightTransitionLabel(`${getRoleName(nightStep)} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
+      playRoleAudio("sleep", nightStep);
     } else {
       // ── role_sleeps → city_wakes → compute results → win check ──
       const goToMorning = () => {
@@ -1512,14 +1570,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         nightTransitionNextRef.current = goToMorning;
         setNightTransitionLabel("الكل يصحى");
         setNightTransition("city_wakes");
+        playGameAudio("morning.m4a");
       };
       setNightTransitionLabel(`${getRoleName(nightStep)} ${roleSleeps(nightStep)}..`);
       setNightTransition("role_sleeps");
+      playRoleAudio("sleep", nightStep);
     }
   };
 
   const handleEndGame = () => {
     if (!window.confirm("هل أنت متأكد أنك تريد إنهاء اللعبة والعودة للرئيسية؟")) return;
+    stopAllAudio();
     setAssignedRoles([]);
     setLivePlayers([]);
     setCurrentIndex(0);
@@ -2592,6 +2653,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const headIcon  = isTownWin ? <Shield size={56} color={accent} strokeWidth={1.2} /> : <VenetianMask size={56} color={accent} strokeWidth={1.2} />;
 
     const resetCore = () => {
+      stopAllAudio();
+      nightTransitionNextRef.current = null;
       setAssignedRoles([]);
       setLivePlayers([]);
       setCurrentIndex(0);
@@ -2771,6 +2834,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const alivePlayers = livePlayers.filter(p => p.isAlive);
 
     const restartGame = () => {
+      stopAllAudio();
+      nightTransitionNextRef.current = null;
       clearNarratorState();
       setPhase("setup");
       setAssignedRoles([]);
