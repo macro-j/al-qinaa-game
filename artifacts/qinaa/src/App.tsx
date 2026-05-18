@@ -408,7 +408,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </p>
               <span className="text-xs font-semibold px-3 py-1 rounded-full"
                 style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-                الإصدار التجريبي الثاني — Beta v2.0.0
+                الإصدار التجريبي الثالث — Beta v3.0.0
               </span>
             </div>
 
@@ -417,43 +417,47 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
             {/* Credits */}
             <div className="flex flex-col gap-3">
-              <span className="text-xs font-bold tracking-widest text-center" style={{ color: "#444444" }}>
+              <span className="text-[10px] font-bold tracking-[0.3em] text-center" style={{ color: "#444444" }}>
                 صُنّاع القناع
               </span>
 
-              {/* Mohammed */}
-              <a
-                href="https://www.tiktok.com/@ll_f7"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
-                <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-xs font-medium" style={{ color: "#555555" }}>التطوير والتصميم البصري</span>
-                  <span className="text-sm font-black text-white">Mohammed</span>
-                </div>
-                <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
-                  <ExternalLink size={13} strokeWidth={2} />
-                  <span className="text-xs" style={{ color: "#555555" }}>TikTok</span>
-                </div>
-              </a>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Mohammed */}
+                <a
+                  href="https://www.tiktok.com/@ll_f7"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center text-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-150 active:scale-95"
+                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
+                  <span className="text-sm font-black text-white tracking-wide">Mohammed</span>
+                  <span className="text-[10px] font-medium leading-snug" style={{ color: "#666666" }}>
+                    التطوير والتصميم البصري
+                  </span>
+                  <div className="flex items-center gap-1 mt-1 pt-1.5 w-full justify-center"
+                    style={{ borderTop: "1px solid #1A1A1A", color: "#555555" }}>
+                    <ExternalLink size={11} strokeWidth={2} />
+                    <span className="text-[10px] tracking-wide">TikTok</span>
+                  </div>
+                </a>
 
-              {/* Abdullah */}
-              <a
-                href="https://www.tiktok.com/@abdullah.jj57"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-row-reverse items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 active:scale-98 group"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
-                <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-xs font-medium" style={{ color: "#555555" }}>تصميم اللعب وقوانين المجلس</span>
-                  <span className="text-sm font-black text-white">Abdullah</span>
-                </div>
-                <div className="flex items-center gap-1.5" style={{ color: "#444444" }}>
-                  <ExternalLink size={13} strokeWidth={2} />
-                  <span className="text-xs" style={{ color: "#555555" }}>TikTok</span>
-                </div>
-              </a>
+                {/* Abdullah */}
+                <a
+                  href="https://www.tiktok.com/@abdullah.jj57"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center text-center gap-1.5 px-3 py-3 rounded-xl transition-all duration-150 active:scale-95"
+                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #1E1E1E", textDecoration: "none" }}>
+                  <span className="text-sm font-black text-white tracking-wide">Abdullah</span>
+                  <span className="text-[10px] font-medium leading-snug" style={{ color: "#666666" }}>
+                    تصميم اللعب وقوانين المجلس
+                  </span>
+                  <div className="flex items-center gap-1 mt-1 pt-1.5 w-full justify-center"
+                    style={{ borderTop: "1px solid #1A1A1A", color: "#555555" }}>
+                    <ExternalLink size={11} strokeWidth={2} />
+                    <span className="text-[10px] tracking-wide">TikTok</span>
+                  </div>
+                </a>
+              </div>
             </div>
 
             {/* Footer */}
