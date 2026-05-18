@@ -1024,20 +1024,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (file) playGameAudio(file);
   };
 
-  // ── Rehydration recovery — fires once on mount if state was restored
-  // mid-transition from localStorage. Night audio is otherwise only emitted
-  // at setNightTransition() callsites, which never re-run on reload, so
-  // without this a resumed session would silently skip its current cue.
-  useEffect(() => {
-    if (phase !== "night") return;
-    if (nightTransition === "city_sleeps")      playGameAudio("start.m4a");
-    else if (nightTransition === "role_wakes")  playRoleAudio("wake", nightStep);
-    else if (nightTransition === "role_sleeps") playRoleAudio("sleep", nightStep);
-    else if (nightTransition === "city_wakes")  playGameAudio("morning.m4a");
-    else                                        playRoleAudio("prompt", nightStep);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ── Victory audio — fires once when entering game_over ──
   useEffect(() => {
     if (phase !== "game_over" || !gameOver) return;
