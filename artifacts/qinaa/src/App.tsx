@@ -2256,40 +2256,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 onPick: (name: string) => void,
                 accent: string,
               ) => (
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   {list.map((p, idx) => {
                     const isSelected = selected === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
                     const rowBorder = isSelected ? accent   : "#222222";
                     return (
-                      <div key={p.name}
-                        className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                      <button
+                        key={p.name}
+                        onClick={() => onPick(p.name)}
+                        className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95"
                         style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
-                        <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
-                            style={{
-                              backgroundColor: isSelected ? `${accent}22` : "rgba(255,255,255,0.06)",
-                              color:           isSelected ? "#ffffff"     : "#888888",
-                              border:          `1px solid ${isSelected ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
-                            }}>
-                            {idx + 1}
-                          </span>
-                          <span className="text-sm font-semibold"
-                            style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                            {p.name}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => onPick(p.name)}
-                          className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
+                        <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                           style={{
-                            backgroundColor: isSelected ? accent   : "#1A1A1A",
-                            color:           isSelected ? "#ffffff" : "#888888",
-                            border:          `1px solid ${isSelected ? accent : "#333333"}`,
+                            backgroundColor: isSelected ? `${accent}22` : "rgba(255,255,255,0.06)",
+                            color:           isSelected ? "#ffffff"     : "#888888",
+                            border:          `1px solid ${isSelected ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
                           }}>
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-center leading-tight"
+                          style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                          {p.name}
+                        </span>
+                        <span className="text-[10px] font-bold tracking-wide"
+                          style={{ color: isSelected ? accent : "#444444" }}>
                           {isSelected ? "تم الاختيار" : "اختر"}
-                        </button>
-                      </div>
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -2336,27 +2330,49 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               );
             }
 
-            // Per-role filter rules:
-            // الولد: cannot target himself OR his teammate الإكة (no friendly fire)
-            // الشايب: cannot investigate himself
-            // الإكة & البنت: all alive (can target themselves)
-            const allAlive   = livePlayers.filter(p => p.isAlive);
-            const targetList =
-              nightStep === "الولد"
-                ? allAlive.filter(p => p.role !== "الولد" && p.role !== "الإكة")
-                : nightStep === "الشايب"
-                ? allAlive.filter(p => p.name !== currentPlayer?.name)
-                : allAlive;
+            // Per-role target pool + smart sorting:
+            //   الولد: pool = all alive EXCEPT self. The Ace stays in the pool
+            //     but is rendered DISABLED at index 0 — narrator sees the
+            //     ally clearly with a wolf glyph but cannot click them.
+            //   الإكة: pool = all alive. Boy at index 0, Ace (self) at index 1,
+            //     rest follow. Both fully clickable.
+            //   البنت: pool = all alive. Girl (self) at index 0 so the
+            //     protect-self affordance is the first tap target.
+            //   الشايب: pool = all alive except self.
+            const allAlive = livePlayers.filter(p => p.isAlive);
+            let targetList: typeof allAlive;
+            if (nightStep === "الولد") {
+              const poolNoSelf = allAlive.filter(p => p.role !== "الولد");
+              const ace        = poolNoSelf.find(p => p.role === "الإكة");
+              const others     = poolNoSelf.filter(p => p.role !== "الإكة");
+              targetList = ace ? [ace, ...others] : others;
+            } else if (nightStep === "الإكة") {
+              const boy  = allAlive.find(p => p.role === "الولد");
+              const ace  = allAlive.find(p => p.role === "الإكة");
+              const rest = allAlive.filter(p => p.role !== "الولد" && p.role !== "الإكة");
+              targetList = [...(boy ? [boy] : []), ...(ace ? [ace] : []), ...rest];
+            } else if (nightStep === "البنت") {
+              const girl = allAlive.find(p => p.role === "البنت");
+              const rest = allAlive.filter(p => p.role !== "البنت");
+              targetList = girl ? [girl, ...rest] : rest;
+            } else if (nightStep === "الشايب") {
+              targetList = allAlive.filter(p => p.name !== currentPlayer?.name);
+            } else {
+              targetList = allAlive;
+            }
 
             return (
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 {targetList.map((p, idx) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
                   const isMafiaRole     = p.role === "الولد" || p.role === "الإكة";
 
+                  // ── Friendly-fire lock: Boy can never silence-click the Ace ──
+                  const isAllyLocked = nightStep === "الولد" && p.role === "الإكة";
+
                   // ── Ally badge (حليف): shown only to the other mafia member ──
-                  // الولد sees الإكة; الإكة sees الولد
+                  // For الولد this row is the (disabled) Ace; for الإكة it's the Boy.
                   const showAllyBadge =
                     (nightStep === "الولد" && p.role === "الإكة") ||
                     (nightStep === "الإكة" && p.role === "الولد");
@@ -2371,74 +2387,66 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   // Lock all other rows once seer has picked
                   const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
 
-                  const rowBg     = isSelected ? "#2A0000" : "#141414";
-                  const rowBorder = isSelected ? "#D32F2F" : "#222222";
+                  const isDisabled = isAllyLocked || seerLocked;
+                  const rowBg      = isSelected ? "#2A0000" : "#141414";
+                  const rowBorder  = isSelected ? "#D32F2F" : "#222222";
 
                   return (
-                    <div key={p.name}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                    <button
+                      key={p.name}
+                      disabled={isDisabled || (isSeerStep && isInvestigated)}
+                      onClick={() => {
+                        setSelectedTarget(p.name);
+                        if (isSeerStep) setInvestigatedTarget(p.name);
+                      }}
+                      className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                       style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
 
-                      {/* ── RIGHT side (first in DOM = rightmost in RTL):
-                              Number badge + name/subtitle column ── */}
-                      <div className="flex items-center gap-3">
-
-                        {/* Index badge — prominent, isolated column */}
-                        <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
-                          style={{
-                            backgroundColor: isSelected ? "rgba(211,47,47,0.18)" : "rgba(255,255,255,0.06)",
-                            color:           isSelected ? "#FF6B6B" : "#888888",
-                            border: `1px solid ${isSelected ? "rgba(211,47,47,0.4)" : "rgba(255,255,255,0.08)"}`,
-                          }}>
-                          {idx + 1}
-                        </span>
-
-                        {/* Name + subtitles stacked */}
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                            {p.name}
-                          </span>
-
-                          {/* Ally badge */}
-                          {showAllyBadge && (
-                            <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
-                          )}
-
-                          {/* "أنت" self badge */}
-                          {showSelfBadge && (
-                            <span className="text-xs font-bold" style={{ color: "#999999" }}>(أنت)</span>
-                          )}
-
-                          {/* Seer result badge — only after host locks a target */}
-                          {showSeerBadge && (
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{
-                                backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
-                                color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
-                                border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
-                              }}>
-                              {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* ── LEFT side (last in DOM = leftmost in RTL): Select button ── */}
-                      <button
-                        disabled={seerLocked || (isSeerStep && isInvestigated)}
-                        onClick={() => {
-                          setSelectedTarget(p.name);
-                          if (isSeerStep) setInvestigatedTarget(p.name);
-                        }}
-                        className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                      {/* Index badge */}
+                      <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                         style={{
-                          backgroundColor: isSelected ? "#D32F2F" : "#1A1A1A",
-                          color:           isSelected ? "#ffffff" : "#888888",
-                          border: `1px solid ${isSelected ? "#D32F2F" : "#333333"}`,
+                          backgroundColor: isSelected ? "rgba(211,47,47,0.18)" : "rgba(255,255,255,0.06)",
+                          color:           isSelected ? "#FF6B6B" : "#888888",
+                          border: `1px solid ${isSelected ? "rgba(211,47,47,0.4)" : "rgba(255,255,255,0.08)"}`,
                         }}>
-                        {isSelected ? "تم الاختيار" : "اختر"}
-                      </button>
-                    </div>
+                        {idx + 1}
+                      </span>
+
+                      {/* Name — wolf glyph appended when this is the Boy's disabled Ace ally */}
+                      <span className="text-sm font-semibold text-center leading-tight"
+                        style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                        {p.name}{isAllyLocked ? " 🐺" : ""}
+                      </span>
+
+                      {/* Badge stack — at most one wins; kept compact for grid cell */}
+                      {showAllyBadge && !isAllyLocked && (
+                        <span className="text-[10px] font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                      )}
+                      {isAllyLocked && (
+                        <span className="text-[10px] font-bold" style={{ color: "#D32F2F" }}>حليفك</span>
+                      )}
+                      {showSelfBadge && (
+                        <span className="text-[10px] font-bold" style={{ color: "#999999" }}>(أنت)</span>
+                      )}
+                      {showSeerBadge && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
+                            color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
+                            border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                          }}>
+                          {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
+                        </span>
+                      )}
+
+                      {/* Action label — replaces the old standalone "اختر" button */}
+                      {!isAllyLocked && (
+                        <span className="text-[10px] font-bold tracking-wide"
+                          style={{ color: isSelected ? "#D32F2F" : "#444444" }}>
+                          {isSelected ? "تم الاختيار" : "اختر"}
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
