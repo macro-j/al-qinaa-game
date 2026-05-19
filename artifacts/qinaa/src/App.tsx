@@ -1688,41 +1688,62 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const canDistribute = players.length >= MIN_PLAYERS;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // ── Floating control buttons — rendered OUTSIDE motion.div so CSS
-  //    transforms never drag them. position:fixed keeps them viewport-anchored.
+  // ── Unified Top Navbar — iOS-style sticky bar above every phase.
+  //    The container is pointer-events-none so taps fall through to any
+  //    content that visually sits under the bar (e.g. scroll lists that
+  //    extend to the top of the viewport). Each button re-enables pointer
+  //    events for itself, so the navbar never blocks underlying UI.
+  //
+  //    Layout (RTL): first DOM child = visually RIGHT → primary nav action
+  //    (Back arrow on setup, X for an active game). Last DOM child =
+  //    visually LEFT → Mute toggle.
+  //
+  //    Rendered fixed so it floats above motion.div phase transitions
+  //    without inheriting their transforms.
+  const navAction = phase === "setup"
+    ? { onClick: onBack,        Icon: ArrowRight, title: "العودة للقائمة الرئيسية" }
+    : { onClick: handleEndGame, Icon: X,          title: "إنهاء اللعبة"           };
   const floatingButtons = (
-    <div className="fixed top-4 left-4 z-50 flex gap-2">
+    <div
+      dir="rtl"
+      className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-5 py-4 pointer-events-none">
+      {/* RIGHT — primary nav action (Back when on setup, Close otherwise) */}
+      <button
+        onClick={navAction.onClick}
+        title={navAction.title}
+        aria-label={navAction.title}
+        className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+        style={{
+          backgroundColor: "rgba(13,13,13,0.55)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+        }}>
+        <navAction.Icon size={18} strokeWidth={2} />
+      </button>
+
+      {/* LEFT — mute toggle (always rendered) */}
       <button
         onClick={() => setIsMuted(m => !m)}
         title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
-        className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
+        aria-label={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+        className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full transition-colors active:scale-90 hover:text-white"
         style={{
-          backgroundColor: "rgba(13,13,13,0.88)",
-          border: `1px solid ${isMuted ? "#D32F2F44" : "rgba(255,255,255,0.07)"}`,
-          backdropFilter: "blur(10px)",
-          color: isMuted ? "#D32F2F" : "#555",
+          backgroundColor: "rgba(13,13,13,0.55)",
+          border: `1px solid ${isMuted ? "rgba(211,47,47,0.32)" : "rgba(255,255,255,0.06)"}`,
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          color: isMuted ? "#D32F2F" : "rgba(255,255,255,0.70)",
         }}>
-        {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+        {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
-      {phase !== "setup" && (
-        <button
-          onClick={handleEndGame}
-          title="إنهاء اللعبة"
-          className="flex items-center justify-center w-9 h-9 rounded-xl transition-all active:scale-90"
-          style={{
-            backgroundColor: "rgba(13,13,13,0.88)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            backdropFilter: "blur(10px)",
-            color: "#444",
-          }}>
-          <X size={15} />
-        </button>
-      )}
     </div>
   );
 
-  // ── In-flow spacer that reserves room below the floating buttons ──
-  const globalControls = <div className="h-14 shrink-0 w-full" />;
+  // ── In-flow spacer that reserves room below the fixed navbar (px-5 py-4
+  //    + 40px button ≈ 72px). h-16 keeps every phase's first element clear
+  //    of the bar without needing per-screen offsets.
+  const globalControls = <div className="h-16 shrink-0 w-full" />;
 
   // ── All phase content lives here so we can wrap it in AnimatePresence ──
   const renderPhaseContent = (): React.ReactNode => {
@@ -2896,16 +2917,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <Shuffle size={20} strokeWidth={2} />
             <span>إعادة اللعبة بنفس اللاعبين</span>
           </motion.button>
-          <motion.button
-            onClick={fullReset}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-sm transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "transparent", color: "#383838", border: "1px solid #1C1C1C" }}>
-            <ArrowRight size={18} strokeWidth={2} />
-            <span>العودة للقائمة</span>
-          </motion.button>
+
+          {/* Bottom "العودة للقائمة" removed — the unified top navbar's X
+              button now owns this exit, calling handleEndGame which fully
+              resets the run and returns to setup. */}
         </div>
       </div>
     );
@@ -3889,17 +3904,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <VenetianMask size={20} strokeWidth={2} />
             <span>توزيع الأقنعة</span>
           </motion.button>
-          <motion.button
-            onClick={onBack}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
-            style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555555" }}>
-            <ArrowRight size={16} strokeWidth={2} />
-            <span>العودة للقائمة الرئيسية</span>
-          </motion.button>
 
+          {/* Bottom "back" button removed — primary back action lives in the
+              unified top navbar (floatingButtons) to keep a single iOS-style
+              navigation surface across the app. */}
         </div>
 
       </div>
