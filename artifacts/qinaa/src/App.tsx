@@ -817,6 +817,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [boyInheritsAce, setBoyInheritsAce] = useState<boolean>(
     () => pick("boyInheritsAce", false)
   );
+
+  // ── Pass-the-Phone Mode (نظام تمرير الجوال) ──
+  // When enabled, the distribution phase shows a full-screen blind/lock
+  // gate before each player's role card. Prevents over-the-shoulder peeks
+  // while passing the device. Persisted across reloads like other house
+  // rules; the transient `isBlindScreen` flag below is intentionally NOT
+  // persisted — it always resets to the mode's default on phase entry.
+  const [isPassPhoneMode, setIsPassPhoneMode] = useState<boolean>(
+    () => pick("isPassPhoneMode", false)
+  );
+  const [isBlindScreen, setIsBlindScreen] = useState<boolean>(false);
   // Game speed preset (drives the 3 timers). Persists across sessions.
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(
     () => pick("gameSpeedV1", "medium" as GameSpeed)
@@ -930,7 +941,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
-      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
+      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -938,7 +949,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
-    magicianState, magicianPotionMode, boyInheritsAce, gameSpeed, avengerFlow, executionResult,
+    magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1155,6 +1166,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
+    // Blind-screen gate seeds from the mode toggle: ON → every card is
+    // locked until the named player taps to unlock; OFF → legacy behavior
+    // (card visible immediately, flip-to-reveal).
+    setIsBlindScreen(isPassPhoneMode);
     setPhase("pre_distribution");
   };
 
@@ -1232,6 +1247,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setIsCardFlipped(false);
       setIsPressing(false);
       setHasRevealedOnce(false);
+      // Re-arm the blind gate for the next player — only if the mode is on.
+      // When off this is a no-op and the legacy flow is fully preserved.
+      setIsBlindScreen(isPassPhoneMode);
       setCurrentIndex((i) => i + 1);
     }
   };
@@ -1596,6 +1614,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // a known baseline that matches the "(افتراضي)" labels in the UI.
     setGameSpeed("medium");
     setBoyInheritsAce(false);
+    setIsPassPhoneMode(false);
+    setIsBlindScreen(false);
     // Reset avenger interrupt flow
     setAvengerFlow(null);
     setPhase("setup");
@@ -1726,6 +1746,80 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const isLast  = currentIndex === assignedRoles.length - 1;
 
     const CARD_HEIGHT = 320;
+
+    // ── Pass-the-Phone gate ──
+    // Intercepts before the role card is even mounted. Only renders when
+    // the user explicitly enabled the mode in Settings; otherwise this
+    // block is bypassed entirely and the legacy flow runs unchanged.
+    if (isPassPhoneMode && isBlindScreen) {
+      return (
+        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          {globalControls}
+          <motion.div
+            key={`blind-${currentIndex}`}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            className="flex flex-col flex-1 w-full max-w-sm mx-auto items-center justify-center gap-8 text-center">
+
+            {/* Counter — mirrors the distribution header for continuity */}
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>
+                الليلة التعريفية
+              </span>
+              <p className="text-xs" style={{ color: "#333333" }}>
+                {currentIndex + 1} / {assignedRoles.length}
+              </p>
+            </div>
+
+            {/* Lock seal — pulsing crimson glow signals "secure, do not open" */}
+            <motion.div
+              initial={{ scale: 0.85 }}
+              animate={{ scale: [0.92, 1, 0.92] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              className="flex items-center justify-center rounded-full"
+              style={{
+                width: 132, height: 132,
+                backgroundColor: "#0A0000",
+                border: "1.5px solid #2A0000",
+                boxShadow: "0 0 60px #D32F2F33, inset 0 0 30px #00000088",
+              }}>
+              <Lock size={56} color="#D32F2F" strokeWidth={1.6} />
+            </motion.div>
+
+            {/* Pass-to instruction */}
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-sm font-semibold" style={{ color: "#555555" }}>
+                مرر الجوال إلى
+              </span>
+              <span className="text-3xl font-black text-white" style={{ textShadow: "0 0 24px #D32F2F66" }}>
+                {current.name}
+              </span>
+            </div>
+
+            <div className="flex-1" />
+
+            {/* Reveal CTA — named so only the intended player taps it */}
+            <motion.button
+              onClick={() => setIsBlindScreen(false)}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-300 active:scale-95"
+              style={{
+                backgroundColor: "#D32F2F",
+                color: "#ffffff",
+                border: "none",
+                boxShadow: "0 0 24px #D32F2F44",
+              }}>
+              <Unlock size={20} strokeWidth={2} />
+              <span>أنا {current.name}، اكشف دوري</span>
+            </motion.button>
+
+          </motion.div>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
@@ -3733,6 +3827,30 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               </span>
               <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
                 (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة) · (الافتراضي: مغلق)
+              </span>
+            </div>
+          </button>
+
+          {/* ── Row 3: نظام تمرير الجوال (Pass-the-Phone toggle) ──
+              Mirrors the توريث الزعامة row exactly for visual consistency. */}
+          <button
+            onClick={() => setIsPassPhoneMode(v => !v)}
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: isPassPhoneMode ? "#170000" : "transparent" }}>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: isPassPhoneMode ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  right: isPassPhoneMode ? "0.125rem" : "1.125rem",
+                }} />
+            </div>
+            <div className="flex flex-col items-end gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: isPassPhoneMode ? "#FFFFFF" : "#AAAAAA" }}>
+                نظام تمرير الجوال
+              </span>
+              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
+                إخفاء الكرت عند الانتقال للاعب التالي · (الافتراضي: مغلق)
               </span>
             </div>
           </button>
