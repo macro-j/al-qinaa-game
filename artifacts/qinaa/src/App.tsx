@@ -3808,11 +3808,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* ── Row 2: توريث الزعامة (slim inline toggle) ── */}
+          {/* ── Row 2: توريث الزعامة ──
+              DOM order matches إضافات القناع: text container first, toggle
+              second. Parent is `flex justify-between` so RTL flow pushes
+              the text to the right edge and the switch to the left edge. */}
           <button
             onClick={() => setBoyInheritsAce(v => !v)}
             className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: boyInheritsAce ? "#170000" : "transparent" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
+                توريث الزعامة (للولد)
+              </span>
+              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
+                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة) · (الافتراضي: مغلق)
+              </span>
+            </div>
             <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
               style={{ backgroundColor: boyInheritsAce ? "#D32F2F" : "#262626" }}>
               <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
@@ -3821,22 +3832,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   right: boyInheritsAce ? "0.125rem" : "1.125rem",
                 }} />
             </div>
-            <div className="flex flex-col items-end gap-0.5 text-right flex-1 min-w-0">
-              <span className="text-xs font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
-                توريث الزعامة (الولد)
-              </span>
-              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
-                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة) · (الافتراضي: مغلق)
-              </span>
-            </div>
           </button>
 
-          {/* ── Row 3: نظام تمرير الجوال (Pass-the-Phone toggle) ──
-              Mirrors the توريث الزعامة row exactly for visual consistency. */}
+          {/* ── Row 3: نظام تمرير الجوال — same layout contract as Row 2 ── */}
           <button
             onClick={() => setIsPassPhoneMode(v => !v)}
             className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: isPassPhoneMode ? "#170000" : "transparent" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: isPassPhoneMode ? "#FFFFFF" : "#AAAAAA" }}>
+                نظام تمرير الجوال
+              </span>
+              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
+                إخفاء الكرت عند الانتقال للاعب التالي · (الافتراضي: مغلق)
+              </span>
+            </div>
             <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
               style={{ backgroundColor: isPassPhoneMode ? "#D32F2F" : "#262626" }}>
               <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
@@ -3844,14 +3854,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   backgroundColor: "#FFFFFF",
                   right: isPassPhoneMode ? "0.125rem" : "1.125rem",
                 }} />
-            </div>
-            <div className="flex flex-col items-end gap-0.5 text-right flex-1 min-w-0">
-              <span className="text-xs font-bold" style={{ color: isPassPhoneMode ? "#FFFFFF" : "#AAAAAA" }}>
-                نظام تمرير الجوال
-              </span>
-              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
-                إخفاء الكرت عند الانتقال للاعب التالي · (الافتراضي: مغلق)
-              </span>
             </div>
           </button>
         </div>
