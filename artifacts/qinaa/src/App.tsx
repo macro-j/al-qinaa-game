@@ -3880,6 +3880,36 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
+          {/* ── Row 1.5: الراوي الصوتي ──
+              Bound to the global `isMuted` state (same source the top-navbar
+              Volume icon reads). The switch represents the AUDIO-ON state,
+              so it's visually ON when `isMuted === false`. Toggling here
+              flips the same state the navbar uses, so both controls stay
+              in sync automatically. Persistence is already handled by the
+              existing NarratorMode save snapshot (isMuted is in the
+              persisted state list), so no extra localStorage write needed. */}
+          <button
+            onClick={() => setIsMuted(m => !m)}
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: !isMuted ? "#170000" : "transparent", borderBottom: "1px solid #1A1A1A" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: !isMuted ? "#FFFFFF" : "#AAAAAA" }}>
+                الراوي الصوتي
+              </span>
+              <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
+                تشغيل التعليق الصوتي والمؤثرات للعبة
+              </span>
+            </div>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: !isMuted ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  right: !isMuted ? "0.125rem" : "1.125rem",
+                }} />
+            </div>
+          </button>
+
           {/* ── Row 2: توريث الزعامة ──
               DOM order matches إضافات القناع: text container first, toggle
               second. Parent is `flex justify-between` so RTL flow pushes
