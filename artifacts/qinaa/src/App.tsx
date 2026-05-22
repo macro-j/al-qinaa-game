@@ -3649,6 +3649,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         const belowMinPlayers = players.length < mod.minPlayers;
                         const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
                         const isDisabled = belowMinPlayers || !canAfford;
+                        // Temporarily locks the Magician row until audio assets are ready.
+                        // State (isMagicianActive), min-player guard, and all game logic are
+                        // intentionally untouched — this is a UI-only gate.
+                        const isComingSoon = mod.id === "magician";
+                        const isLocked = isDisabled || isComingSoon;
                         return (
                           <div key={mod.id}
                             dir="rtl"
@@ -3656,8 +3661,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                              opacity: isDisabled ? 0.4 : 1,
+                              opacity: isLocked ? 0.4 : 1,
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
+                              cursor: isComingSoon ? "not-allowed" : undefined,
                             }}>
 
                             <div className="flex items-center justify-between px-3.5 py-3">
@@ -3669,7 +3675,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                     style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
                                     {mod.name}
                                   </span>
-                                  {cost === 2 && (
+                                  {isComingSoon && (
+                                    <span className="text-[10px] px-1.5 py-px rounded font-bold flex-shrink-0 tracking-wide"
+                                      style={{ backgroundColor: "#1A1A1A", color: "#444444", border: "1px solid #2A2A2A" }}>
+                                      قريباً
+                                    </span>
+                                  )}
+                                  {!isComingSoon && cost === 2 && (
                                     <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
                                       style={{ backgroundColor: "#111111", color: "#3A3A3A", border: "1px solid #1E1E1E" }}>
                                       ×2
@@ -3690,14 +3702,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
                               {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
                               <button
-                                onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
-                                disabled={isDisabled}
+                                onClick={e => { e.stopPropagation(); if (!isLocked) toggleMod(mod.id); }}
+                                disabled={isLocked}
                                 style={{
                                   width: 38, height: 22, borderRadius: 11, flexShrink: 0,
                                   backgroundColor: isOn ? mod.accent : "#181818",
                                   border: `1px solid ${isOn ? mod.accent : "#252525"}`,
                                   position: "relative",
-                                  cursor: isDisabled ? "not-allowed" : "pointer",
+                                  cursor: isLocked ? "not-allowed" : "pointer",
                                   transition: "background-color 0.2s, border-color 0.2s",
                                 }}>
                                 <div style={{
