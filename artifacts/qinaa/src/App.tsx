@@ -384,18 +384,39 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           className="fixed inset-0 z-50 flex items-center justify-center px-5"
           style={{ backgroundColor: "rgba(0,0,0,0.82)", backdropFilter: "blur(12px)" }}
           onClick={() => setShowAbout(false)}>
+
+          {/* ── Unified Top Navbar (modal scope) ──
+              Mirrors the in-app navbar exactly: fixed top, pointer-events
+              gated so taps fall through to the backdrop (which dismisses
+              the modal), single right-side X button that re-enables
+              pointer events. z-[60] sits above the modal overlay (z-50).
+              Mute is intentionally omitted here — this modal opens from
+              GameModeSelector, which has no audio state (isMuted lives
+              in NarratorMode). A non-functional mute would mislead. */}
           <div
-            className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-5 shadow-2xl relative"
+            dir="rtl"
+            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-5 py-4 pointer-events-none">
+            <button
+              onClick={() => setShowAbout(false)}
+              title="إغلاق"
+              aria-label="إغلاق صناع القناع"
+              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+              style={{
+                backgroundColor: "rgba(13,13,13,0.55)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
+              }}>
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+
+          <div
+            className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-5 shadow-2xl"
             style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={(e) => e.stopPropagation()}>
 
-            {/* Close button */}
-            <button
-              onClick={() => setShowAbout(false)}
-              className="absolute top-4 left-4 flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 active:scale-90"
-              style={{ backgroundColor: "#1A1A1A", color: "#555555", border: "1px solid #2A2A2A" }}>
-              <X size={15} strokeWidth={2} />
-            </button>
+            {/* In-card X removed — navbar above owns the dismiss action. */}
 
             {/* Logo + Title */}
             <div className="flex flex-col items-center gap-3 pt-2">
