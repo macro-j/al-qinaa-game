@@ -3111,7 +3111,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       };
 
       return (
-        <AutoAdvanceDiscussion timerEndsAt={timerEndsAt} onExpire={startVoting}>
+        // AutoAdvanceDiscussion removed — discussion no longer auto-advances
+        // when the timer hits zero. Host must manually tap "بدء التصويت".
+        // DayTimerBar still counts down to 00:00 visually (no phase change).
+        <>
           <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
             {globalControls}
             <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
@@ -3156,7 +3159,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               {restartBtn}
             </div>
           </div>
-        </AutoAdvanceDiscussion>
+        </>
       );
     }
 
