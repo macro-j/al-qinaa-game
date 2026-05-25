@@ -845,6 +845,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
   const [magicianPoisonTarget, setMagicianPoisonTarget]           = useState<string | null>(null);
   const [magicianPickerOpen, setMagicianPickerOpen]               = useState(false);
+  // Anti-cheat heal flow: gate the mafia victim's name behind an explicit
+  // "use potion?" prompt so the magician can't peek at the kill target
+  // without committing. "prompt" = decision pending, "reveal" = victim
+  // shown awaiting confirmation, "done" = decision finalised (used or skipped).
+  const [magicianHealStep, setMagicianHealStep] = useState<"prompt" | "reveal" | "done">("prompt");
 
   // ── House Rules (إعدادات المجلس) ──
   // boyInheritsAce: when true, if the Ace (الإكة) is dead, the Boy (الولد)
@@ -1566,6 +1571,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           setMagicianHealUsedThisNight(false);
           setMagicianPoisonTarget(null);
           setMagicianPickerOpen(false);
+          setMagicianHealStep("prompt");
         }
         setNightTransitionLabel(`${getRoleName(nextRole)} ${roleWakes(nextRole)}`);
         nightTransitionNextRef.current = null;
@@ -2150,6 +2156,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             );
           })()}
 
+          {/* ── Boy-synergy banner — shown ONLY to الإكة so she can coordinate her silence with the Boy's planned kill ── */}
+          {nightStep === "الإكة" && (() => {
+            const boy = livePlayers.find(p => p.role === "الولد" && p.isAlive);
+            const boyTarget = nightActions.killTarget;
+            if (!boy || !boyTarget) return null;
+            return (
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full"
+                style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
+                <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-base"
+                  style={{ backgroundColor: "rgba(153,27,27,0.3)", border: "1px solid rgba(211,47,47,0.35)" }}>
+                  🔪
+                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs" style={{ color: "#666666" }}>الولد يخطط لاغتيال:</span>
+                  <span className="text-sm font-bold text-white">{boyTarget}</span>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Target player list — per-role filtering + badge rules ── */}
           {(() => {
             // Find the player holding this role (dead or alive) for phantom turn detection
@@ -2179,42 +2205,109 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               const poisonChosen = !!magicianPoisonTarget;
               const healChosen   = magicianHealUsedThisNight;
               const isSingle    = magicianPotionMode === "single";
-              const canHeal     = magicianState.hasHeal && !!mafiaTarget && !(isSingle && poisonChosen);
               const canPoison   = magicianState.hasPoison && !(isSingle && healChosen);
+
+              // ── Heal sub-flow gating ──
+              // Anti-cheat: never expose the mafia victim until the magician
+              // explicitly commits to using the potion. Sub-states:
+              //   prompt  → "Do you want to use the Life Potion?" (Yes/Skip)
+              //   reveal  → victim name shown + Confirm/Back buttons
+              //   done    → status pill + Poison action become available
+              // If heal isn't possible at all (no potion or no victim and not
+              // locked out by single-mode poison), skip the prompt entirely
+              // and present the Poison/Skip UI right away.
+              const healPossible   = magicianState.hasHeal && !!mafiaTarget && !(isSingle && poisonChosen);
+              const showHealPrompt = magicianHealStep === "prompt" && healPossible;
+              const showHealReveal = magicianHealStep === "reveal" && healPossible;
+
+              if (showHealPrompt) {
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="px-4 py-5 rounded-2xl text-center"
+                      style={{ backgroundColor: "#0D0D0D", border: `1px solid ${magMeta.color}44` }}>
+                      <span className="text-base font-black text-white">هل تريد استخدام جرعة الحياة؟</span>
+                    </div>
+                    <button
+                      onClick={() => { triggerHaptic([30, 50, 30]); setMagicianHealStep("reveal"); }}
+                      className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
+                      style={{
+                        backgroundColor: "#1B2A0E",
+                        color:           "#A3E635",
+                        border:          `1px solid ${magMeta.color}`,
+                        boxShadow:       `0 0 16px ${magMeta.color}33`,
+                      }}>
+                      نعم، استخدم الجرعة
+                    </button>
+                    <button
+                      onClick={() => { triggerHaptic(20); setMagicianHealStep("done"); }}
+                      className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
+                      style={{ backgroundColor: "#141414", color: "#CCCCCC", border: "1px solid #222" }}>
+                      تخطي
+                    </button>
+                  </div>
+                );
+              }
+
+              if (showHealReveal) {
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="px-4 py-4 rounded-xl flex flex-col gap-1"
+                      style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F88", boxShadow: "0 0 16px #D32F2F33" }}>
+                      <span className="text-xs font-bold" style={{ color: "#FF8888" }}>المافيا يخططون لقتل:</span>
+                      <span className="text-lg font-black text-white">{mafiaTarget}</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        triggerHaptic([30, 50, 30]);
+                        setMagicianHealUsedThisNight(true);
+                        setMagicianHealStep("done");
+                      }}
+                      className="w-full px-4 py-3 rounded-xl font-black text-sm transition-all duration-150 active:scale-95"
+                      style={{
+                        backgroundColor: "#1B2A0E",
+                        color:           "#A3E635",
+                        border:          `1px solid ${magMeta.color}`,
+                        boxShadow:       `0 0 16px ${magMeta.color}55`,
+                      }}>
+                      تأكيد الإنقاذ
+                    </button>
+                    <button
+                      onClick={() => { triggerHaptic(20); setMagicianHealStep("prompt"); }}
+                      className="w-full px-4 py-3 rounded-xl font-bold text-xs transition-all duration-150 active:scale-95"
+                      style={{ backgroundColor: "#0A0A0A", color: "#666666", border: "1px solid #1A1A1A" }}>
+                      تراجع
+                    </button>
+                  </div>
+                );
+              }
 
               return (
                 <div className="flex flex-col gap-3">
-                  {/* Mafia plan banner — shown ONLY when the Mafia chose a victim (per spec) */}
-                  {mafiaTarget && (
+                  {/* Heal status pill — read-only summary of the heal decision.
+                      Only rendered when the magician actually had a heal opportunity
+                      this night (potion in hand + mafia chose a victim). */}
+                  {magicianState.hasHeal && mafiaTarget && (
                     <div className="px-4 py-3 rounded-xl flex items-center gap-2"
-                      style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
-                      <span className="text-xs font-bold" style={{ color: "#FF8888" }}>المافيا تخطط لقتل:</span>
-                      <span className="text-sm font-black text-white">{mafiaTarget}</span>
-                    </div>
-                  )}
-
-                  {/* ── Action 1: Heal ── */}
-                  <button
-                    disabled={!canHeal}
-                    onClick={() => setMagicianHealUsedThisNight(v => !v)}
-                    className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed text-right"
-                    style={{
-                      backgroundColor: magicianHealUsedThisNight ? "#1B2A0E" : "#141414",
-                      color:           magicianHealUsedThisNight ? "#A3E635" : "#CCCCCC",
-                      border: `1px solid ${magicianHealUsedThisNight ? magMeta.color : "#222"}`,
-                      boxShadow: magicianHealUsedThisNight ? `0 0 16px ${magMeta.color}33` : "none",
-                    }}>
-                    <div className="flex flex-col gap-0.5">
-                      <span>
-                        {magicianHealUsedThisNight
-                          ? `تم — جرعة الحياة لـ ${mafiaTarget}`
-                          : "استخدام جرعة الحياة"}
+                      style={{
+                        backgroundColor: magicianHealUsedThisNight ? "#1B2A0E" : "#0D0D0D",
+                        border:          `1px solid ${magicianHealUsedThisNight ? magMeta.color : "#222"}`,
+                        boxShadow:       magicianHealUsedThisNight ? `0 0 16px ${magMeta.color}33` : "none",
+                      }}>
+                      <span className="text-xs font-bold"
+                        style={{ color: magicianHealUsedThisNight ? "#A3E635" : "#888888" }}>
+                        {magicianHealUsedThisNight ? "تم الإنقاذ:" : "تم تخطي جرعة الحياة"}
                       </span>
-                      {!magicianState.hasHeal && (
-                        <span className="text-xs" style={{ color: "#666" }}>(جرعة الحياة مُستهلكة)</span>
+                      {magicianHealUsedThisNight && (
+                        <span className="text-sm font-black text-white">{mafiaTarget}</span>
                       )}
                     </div>
-                  </button>
+                  )}
+                  {!magicianState.hasHeal && (
+                    <div className="px-4 py-3 rounded-xl text-center"
+                      style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
+                      <span className="text-xs" style={{ color: "#666" }}>(جرعة الحياة مُستهلكة)</span>
+                    </div>
+                  )}
 
                   {/* ── Action 2: Poison ── */}
                   <button
@@ -2514,7 +2607,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {/* Action label — replaces the old standalone "اختر" button */}
                       {!isAllyLocked && (
                         <span className="text-[10px] font-bold tracking-wide"
-                          style={{ color: isSelected ? "#D32F2F" : "#444444" }}>
+                          style={{ color: showSeerBadge ? "#FFFFFF" : (isSelected ? "#D32F2F" : "#444444") }}>
                           {isSelected ? "تم الاختيار" : "اختر"}
                         </span>
                       )}
