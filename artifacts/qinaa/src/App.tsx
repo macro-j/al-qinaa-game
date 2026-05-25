@@ -4100,7 +4100,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       { key: "discuss",   labelAr: "مدة النقاش"  },
                       { key: "lastWords", labelAr: "مدة الدفاع" },
                     ] as ReadonlyArray<{ key: keyof SpeedTimings; labelAr: string }>).map(({ key, labelAr }) => (
-                      <div key={key} className="flex items-center justify-between gap-3">
+                      // RTL row: label FIRST (renders on the right under
+                      // dir="rtl"), select LAST (renders on the left). Mirrors
+                      // the DOM-order contract used by rows 2 & 3 of this
+                      // settings card — text container first, control second.
+                      <div key={key} className="flex items-center justify-between gap-3 w-full">
+                        <span className="text-xs font-bold text-right flex-1 min-w-0" style={{ color: "#CCCCCC" }}>
+                          {labelAr}
+                        </span>
                         <div className="relative flex-shrink-0">
                           {/* Chevron — placed on the LEFT in RTL since that's the
                               trailing edge of the control. pointer-events-none so
@@ -4129,9 +4136,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             ))}
                           </select>
                         </div>
-                        <span className="text-xs font-bold text-right" style={{ color: "#CCCCCC" }}>
-                          {labelAr}
-                        </span>
                       </div>
                     ))}
                   </div>
