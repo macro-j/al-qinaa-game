@@ -922,9 +922,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
 
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
-  const [isModsEnabled, setIsModsEnabled]     = useState(false); // master ON/OFF toggle
+  // Persisted so the user's add-on selection (Twins / Madman / Avenger /
+  // Magician) survives reloads AND the "Play Again with same players" flow.
+  const [isModsEnabled, setIsModsEnabled]     = useState<boolean>(() => pick("isModsEnabled", false));
   const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
-    () => EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {})
+    () => pick(
+      "activeMods",
+      EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {} as Record<string, boolean>),
+    ),
   );
   const toggleMod = (id: string) => {
     setActiveMods(prev => {
@@ -984,6 +989,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal, isMuted,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
+      isModsEnabled, activeMods,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -992,6 +998,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
+    isModsEnabled, activeMods,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -2934,11 +2941,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
 
     const handlePlayAgainSamePlayers = () => {
+      // Replay with the same roster AND the same configuration.
+      // resetCore() clears per-game runtime state (votes, deaths, magician
+      // potion charges, etc.) but deliberately preserves user-chosen settings:
+      // mods (isModsEnabled / activeMods), house rules (boyInheritsAce,
+      // isPassPhoneMode, magicianPotionMode), and gameSpeed.
+      // We do NOT call clearNarratorState() — that would wipe those settings
+      // from localStorage before the next save effect runs. The persistence
+      // effect will rewrite the snapshot with the preserved settings and the
+      // new player list on the next render.
       const sameNames = assignedRoles.map(p => p.name);
       resetCore();
       setPlayers(sameNames);
       setPhase("setup");
-      clearNarratorState();
     };
 
     return (
