@@ -825,7 +825,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [dayResult, setDayResult]               = useState<{ deaths: DeathEntry[]; silenced: string | null }>(() => pick("dayResultV2", { deaths: [] as DeathEntry[], silenced: null as string | null }));
   const [nightCount, setNightCount]             = useState(() => pick("nightCount", 1));
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
-  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
+  const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "no_quorum" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
 
   // ── Magician (الساحر) — configurable potion capacity ──
   // The magician owns two independent flags. Depending on `magicianPotionMode`
@@ -1139,9 +1139,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nightTimerExpired]);
 
-  // ── Tie-vote cinematic — 4 s display then auto-advance to night ──
+  // ── Tie / No-quorum cinematic — 4 s display then auto-advance to night ──
   useEffect(() => {
-    if (phase !== "day" || daySubPhase !== "vote_tie") return;
+    if (phase !== "day" || (daySubPhase !== "vote_tie" && daySubPhase !== "no_quorum")) return;
     const t = setTimeout(() => handleStartNextNight(), 4000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2448,12 +2448,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   const isDisabled = isAllyLocked || seerLocked;
                   // Seer reveal: heavily tint the card based on allegiance so
                   // the Narrator sees the result at a glance without reading text.
+                  // Seer reveal: vivid solid fill + glow so the result is
+                  // unmissable even in a dark room. The revealed card is exempt
+                  // from disabled:opacity-30 — it should GLOW, not fade.
                   const rowBg = showSeerBadge
-                    ? (isMafiaRole ? "#1A0000" : "#001A00")
+                    ? (isMafiaRole ? "#C62828" : "#2E7D32")
                     : (isSelected ? "#2A0000" : "#141414");
                   const rowBorder = showSeerBadge
-                    ? (isMafiaRole ? "#D32F2F" : "#33691E")
+                    ? (isMafiaRole ? "#FF5252" : "#69F0AE")
                     : (isSelected ? "#D32F2F" : "#222222");
+                  const rowGlow = showSeerBadge
+                    ? (isMafiaRole
+                        ? "0 0 24px rgba(220,38,38,0.85)"
+                        : "0 0 24px rgba(22,163,74,0.85)")
+                    : "none";
 
                   return (
                     <button
@@ -2463,8 +2471,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         setSelectedTarget(p.name);
                         if (isSeerStep) setInvestigatedTarget(p.name);
                       }}
-                      className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
+                      className={`flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 ${showSeerBadge ? "cursor-default" : "disabled:opacity-30 disabled:cursor-not-allowed"}`}
+                      style={{ backgroundColor: rowBg, border: `2px solid ${rowBorder}`, boxShadow: rowGlow }}>
 
                       {/* Index badge */}
                       <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
@@ -3175,25 +3183,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
       const handleCountVotes = () => {
         // ── Absolute-majority rule (النصف + 1) ─────────────────────────────
-        // Justification is gated by THREE requirements; failing any one of
-        // them skips trial entirely and the day ends straight into night
-        // (الجميع ينام) via the existing 4s vote_tie cinematic.
-        //   1. At least one vote was cast (maxVotes > 0)
-        //   2. The top vote count meets the majority threshold
-        //      (Math.floor(alive / 2) + 1 — e.g. 5 of 8, 4 of 7)
-        //   3. A SINGLE player owns that top count (no deadlock at threshold)
+        // Three distinct outcomes based on vote distribution:
+        //
+        //   C — Elimination:  maxVotes >= threshold AND single leader
+        //       → accused goes to justification sub-phase
+        //   B — Actual Tie:   maxVotes >= threshold AND multiple leaders
+        //       → "تعادل في الأصوات" cinematic (4s) then night
+        //   A — No Quorum:    maxVotes < threshold (or zero votes cast)
+        //       → "الأصوات أقل من الحد الأدنى" cinematic (4s) then night
+        //
+        // Differentiating A from B lets the Narrator give players accurate
+        // feedback: a tie is a different situation from insufficient votes.
         const majorityThreshold = Math.floor(alivePlayers.length / 2) + 1;
         const maxVotes = Math.max(0, ...alivePlayers.map(p => voteCounts[p.name] ?? 0));
-        const nominees = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
-        const hasUniqueWinner = nominees.length === 1;
-        const reachesMajority = maxVotes >= majorityThreshold;
-        if (hasUniqueWinner && reachesMajority) {
-          setAccusedPlayer(nominees[0].name);
+        const leaders  = alivePlayers.filter(p => (voteCounts[p.name] ?? 0) === maxVotes && maxVotes > 0);
+
+        if (maxVotes >= majorityThreshold && leaders.length === 1) {
+          // Condition C: clean majority winner → proceed to trial
+          setAccusedPlayer(leaders[0].name);
           setTimerEndsAt(Date.now() + speedPreset.lastWords * 1000);
           setDaySubPhase("justification");
-        } else {
-          // Below threshold, no votes, or tie at threshold → no trial today.
+        } else if (maxVotes >= majorityThreshold && leaders.length > 1) {
+          // Condition B: threshold met but multiple players share the top count
           setDaySubPhase("vote_tie");
+        } else {
+          // Condition A: nobody reached majority (includes zero-vote rounds)
+          setDaySubPhase("no_quorum");
         }
       };
       return (
@@ -3291,6 +3306,36 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               </p>
             </div>
             <div className="mt-2 px-6 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid #FF8F0033" }}>
+              <p className="text-xs" style={{ color: "#555" }}>القرية تستعد للنوم...</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ════════════════════════════════════════════
+    // SUB-PHASE 3c: no_quorum — votes insufficient (4 s, then auto-night)
+    // Distinct from vote_tie: nobody reached the majority threshold,
+    // no tie occurred — simply not enough votes were cast.
+    // ════════════════════════════════════════════
+    if (daySubPhase === "no_quorum") {
+      return (
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+          {globalControls}
+          <div className="flex flex-col items-center gap-6 w-full max-w-sm text-center">
+            <div style={{ filter: "drop-shadow(0 0 32px #55555566)" }}>
+              <VenetianMask size={72} color="#555555" strokeWidth={1} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#555555" }}>لا يوجد إجماع</span>
+              <h1 className="text-2xl font-black text-white leading-snug">
+                الأصوات أقل من الحد الأدنى
+              </h1>
+              <p className="text-base font-semibold" style={{ color: "#AAAAAA" }}>
+                لم يتم إعدام أحد
+              </p>
+            </div>
+            <div className="mt-2 px-6 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}>
               <p className="text-xs" style={{ color: "#555" }}>القرية تستعد للنوم...</p>
             </div>
           </div>

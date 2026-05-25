@@ -1,0 +1,22 @@
+"Act as a Senior React Developer and Game Designer. We need to fix a visibility issue with the Seer's reveal screen and correct a logic flaw in the Day Voting phase based on playtest feedback.
+THE TASK:
+1. Seer (الشايب) Visibility Boost:
+Locate the Seer's night action UI where the investigated player's allegiance is revealed.
+The previous background tints (bg-red-500/10) are too dark against the game's dark theme.
+Update the styling for the revealed player's card to be highly visible and glowing:
+For 'مافيا' (Mafia): Use a solid, bright red background with a glow effect (e.g., bg-red-600 text-white shadow-[0_0_20px_rgba(220,38,38,0.8)] border-2 border-red-400).
+For 'بريء' (Innocent): Use a solid, bright green background with a glow effect (e.g., bg-green-600 text-white shadow-[0_0_20px_rgba(22,163,74,0.8)] border-2 border-green-400).
+Ensure any overarching dark overlays or opacity-30 classes are removed from this specific revealed card so it stands out brightly.
+2. Day Voting Logic Fix (Quorum vs. Tie):
+Locate the evaluation logic at the end of the Day Voting phase.
+Currently, if the votes don't meet the required threshold, it incorrectly shows a 'Tie' (تعادل).
+Fix the logic by differentiating between a lack of minimum votes and an actual tie:
+Let threshold = Math.floor(alivePlayers.length / 2) + 1.
+Let maxVotes be the highest number of votes received by anyone.
+Let leaders be the array of players who received maxVotes.
+Condition A (No Quorum): If maxVotes < threshold, the game should show a message indicating votes were insufficient. (Create a state/UI for this: الأصوات أقل من الحد الأدنى with a subtitle like لم يتم إعدام أحد).
+Condition B (Actual Tie): If maxVotes >= threshold AND leaders.length > 1, show the existing Tie message (تعادل في الأصوات).
+Condition C (Elimination): If maxVotes >= threshold AND leaders.length === 1, eliminate the player.
+CRITICAL GUARDRAILS:
+Do NOT touch the audio logic, the grid layout we just added, or the Tajawal font.
+Ensure the new 'No Quorum' screen uses the same UI aesthetic as the 'Tie' screen (just different text)."
