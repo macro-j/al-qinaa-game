@@ -2503,9 +2503,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {showSeerBadge && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                           style={{
-                            backgroundColor: isMafiaRole ? "#D32F2F18" : "#33691E18",
-                            color:           isMafiaRole ? "#FF4040"   : "#8BC34A",
-                            border: `1px solid ${isMafiaRole ? "#D32F2F44" : "#33691E44"}`,
+                            backgroundColor: "rgba(255,255,255,0.18)",
+                            color:           "#FFFFFF",
+                            border:          "1px solid rgba(255,255,255,0.35)",
                           }}>
                           {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
                         </span>
