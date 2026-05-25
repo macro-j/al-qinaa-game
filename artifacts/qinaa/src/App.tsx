@@ -875,6 +875,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     () => pick("gameSpeedV1", "medium" as GameSpeed)
   );
   const speedPreset = SPEED_PRESETS[gameSpeed];
+  // ── Discussion timer override (وقت النقاش) ──
+  // Independent of the speed preset so the host can extend / shorten the
+  // open-discussion window without changing the night-turn or last-words
+  // timers. Default 90s mirrors the original "medium" preset value.
+  // Persisted across sessions and replays.
+  const [discussionDuration, setDiscussionDuration] = useState<number>(
+    () => pick("discussionDuration", 90)
+  );
   // Transient per-night boy picks (only used in inheritance mode — the standard
   // boy still uses the shared `selectedTarget`). Reset on entry to the boy turn
   // and on every game-reset path.
@@ -990,6 +998,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       finalVoteAgainst, gameOver, executionReveal, isMuted,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       isModsEnabled, activeMods,
+      discussionDuration,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -998,7 +1007,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
-    isModsEnabled, activeMods,
+    isModsEnabled, activeMods, discussionDuration,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -3200,7 +3209,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <motion.button
               onClick={() => {
-                setTimerEndsAt(Date.now() + speedPreset.discuss * 1000);
+                setTimerEndsAt(Date.now() + discussionDuration * 1000);
                 setDaySubPhase("discussion");
               }}
               whileTap={{ scale: 0.95 }}
@@ -3243,7 +3252,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
                 <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
                 <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.discuss} />
+                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={discussionDuration} />
                 </div>
               </div>
               {morningBanner}
@@ -3995,7 +4004,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             style={{ borderBottom: "1px solid #1A1A1A" }}>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold tracking-wide" style={{ color: "#888" }}>
-                {`دور: ${speedPreset.turn}ث · نقاش: ${speedPreset.discuss}ث · دفاع: ${speedPreset.lastWords}ث`}
+                {`دور: ${speedPreset.turn}ث · نقاش: ${discussionDuration}ث · دفاع: ${speedPreset.lastWords}ث`}
               </span>
               <span className="text-xs font-bold text-white">سرعة المجلس</span>
             </div>
@@ -4018,6 +4027,52 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     <span className="flex flex-col items-center gap-0.5 leading-none">
                       <span>{preset.labelAr}</span>
                       {id === "medium" && (
+                        <span className="text-[9px] font-bold"
+                          style={{ color: isActive ? "#FFFFFFB3" : "#5C5C5C" }}>
+                          (افتراضي)
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Row 1.25: وقت النقاش (segmented number selector) ──
+              Independent override for the discussion-phase countdown. Other
+              two timers (دور / دفاع) still come from the speed preset above. */}
+          <div className="flex flex-col gap-2 px-3.5 py-3"
+            style={{ borderBottom: "1px solid #1A1A1A" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold tracking-wide" style={{ color: "#888" }}>
+                {`${discussionDuration} ثانية`}
+              </span>
+              <span className="text-xs font-bold text-white">وقت النقاش</span>
+            </div>
+            <div className="flex flex-row-reverse gap-1.5 rounded-xl p-1"
+              style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
+              {([
+                { sec: 60,  label: "د 1"  },
+                { sec: 90,  label: "ث 90" },
+                { sec: 120, label: "د 2"  },
+                { sec: 180, label: "د 3"  },
+              ] as const).map(({ sec, label }) => {
+                const isActive = discussionDuration === sec;
+                return (
+                  <button
+                    key={sec}
+                    onClick={() => setDiscussionDuration(sec)}
+                    className="flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
+                    style={{
+                      backgroundColor: isActive ? "#D32F2F" : "transparent",
+                      color:           isActive ? "#FFFFFF" : "#777777",
+                      border:          `1px solid ${isActive ? "#D32F2F" : "transparent"}`,
+                      boxShadow:       isActive ? "0 0 14px #D32F2F33" : "none",
+                    }}>
+                    <span className="flex flex-col items-center gap-0.5 leading-none">
+                      <span>{label}</span>
+                      {sec === 90 && (
                         <span className="text-[9px] font-bold"
                           style={{ color: isActive ? "#FFFFFFB3" : "#5C5C5C" }}>
                           (افتراضي)

@@ -400,3 +400,39 @@
 .winner-card {
   animation: winnerPulse 2.8s ease-in-out infinite;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Landscape / TV-mode constraint
+   --------------------------------------------------------------------------
+   The app is mobile-first; on wide viewports (landscape phones, tablets, TVs,
+   desktop browsers) it would otherwise stretch full-width and break the
+   carefully-tuned mobile UI. Constrain #root to a centered mobile frame and
+   apply a subtle outer background so the play area reads as a native app
+   running on the larger screen.
+
+   Why `transform: translateZ(0)` on #root:
+   The unified top navbar and modal overlays in App.tsx use `position: fixed`.
+   By spec, `transform` (along with `filter`, `perspective`, `contain: paint`,
+   and `will-change: transform`) makes the element a containing block for
+   fixed-positioned descendants. Without this, the fixed navbar would span
+   the full viewport width — breaking out of the mobile frame on a TV.
+   With this transform, the navbar/modals correctly stay inside the 28rem
+   centered frame across all viewport sizes.
+   ───────────────────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  body {
+    background-color: #050505;
+    background-image: radial-gradient(circle at center, #141414 0%, #030303 80%);
+  }
+  #root {
+    max-width: 28rem;            /* matches Tailwind max-w-md */
+    margin-left: auto;
+    margin-right: auto;
+    min-height: 100dvh;
+    background-color: #000;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow-x: hidden;
+    position: relative;
+    transform: translateZ(0);    /* containing block for fixed descendants */
+  }
+}
