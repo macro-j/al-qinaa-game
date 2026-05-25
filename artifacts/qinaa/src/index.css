@@ -402,37 +402,25 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Landscape / TV-mode constraint
+   Production responsive baseline
    --------------------------------------------------------------------------
-   The app is mobile-first; on wide viewports (landscape phones, tablets, TVs,
-   desktop browsers) it would otherwise stretch full-width and break the
-   carefully-tuned mobile UI. Constrain #root to a centered mobile frame and
-   apply a subtle outer background so the play area reads as a native app
-   running on the larger screen.
+   The app ships as a true responsive web app — phone, tablet, laptop, TV. The
+   previous mobile-frame hack (which clamped #root to 28rem and used
+   `transform: translateZ(0)` to make it a containing block for fixed
+   descendants) has been removed. #root and body are now fully fluid; per-
+   screen content sizing is handled inside App.tsx via Tailwind responsive
+   container utilities (`max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl`).
 
-   Why `transform: translateZ(0)` on #root:
-   The unified top navbar and modal overlays in App.tsx use `position: fixed`.
-   By spec, `transform` (along with `filter`, `perspective`, `contain: paint`,
-   and `will-change: transform`) makes the element a containing block for
-   fixed-positioned descendants. Without this, the fixed navbar would span
-   the full viewport width — breaking out of the mobile frame on a TV.
-   With this transform, the navbar/modals correctly stay inside the 28rem
-   centered frame across all viewport sizes.
+   Because nothing in this stylesheet creates a containing block anymore, the
+   in-app fixed navbar / modal overlays correctly span the full viewport width
+   on every breakpoint — their internal padding scales fluidly with
+   `px-4 md:px-8 lg:px-12` so content never glues to the edges on wide screens.
    ───────────────────────────────────────────────────────────────────────── */
-@media (min-width: 640px) {
-  body {
-    background-color: #050505;
-    background-image: radial-gradient(circle at center, #141414 0%, #030303 80%);
-  }
-  #root {
-    max-width: 28rem;            /* matches Tailwind max-w-md */
-    margin-left: auto;
-    margin-right: auto;
-    min-height: 100dvh;
-    background-color: #000;
-    box-shadow: 0 0 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    overflow-x: hidden;
-    position: relative;
-    transform: translateZ(0);    /* containing block for fixed descendants */
-  }
+html,
+body,
+#root {
+  min-height: 100dvh;
+  width: 100%;
+  background-color: #000;
+  overflow-x: hidden;
 }

@@ -294,7 +294,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 relative" style={ROOT_STYLE}>
-      <div className="flex flex-col items-center gap-10 w-full max-w-sm">
+      <div className="flex flex-col items-center gap-10 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
 
         {/* Logo + Title */}
         <div className="flex flex-col items-center gap-3">
@@ -395,7 +395,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               in NarratorMode). A non-functional mute would mislead. */}
           <div
             dir="rtl"
-            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-5 py-4 pointer-events-none">
+            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
             <button
               onClick={() => setShowAbout(false)}
               title="إغلاق"
@@ -412,7 +412,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           </div>
 
           <div
-            className="w-full max-w-sm rounded-2xl p-6 flex flex-col gap-5 shadow-2xl"
+            className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl p-6 flex flex-col gap-5 shadow-2xl"
             style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.08)" }}
             onClick={(e) => e.stopPropagation()}>
 
@@ -497,7 +497,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               pointer events. z-[60] sits above the modal overlay (z-50). */}
           <div
             dir="rtl"
-            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-5 py-4 pointer-events-none">
+            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
             <button
               onClick={() => setShowGuide(false)}
               title="إغلاق"
@@ -514,7 +514,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           </div>
 
           <div
-            className="w-full max-w-sm rounded-2xl flex flex-col gap-4 p-5 overflow-y-auto max-h-[90vh] font-sans"
+            className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl flex flex-col gap-4 p-5 overflow-y-auto max-h-[90vh] font-sans"
             style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
             onClick={(e) => e.stopPropagation()}>
             {/* Header — X removed; navbar above owns the dismiss action */}
@@ -1796,7 +1796,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const floatingButtons = (
     <div
       dir="rtl"
-      className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-5 py-4 pointer-events-none">
+      className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
       {/* RIGHT — primary nav action (Back when on setup, Close otherwise) */}
       <button
         onClick={navAction.onClick}
@@ -1871,7 +1871,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-            className="flex flex-col flex-1 w-full max-w-sm mx-auto items-center justify-center gap-8 text-center">
+            className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto items-center justify-center gap-8 text-center">
 
             {/* Counter — mirrors the distribution header for continuity */}
             <div className="flex flex-col items-center gap-1">
@@ -1935,7 +1935,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
-        <div className="flex flex-col flex-1 w-full max-w-sm mx-auto gap-6">
+        <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto gap-6">
 
           {/* ── Header ── */}
           <div className="flex flex-col items-center gap-1 text-center">
@@ -2150,7 +2150,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
-        <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+        <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
           {/* ── Cinematic header ── */}
           <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -2454,7 +2454,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 onPick: (name: string) => void,
                 accent: string,
               ) => (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
                   {list.map((p, idx) => {
                     const isSelected = selected === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
@@ -2560,7 +2560,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }
 
             return (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
                 {targetList.map((p, idx) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
@@ -2743,15 +2743,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </p>
         </div>
 
-        <div className="w-full max-w-sm mx-auto px-4 py-3 rounded-2xl flex items-center gap-3"
+        <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-3 rounded-2xl flex items-center gap-3"
           style={{ backgroundColor: "#1A0A00", border: `1px solid ${accent}44` }}>
           <VenetianMask size={18} color={accent} strokeWidth={1.5} />
           <span className="text-xs font-semibold" style={{ color: "#AAA" }}>اختر لاعباً واحداً ليلحق به الموت فوراً.</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto">
           {targets.length === 0 ? (
-            <p className="col-span-2 text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
+            <p className="col-span-full text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
           ) : (
             targets.map(p => (
               <button
@@ -2798,7 +2798,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.02 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        className="w-full max-w-sm flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+        className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
         style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
         <ChevronRight size={20} strokeWidth={2} />
         <span>متابعة</span>
@@ -2813,7 +2813,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <Skull size={18} color="#555555" strokeWidth={1.5} />
             <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#555555" }}>اكتشاف</span>
           </div>
-          <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+          <div className="flex flex-col items-center gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
             <div className="w-full flex flex-col items-center gap-4 py-8 px-6 rounded-2xl"
               style={{ backgroundColor: "#0D0D0D", border: "1px solid #33333366", boxShadow: "0 0 40px #11111133" }}>
               <VenetianMask size={56} color="#444444" strokeWidth={1.2} />
@@ -2837,7 +2837,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
           <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#D32F2F" }}>تم الاستبعاد</span>
         </div>
-        <div className="flex flex-col items-center gap-5 w-full max-w-sm">
+        <div className="flex flex-col items-center gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
           <div className="w-full flex flex-col items-center gap-4 py-8 px-6 rounded-2xl"
             style={{ backgroundColor: "#0D0000", border: `1px solid ${revealMeta.color}66`, boxShadow: `0 0 40px ${revealMeta.color}22` }}>
             <VenetianMask size={56} color={revealMeta.color} strokeWidth={1.2} />
@@ -2877,7 +2877,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
-        <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+        <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
             <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#D32F2F" }}>نتيجة الإعدام</span>
@@ -3002,7 +3002,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         {globalControls}
 
         {/* ── Winner card with pulsing glow ── */}
-        <div className="winner-card w-full max-w-sm flex flex-col items-center gap-6 py-12 px-6 rounded-3xl"
+        <div className="winner-card w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-col items-center gap-6 py-12 px-6 rounded-3xl"
           style={{
             ["--glow-sm" as string]: `0 0 40px ${glowCol}, 0 0 80px ${glowCol}`,
             ["--glow-lg" as string]: `0 0 70px ${glowCol}, 0 0 140px ${glowCol}, inset 0 0 30px ${glowCol}`,
@@ -3044,7 +3044,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
-            className="w-full max-w-sm flex flex-col gap-3 px-5 py-4 rounded-2xl"
+            className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-col gap-3 px-5 py-4 rounded-2xl"
             style={{
               backgroundColor: "#0A0000",
               border: "1px solid #D32F2F44",
@@ -3078,7 +3078,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         )}
 
         {/* ── Final roles list ── */}
-        <div className="flex flex-col gap-2 w-full max-w-sm">
+        <div className="flex flex-col gap-2 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
           <p className="text-xs text-center font-semibold pb-1" style={{ color: "#2A2A2A", letterSpacing: "0.12em" }}>الأدوار النهائية</p>
           {livePlayers.map(p => {
             const pm = ROLE_META[p.role] ?? ROLE_META["المواطن"];
@@ -3099,7 +3099,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* ── Action buttons ── */}
-        <div className="flex flex-col gap-3 w-full max-w-sm">
+        <div className="flex flex-col gap-3 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
           <motion.button
             onClick={handlePlayAgainSamePlayers}
             whileTap={{ scale: 0.95 }}
@@ -3230,7 +3230,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
-          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+          <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <Sun size={18} color="#FFB300" strokeWidth={1.5} />
               <span className="text-xs font-bold tracking-widest mt-1" style={{ color: "#FFB300" }}>الصباح</span>
@@ -3278,7 +3278,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         <>
           <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
             {globalControls}
-            <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+            <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
               <div className="flex flex-col items-center gap-2 text-center pt-1">
                 <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
                 <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
@@ -3287,7 +3287,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
               {morningBanner}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
                 {alivePlayers.map((p, idx) => (
                   <div key={p.name}
                     className="flex flex-col items-center gap-2 px-3 py-3.5 rounded-xl"
@@ -3362,13 +3362,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
-          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+          <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
               <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
               {alivePlayers.map((p, idx) => {
                 const count  = voteCounts[p.name] ?? 0;
                 const canAdd = count < perPlayerCap;
@@ -3440,7 +3440,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
           {globalControls}
-          <div className="flex flex-col items-center gap-6 w-full max-w-sm text-center">
+          <div className="flex flex-col items-center gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl text-center">
             <div style={{ filter: "drop-shadow(0 0 32px #FF8F0066)" }}>
               <VenetianMask size={72} color="#FF8F00" strokeWidth={1} />
             </div>
@@ -3470,7 +3470,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
           {globalControls}
-          <div className="flex flex-col items-center gap-6 w-full max-w-sm text-center">
+          <div className="flex flex-col items-center gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl text-center">
             <div style={{ filter: "drop-shadow(0 0 32px #55555566)" }}>
               <VenetianMask size={72} color="#555555" strokeWidth={1} />
             </div>
@@ -3498,7 +3498,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return (
         <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
-          <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+          <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>المحاكمة</span>
               <h1 className="text-2xl font-black text-white">{accusedPlayer} يدافع عن نفسه</h1>
@@ -3558,7 +3558,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return (
       <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
-        <div className="flex flex-col gap-5 w-full max-w-sm mx-auto flex-1">
+        <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
             <h1 className="text-2xl font-black text-white">هل يُعدَم {accusedPlayer}؟</h1>
@@ -3657,7 +3657,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col px-5 pt-3 pb-8" style={ROOT_STYLE}>
       {globalControls}
-      <div className="flex flex-col gap-6 w-full max-w-sm mx-auto flex-1">
+      <div className="flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
         {/* ── Header ── */}
         <div className="flex flex-col gap-1">
@@ -4292,7 +4292,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => void; onJoinRoom: () => void; onBack: () => void }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
-      <div className="flex flex-col items-center gap-8 w-full max-w-sm">
+      <div className="flex flex-col items-center gap-8 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
         <div className="flex flex-col items-center gap-3">
           <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
@@ -4335,7 +4335,7 @@ function NameInputLayout({
 }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
-      <div className="flex flex-col gap-6 w-full max-w-sm">
+      <div className="flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
         <TopBar onBack={onBack} />
         <div>
           <h2 className="text-2xl font-black text-white">{title}</h2>
@@ -4557,7 +4557,7 @@ function LobbyScreen({
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
-      <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
+      <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-5">
 
         <TopBar />
 
@@ -4917,7 +4917,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <NightRoleSleepingOverlay phase={gamePhase} />
-      <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-6">
+      <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-6">
 
         <TopBar />
 
@@ -5444,7 +5444,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
       {/* Executed player banner */}
       {result.executedPlayerName && (
-        <div className="w-full max-w-sm rounded-2xl flex flex-col items-center gap-1 py-3 px-4"
+        <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl flex flex-col items-center gap-1 py-3 px-4"
           style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F" }}>
           <span className="text-xs font-semibold tracking-widest" style={{ color: "#666666" }}>تم إعدام</span>
           <span className="text-lg font-black" style={{ color: "#FF6B6B" }}>{result.executedPlayerName}</span>
@@ -5452,7 +5452,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
       )}
 
       {/* Main result card */}
-      <div className="w-full max-w-sm flex flex-col items-center gap-6">
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-col items-center gap-6">
         <div style={{ filter: `drop-shadow(0 0 36px ${wolvesWon ? "#D32F2F" : "#4CAF50"})` }}>
           <VenetianMask
             size={100}
@@ -5643,7 +5643,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   return (
     <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
       <NightRoleSleepingOverlay phase={activeGamePhase} />
-      <div className="flex flex-col flex-1 w-full max-w-sm mx-auto px-4 py-6 gap-5">
+      <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-5">
 
         <TopBar />
 
