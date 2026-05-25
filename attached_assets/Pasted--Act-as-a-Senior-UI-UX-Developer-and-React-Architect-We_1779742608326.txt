@@ -1,0 +1,24 @@
+"Act as a Senior UI/UX Developer and React Architect. We need to revert the standalone discussion timer added previously and integrate a 'Custom' (مخصص) option directly into the existing 'Game Speed' (سرعة المجلس) setting, matching a native mobile app experience.
+THE TASK:
+1. Revert Previous Mistake:
+Locate and completely REMOVE the standalone 'وقت النقاش' (Discussion Time) row that was recently added to the settings menu. Remove its dedicated state (discussionDuration).
+2. Upgrade 'Game Speed' (سرعة المجلس) State:
+Expand the existing gameSpeed state to accept a fourth option: 'custom' (مخصص).
+Create a new state object for the custom times: customSpeeds = { turn: 30, discuss: 90, defense: 45 }.
+Ensure BOTH gameSpeed and customSpeeds are properly persisted via the existing pick() and saveNarratorState() local storage pipeline.
+3. Build Native-like Custom UI:
+In the 'إعدادات المجلس' (Settings) where the Game Speed segmented control is rendered:
+Add 'مخصص' (Custom) as the fourth button next to Slow, Medium, and Fast.
+If gameSpeed === 'custom', render a smooth, nicely animated expanded section right below the segmented control.
+Inside this expanded section, display 3 distinct native-looking dropdowns (<select> styled with Tailwind) or number pickers for:
+مدة الدور (Turn Time)
+مدة النقاش (Discussion Time)
+مدة الدفاع (Defense Time)
+Provide logical interval options for these dropdowns (e.g., 15s, 30s, 45s, 60s, 90s, 120s, 180s, 240s, 300s).
+4. Integrate with Game Engine:
+Locate the logic that returns the timer durations based on gameSpeed (e.g., the speedPreset object or switch statement).
+Update it so that if gameSpeed === 'custom', it strictly returns the values from the customSpeeds state instead of hardcoded numbers.
+CRITICAL GUARDRAILS:
+Ensure the layout remains strictly RTL and uses the Tajawal font.
+The expanded 'Custom' section must look premium and seamlessly integrated into the dark theme card.
+Do NOT touch Fisher-Yates randomization, audio logic, or night phase sequences."

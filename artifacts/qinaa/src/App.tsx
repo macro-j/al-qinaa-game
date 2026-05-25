@@ -648,16 +648,30 @@ const formatCorpsesCount = (count: number): string => {
 };
 
 // ── سرعة المجلس (Game Speed presets) ──────────────────────────────────────
-// Three pacing profiles for the table. Each preset drives THREE timers:
+// Four pacing profiles for the table. Each preset drives THREE timers:
 //   • turn      — per-role night action window (seconds)
 //   • discuss   — open day discussion window  (seconds)
 //   • lastWords — accused player's final defense window (seconds)
-// Tweak in one place; every timer site reads from the active preset.
-type GameSpeed = "fast" | "medium" | "slow";
-const SPEED_PRESETS: Record<GameSpeed, { turn: number; discuss: number; lastWords: number; labelAr: string }> = {
+// The three named presets live in SPEED_PRESETS below; the fourth, "custom",
+// is host-defined at runtime from `customSpeeds` state. Every timer site
+// reads from the derived `speedPreset` value (see NarratorMode), which
+// resolves custom→customSpeeds and otherwise indexes SPEED_PRESETS.
+type GameSpeed = "fast" | "medium" | "slow" | "custom";
+type SpeedTimings = { turn: number; discuss: number; lastWords: number };
+const SPEED_PRESETS: Record<Exclude<GameSpeed, "custom">, SpeedTimings & { labelAr: string }> = {
   fast:   { turn: 15, discuss: 60,  lastWords: 30, labelAr: "سريع"  },
   medium: { turn: 30, discuss: 90,  lastWords: 45, labelAr: "متوسط" },
   slow:   { turn: 45, discuss: 120, lastWords: 60, labelAr: "بطيء"  },
+};
+// Discrete options offered in the three custom-time dropdowns. Covers the
+// full range from very-fast night turns (15s) up to long social-deduction
+// discussion windows (5 min). The same option list is reused for all three
+// timers — host can mix any combination.
+const CUSTOM_TIME_OPTIONS: ReadonlyArray<number> = [15, 30, 45, 60, 90, 120, 180, 240, 300];
+const formatTimeOption = (sec: number): string => {
+  if (sec < 60) return `${sec} ثانية`;
+  const m = sec / 60;
+  return Number.isInteger(m) ? `${m} ${m === 1 ? "دقيقة" : m === 2 ? "دقيقتان" : "دقائق"}` : `${sec} ثانية`;
 };
 
 const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
@@ -874,15 +888,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(
     () => pick("gameSpeedV1", "medium" as GameSpeed)
   );
-  const speedPreset = SPEED_PRESETS[gameSpeed];
-  // ── Discussion timer override (وقت النقاش) ──
-  // Independent of the speed preset so the host can extend / shorten the
-  // open-discussion window without changing the night-turn or last-words
-  // timers. Default 90s mirrors the original "medium" preset value.
-  // Persisted across sessions and replays.
-  const [discussionDuration, setDiscussionDuration] = useState<number>(
-    () => pick("discussionDuration", 90)
-  );
+  // ── Custom speed timings (مخصص) ──
+  // Host-defined values for the three timers, used only when gameSpeed
+  // === "custom". Defaults mirror the "medium" preset so toggling to
+  // custom feels neutral. Persisted independently so the host's custom
+  // values survive even while a named preset is active, and re-appear
+  // the next time they switch back to "مخصص".
+  const [customSpeeds, setCustomSpeeds] = useState<SpeedTimings>(() => {
+    // Defensive hydration: `pick` is an unchecked cast, so a stale snapshot
+    // from an older schema (or hand-edited localStorage) could be missing
+    // keys or contain non-numeric values. Fall back per-field to medium
+    // defaults so `speedPreset` is always a fully-populated SpeedTimings.
+    const DEFAULTS = { turn: 30, discuss: 90, lastWords: 45 };
+    const raw = pick<Partial<SpeedTimings>>("customSpeedsV1", DEFAULTS);
+    const sane = (v: unknown, fallback: number): number =>
+      typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+    return {
+      turn:      sane(raw?.turn,      DEFAULTS.turn),
+      discuss:   sane(raw?.discuss,   DEFAULTS.discuss),
+      lastWords: sane(raw?.lastWords, DEFAULTS.lastWords),
+    };
+  });
+  // Resolved active timings: custom→customSpeeds, otherwise the named preset.
+  // Single source of truth for every timer site in the app.
+  const speedPreset = gameSpeed === "custom"
+    ? { ...customSpeeds, labelAr: "مخصص" }
+    : SPEED_PRESETS[gameSpeed];
   // Transient per-night boy picks (only used in inheritance mode — the standard
   // boy still uses the shared `selectedTarget`). Reset on entry to the boy turn
   // and on every game-reset path.
@@ -998,7 +1029,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       finalVoteAgainst, gameOver, executionReveal, isMuted,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       isModsEnabled, activeMods,
-      discussionDuration,
+      customSpeedsV1: customSpeeds,
     });
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
@@ -1007,7 +1038,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal, isMuted,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
-    isModsEnabled, activeMods, discussionDuration,
+    isModsEnabled, activeMods, customSpeeds,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -3209,7 +3240,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex-1" />
             <motion.button
               onClick={() => {
-                setTimerEndsAt(Date.now() + discussionDuration * 1000);
+                setTimerEndsAt(Date.now() + speedPreset.discuss * 1000);
                 setDaySubPhase("discussion");
               }}
               whileTap={{ scale: 0.95 }}
@@ -3252,7 +3283,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
                 <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
                 <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={discussionDuration} />
+                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.discuss} />
                 </div>
               </div>
               {morningBanner}
@@ -3999,25 +4030,34 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </span>
           </div>
 
-          {/* ── Row 1: سرعة المجلس (segmented radio) ── */}
+          {/* ── Row 1: سرعة المجلس (segmented radio + custom expansion) ──
+              Four-way segmented control: سريع · متوسط · بطيء · مخصص. When
+              "مخصص" is active, an animated panel expands beneath with three
+              native-styled dropdowns (turn / discuss / defense) bound to
+              `customSpeeds`. The summary label up top always reflects the
+              live `speedPreset`, so it mirrors custom values automatically. */}
           <div className="flex flex-col gap-2 px-3.5 py-3"
             style={{ borderBottom: "1px solid #1A1A1A" }}>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold tracking-wide" style={{ color: "#888" }}>
-                {`دور: ${speedPreset.turn}ث · نقاش: ${discussionDuration}ث · دفاع: ${speedPreset.lastWords}ث`}
+                {`دور: ${speedPreset.turn}ث · نقاش: ${speedPreset.discuss}ث · دفاع: ${speedPreset.lastWords}ث`}
               </span>
               <span className="text-xs font-bold text-white">سرعة المجلس</span>
             </div>
             <div className="flex flex-row-reverse gap-1.5 rounded-xl p-1"
               style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
-              {(["fast", "medium", "slow"] as GameSpeed[]).map((id) => {
+              {([
+                { id: "fast",   labelAr: "سريع"  },
+                { id: "medium", labelAr: "متوسط", isDefault: true },
+                { id: "slow",   labelAr: "بطيء"  },
+                { id: "custom", labelAr: "مخصص"  },
+              ] as ReadonlyArray<{ id: GameSpeed; labelAr: string; isDefault?: boolean }>).map(({ id, labelAr, isDefault }) => {
                 const isActive = gameSpeed === id;
-                const preset   = SPEED_PRESETS[id];
                 return (
                   <button
                     key={id}
                     onClick={() => setGameSpeed(id)}
-                    className="flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
+                    className="flex-1 px-1.5 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
                     style={{
                       backgroundColor: isActive ? "#D32F2F" : "transparent",
                       color:           isActive ? "#FFFFFF" : "#777777",
@@ -4025,8 +4065,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       boxShadow:       isActive ? "0 0 14px #D32F2F33" : "none",
                     }}>
                     <span className="flex flex-col items-center gap-0.5 leading-none">
-                      <span>{preset.labelAr}</span>
-                      {id === "medium" && (
+                      <span>{labelAr}</span>
+                      {isDefault && (
                         <span className="text-[9px] font-bold"
                           style={{ color: isActive ? "#FFFFFFB3" : "#5C5C5C" }}>
                           (افتراضي)
@@ -4037,52 +4077,67 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 );
               })}
             </div>
-          </div>
 
-          {/* ── Row 1.25: وقت النقاش (segmented number selector) ──
-              Independent override for the discussion-phase countdown. Other
-              two timers (دور / دفاع) still come from the speed preset above. */}
-          <div className="flex flex-col gap-2 px-3.5 py-3"
-            style={{ borderBottom: "1px solid #1A1A1A" }}>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wide" style={{ color: "#888" }}>
-                {`${discussionDuration} ثانية`}
-              </span>
-              <span className="text-xs font-bold text-white">وقت النقاش</span>
-            </div>
-            <div className="flex flex-row-reverse gap-1.5 rounded-xl p-1"
-              style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
-              {([
-                { sec: 60,  label: "د 1"  },
-                { sec: 90,  label: "ث 90" },
-                { sec: 120, label: "د 2"  },
-                { sec: 180, label: "د 3"  },
-              ] as const).map(({ sec, label }) => {
-                const isActive = discussionDuration === sec;
-                return (
-                  <button
-                    key={sec}
-                    onClick={() => setDiscussionDuration(sec)}
-                    className="flex-1 px-2 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
-                    style={{
-                      backgroundColor: isActive ? "#D32F2F" : "transparent",
-                      color:           isActive ? "#FFFFFF" : "#777777",
-                      border:          `1px solid ${isActive ? "#D32F2F" : "transparent"}`,
-                      boxShadow:       isActive ? "0 0 14px #D32F2F33" : "none",
-                    }}>
-                    <span className="flex flex-col items-center gap-0.5 leading-none">
-                      <span>{label}</span>
-                      {sec === 90 && (
-                        <span className="text-[9px] font-bold"
-                          style={{ color: isActive ? "#FFFFFFB3" : "#5C5C5C" }}>
-                          (افتراضي)
+            {/* ── Custom-times expanded panel ──
+                Animated reveal when gameSpeed === "custom". Three native
+                <select> dropdowns (one per timer), styled to match the dark
+                card. RTL flow + Tajawal inherited from globals; the
+                appearance-none + chevron pattern keeps the picker looking
+                consistent across iOS / Android / desktop browsers. */}
+            <AnimatePresence initial={false}>
+              {gameSpeed === "custom" && (
+                <motion.div
+                  key="custom-speeds"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ overflow: "hidden" }}>
+                  <div className="mt-2 flex flex-col gap-2 rounded-xl px-3 py-3"
+                    style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
+                    {([
+                      { key: "turn",      labelAr: "مدة الدور"   },
+                      { key: "discuss",   labelAr: "مدة النقاش"  },
+                      { key: "lastWords", labelAr: "مدة الدفاع" },
+                    ] as ReadonlyArray<{ key: keyof SpeedTimings; labelAr: string }>).map(({ key, labelAr }) => (
+                      <div key={key} className="flex items-center justify-between gap-3">
+                        <div className="relative flex-shrink-0">
+                          {/* Chevron — placed on the LEFT in RTL since that's the
+                              trailing edge of the control. pointer-events-none so
+                              taps fall through to the underlying <select>. */}
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] pointer-events-none"
+                            style={{ color: "#888" }}>▾</span>
+                          <select
+                            value={customSpeeds[key]}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setCustomSpeeds(prev => ({ ...prev, [key]: v }));
+                            }}
+                            dir="rtl"
+                            className="appearance-none text-xs font-bold rounded-lg pr-3 pl-6 py-2 transition-colors duration-150 focus:outline-none"
+                            style={{
+                              backgroundColor: "#141414",
+                              color: "#FFFFFF",
+                              border: "1px solid #2A2A2A",
+                              fontFamily: "inherit",
+                              minWidth: "6.5rem",
+                            }}>
+                            {CUSTOM_TIME_OPTIONS.map(sec => (
+                              <option key={sec} value={sec} style={{ backgroundColor: "#141414", color: "#FFFFFF" }}>
+                                {formatTimeOption(sec)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <span className="text-xs font-bold text-right" style={{ color: "#CCCCCC" }}>
+                          {labelAr}
                         </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* ── Row 1.5: الراوي الصوتي ──
