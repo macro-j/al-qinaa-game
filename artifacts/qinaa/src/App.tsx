@@ -260,7 +260,7 @@ function ConnectionBanner({ connected }: { connected: boolean }) {
 
 function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center gap-6 px-6" style={ROOT_STYLE}>
       <div style={{ filter: "drop-shadow(0 0 20px #D32F2F44)" }}>
         <VenetianMask size={80} color="#D32F2F" strokeWidth={1} />
       </div>
@@ -293,7 +293,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   const [showAbout, setShowAbout] = useState(false);
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 relative" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-6 relative" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-10 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
 
         {/* Logo + Title */}
@@ -1864,7 +1864,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // block is bypassed entirely and the legacy flow runs unchanged.
     if (isPassPhoneMode && isBlindScreen) {
       return (
-        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
           <motion.div
             key={`blind-${currentIndex}`}
@@ -1933,7 +1933,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
         <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto gap-6">
 
@@ -2108,7 +2108,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const isWaking  = nightTransition === "role_wakes";
       const wakeMeta  = isWaking ? (ROLE_META[nightStep] ?? ROLE_META["المواطن"]) : null;
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center gap-8 px-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col items-center justify-center gap-8 px-8" style={ROOT_STYLE}>
           {isDawn
             ? <Sun size={56} color="#FFB300" strokeWidth={1} style={{ opacity: 0.85 }} />
             : isWaking
@@ -2148,7 +2148,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const nightLabel = arabicNights[nightCount - 1] ?? String(nightCount);
 
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
         <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
@@ -2730,7 +2730,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const accent         = ROLE_META["avenger"]?.color ?? "#A0522D";
     const accentGlow     = ROLE_META["avenger"]?.glow  ?? "#A0522D33";
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8 gap-6" style={{ ...ROOT_STYLE, backgroundColor: "#0A0500" }}>
+      <div className="min-h-full w-full flex flex-col px-5 py-8 gap-6" style={{ ...ROOT_STYLE, backgroundColor: "#0A0500" }}>
         {globalControls}
         <div className="flex flex-col items-center gap-2 text-center pt-2">
           <div style={{ filter: `drop-shadow(0 0 24px ${accent}99)` }}>
@@ -2807,7 +2807,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     if (isNightKillReveal) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col items-center gap-1 text-center">
             <Skull size={18} color="#555555" strokeWidth={1.5} />
@@ -2831,7 +2831,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8 gap-8" style={ROOT_STYLE}>
         {globalControls}
         <div className="flex flex-col items-center gap-1 text-center">
           <Skull size={18} color="#D32F2F" strokeWidth={1.5} />
@@ -2875,7 +2875,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const advanceLabel  = pendingWinner ? "إنهاء اللعبة" : "بدء الليلة التالية";
     const AdvanceIcon   = pendingWinner ? Skull : Moon;
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
         <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
           <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -2997,7 +2997,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
 
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-5 py-8 gap-6"
+      <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8 gap-6"
         style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
         {globalControls}
 
@@ -3228,7 +3228,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     if (daySubPhase === "results") {
       return (
-        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -3276,7 +3276,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         // when the timer hits zero. Host must manually tap "بدء التصويت".
         // DayTimerBar still counts down to 00:00 visually (no phase change).
         <>
-          <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+          <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
             {globalControls}
             <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
               <div className="flex flex-col items-center gap-2 text-center pt-1">
@@ -3360,7 +3360,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         }
       };
       return (
-        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -3438,7 +3438,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     if (daySubPhase === "vote_tie") {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col items-center gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl text-center">
             <div style={{ filter: "drop-shadow(0 0 32px #FF8F0066)" }}>
@@ -3468,7 +3468,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     if (daySubPhase === "no_quorum") {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col items-center gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl text-center">
             <div style={{ filter: "drop-shadow(0 0 32px #55555566)" }}>
@@ -3496,7 +3496,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ════════════════════════════════════════════
     if (daySubPhase === "justification") {
       return (
-        <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+        <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -3556,7 +3556,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       }
     };
     return (
-      <div className="min-h-screen w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
         <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
           <div className="flex flex-col items-center gap-1 text-center pt-1">
@@ -3655,7 +3655,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: setup (default)
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full flex flex-col px-5 pt-3 pb-8" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col px-5 pt-3 pb-8" style={ROOT_STYLE}>
       {globalControls}
       <div className="flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
@@ -4268,7 +4268,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       initial={false}
       animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as unknown as Record<string, string>}
       transition={{ duration: 1.5, ease: "easeInOut" }}
-      style={{ "--n-bg": "#000000", minHeight: "100vh", width: "100%" } as React.CSSProperties}
+      style={{ "--n-bg": "#000000", height: "100dvh", width: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } as React.CSSProperties}
     >
       {floatingButtons}
       <AnimatePresence mode="wait">
@@ -4278,7 +4278,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -15 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          style={{ width: "100%", minHeight: "100vh" }}
+          style={{ width: "100%", flex: 1, overflowY: "auto", minHeight: 0 }}
         >
           {renderPhaseContent()}
         </motion.div>
@@ -4291,7 +4291,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
 function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => void; onJoinRoom: () => void; onBack: () => void }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col items-center gap-8 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
         <div className="flex flex-col items-center gap-3">
           <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
@@ -4334,7 +4334,7 @@ function NameInputLayout({
   extraField?: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-6" style={ROOT_STYLE}>
       <div className="flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
         <TopBar onBack={onBack} />
         <div>
@@ -4531,7 +4531,7 @@ function LobbyScreen({
 
   if (kicked) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
         <Skull size={48} color="#D32F2F" />
         <p className="text-white font-bold text-xl">تم طردك من الغرفة</p>
         <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>قرر المضيف إزالتك من هذه الجلسة</p>
@@ -4544,7 +4544,7 @@ function LobbyScreen({
 
   if (closed) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
+      <div className="min-h-full w-full flex flex-col items-center justify-center px-6 gap-4" style={ROOT_STYLE}>
         <AlertCircle size={48} color="#D32F2F" />
         <p className="text-white font-bold text-lg">تم إغلاق الغرفة</p>
         <p className="text-sm" style={{ color: "#9E9E9E" }}>غادر المضيف أو انتهت الجلسة</p>
@@ -4556,7 +4556,7 @@ function LobbyScreen({
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col" style={ROOT_STYLE}>
       <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-5">
 
         <TopBar />
@@ -4915,7 +4915,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
   const conceal = useCallback(() => setRevealed(false), []);
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col" style={ROOT_STYLE}>
       <NightRoleSleepingOverlay phase={gamePhase} />
       <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-6">
 
@@ -5294,7 +5294,7 @@ function PreDistributionScreen({
   }, []);
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-10 px-8" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center gap-10 px-8" style={ROOT_STYLE}>
       <Moon size={56} color="#3A3A6A" strokeWidth={1} style={{ opacity: 0.85 }} />
       <p className="text-2xl font-black text-center leading-relaxed"
         style={{ color: "#2A2A4A" }}>
@@ -5441,7 +5441,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
 }) {
   const wolvesWon = result.winner === "wolves";
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-6 gap-8" style={ROOT_STYLE}>
       {/* Executed player banner */}
       {result.executedPlayerName && (
         <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl flex flex-col items-center gap-1 py-3 px-4"
@@ -5641,7 +5641,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
   const handleTallyAndExecute = () => getSocket().emit("tallyVotesAndExecute", { code: game.code });
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={ROOT_STYLE}>
+    <div className="min-h-full w-full flex flex-col" style={ROOT_STYLE}>
       <NightRoleSleepingOverlay phase={activeGamePhase} />
       <div className="flex flex-col flex-1 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-4 py-6 gap-5">
 

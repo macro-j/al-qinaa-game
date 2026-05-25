@@ -416,11 +416,21 @@
    on every breakpoint — their internal padding scales fluidly with
    `px-4 md:px-8 lg:px-12` so content never glues to the edges on wide screens.
    ───────────────────────────────────────────────────────────────────────── */
+/* Lock the viewport — no native window scrolling ever.
+   html/body get explicit height so percentage-based children resolve
+   correctly. #root stretches to fill body fully. Scrolling for long
+   content happens inside the flex-1 overflow-y-auto inner container
+   (NarratorMode) so the browser chrome never bounces. */
 html,
-body,
-#root {
-  min-height: 100dvh;
+body {
+  height: 100dvh;
   width: 100%;
+  overflow: hidden;
   background-color: #000;
-  overflow-x: hidden;
+}
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: #000;
 }
