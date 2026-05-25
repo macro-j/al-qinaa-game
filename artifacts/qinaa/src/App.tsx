@@ -225,7 +225,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
 }
 
 function Footer() {
-  return <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>;
+  return <p className="text-center text-xs pb-2" style={{ color: "#333333" }}>القرية تنام.. والقاتل يصحو</p>;
 }
 
 function LeaveButton({ onLeave, label = "خروج من الغرفة" }: { onLeave: () => void; label?: string }) {
@@ -272,7 +272,7 @@ function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
       <button onClick={onGiveUp} className="text-xs underline" style={{ color: "#555555" }}>
         بدء من جديد
       </button>
-      <p className="text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+      <p className="text-xs" style={{ color: "#333333" }}>القرية تنام.. والقاتل يصحو</p>
     </div>
   );
 }
@@ -302,7 +302,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h1>
-          <p className="text-sm text-center tracking-wide font-light" style={{ color: "rgba(255,255,255,0.55)" }}>المدينة تنام والقاتل يصحو..</p>
+          <p className="text-sm text-center tracking-wide font-light" style={{ color: "rgba(255,255,255,0.55)" }}>القرية تنام والقاتل يصحو..</p>
         </div>
 
         {/* Mode buttons */}
@@ -628,7 +628,7 @@ type DeathEntry = { name: string; cause: DeathCause };
 const DEATH_CAUSE_LABEL: Record<DeathCause, string> = {
   mafia:   "قتلته المافيا",
   poison:  "مات مسموماً",
-  vote:    "أعدمته المدينة",
+  vote:    "أعدمته القرية",
   twin:    "فقد توأمه فلحق به",
   avenger: "أخذه المنتقم معه",
 };
@@ -2102,7 +2102,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Cinematic header ── */}
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <Moon size={18} color="#444" strokeWidth={1.5} />
-            <h1 className="text-xl font-black text-white mt-1">الليل يخيم على المدينة</h1>
+            <h1 className="text-xl font-black text-white mt-1">الليل يخيم على القرية</h1>
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightLabel} · الجميع ينام..</p>
             {timerEndsAt && (
               <div className="mt-2 w-full px-4 py-3 rounded-xl"
@@ -2446,8 +2446,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
 
                   const isDisabled = isAllyLocked || seerLocked;
-                  const rowBg      = isSelected ? "#2A0000" : "#141414";
-                  const rowBorder  = isSelected ? "#D32F2F" : "#222222";
+                  // Seer reveal: heavily tint the card based on allegiance so
+                  // the Narrator sees the result at a glance without reading text.
+                  const rowBg = showSeerBadge
+                    ? (isMafiaRole ? "#1A0000" : "#001A00")
+                    : (isSelected ? "#2A0000" : "#141414");
+                  const rowBorder = showSeerBadge
+                    ? (isMafiaRole ? "#D32F2F" : "#33691E")
+                    : (isSelected ? "#D32F2F" : "#222222");
 
                   return (
                     <button
@@ -2595,9 +2601,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <span className="text-xs font-semibold" style={{ color: "#AAA" }}>اختر لاعباً واحداً ليلحق به الموت فوراً.</span>
         </div>
 
-        <div className="flex flex-col gap-2 w-full max-w-sm mx-auto">
+        <div className="grid grid-cols-2 gap-3 w-full max-w-sm mx-auto">
           {targets.length === 0 ? (
-            <p className="text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
+            <p className="col-span-2 text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
           ) : (
             targets.map(p => (
               <button
@@ -2606,15 +2612,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   triggerHaptic([100, 50, 100]);
                   handleAvengerPick(p.name);
                 }}
-                className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all active:scale-95"
+                className="flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-xl transition-all active:scale-95"
                 style={{
                   backgroundColor: "#0D0500",
                   border: `1px solid ${accent}55`,
                   boxShadow: `0 0 14px ${accentGlow}`,
                 }}>
-                {/* Name first in DOM = far right in RTL */}
-                <span className="text-sm font-semibold text-white">{p.name}</span>
                 <ChevronRight size={16} color={accent} />
+                <span className="text-sm font-semibold text-white text-center">{p.name}</span>
               </button>
             ))
           )}
@@ -2735,7 +2740,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: "#D32F2F" }} />
               <p className="text-sm font-bold" style={{ color: "#FF6B6B" }}>
-                {`بعد الإعدام، سقطت في المدينة ${formatCorpsesCount(deathCount)}`}
+                {`بعد الإعدام، سقطت في القرية ${formatCorpsesCount(deathCount)}`}
               </p>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -2857,7 +2862,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </span>
             {isMadmanWin && gameOver.killerName && (
               <p className="text-sm leading-loose" style={{ color: "#666" }}>
-                أعدمت المدينة المجنون<br />
+                أعدمت القرية المجنون<br />
                 <span className="text-base font-black" style={{ color: accent }}>{gameOver.killerName}</span>
                 <br />
                 <span className="text-xs" style={{ color: "#666" }}>وانتصر بمفرده على الجميع</span>
@@ -2871,7 +2876,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             )}
             {!isTownWin && !isMadmanWin && (
               <p className="text-xs font-semibold" style={{ color: "#444", letterSpacing: "0.18em" }}>
-                المافيا تسيطر على المدينة
+                المافيا تسيطر على القرية
               </p>
             )}
           </div>
@@ -3038,7 +3043,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <p className="text-sm font-bold" style={{ color: hasDeaths ? "#FF6B6B" : "#8BC34A" }}>
             {!hasDeaths
               ? "مرت الليلة بسلام.. لم يمت أحد."
-              : `استيقظت المدينة على ${formatCorpsesCount(deathCount)}`}
+              : `استيقظت القرية على ${formatCorpsesCount(deathCount)}`}
           </p>
         </div>
         {hasDeaths && (
@@ -3126,21 +3131,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
               {morningBanner}
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-3">
                 {alivePlayers.map((p, idx) => (
                   <div key={p.name}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                    className="flex flex-col items-center gap-2 px-3 py-3.5 rounded-xl"
                     style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
-                    {/* Number badge — first in DOM = far right in RTL */}
-                    <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm"
+                    <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                       style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
                       {idx + 1}
                     </span>
-                    {/* Name + status — directly beside badge */}
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-sm font-semibold" style={{ color: "#AAAAAA" }}>{p.name}</span>
-                      {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
-                    </div>
+                    <span className="text-sm font-semibold text-center leading-tight"
+                      style={{ color: "#AAAAAA" }}>{p.name}</span>
+                    {p.isSilenced && (
+                      <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -3201,27 +3205,33 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
               <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {alivePlayers.map((p, idx) => {
                 const count  = voteCounts[p.name] ?? 0;
                 const canAdd = count < perPlayerCap;
                 return (
                   <div key={p.name}
-                    className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                    className="flex flex-col items-center gap-2 px-2 py-3 rounded-xl"
                     style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
-                    {/* Right group: badge + name — first in DOM = far right in RTL */}
-                    <div className="flex items-center gap-3">
-                      <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm"
-                        style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
-                        {idx + 1}
-                      </span>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-sm font-semibold" style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
-                        {p.isSilenced && <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>}
-                      </div>
+                    {/* Number badge */}
+                    <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                      style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
+                      {idx + 1}
+                    </span>
+                    {/* Name + silenced */}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-sm font-semibold text-center leading-tight"
+                        style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
+                      {p.isSilenced && (
+                        <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
+                      )}
                     </div>
-                    {/* Left group: voting controls — last in DOM = far left in RTL */}
-                    {/* Inside: + first (right of count), count, − last (left of count) */}
+                    {/* Vote count */}
+                    <span className="text-2xl font-black tabular-nums leading-none"
+                      style={{ color: count > 0 ? "#FF6B6B" : "#333" }}>
+                      {count}
+                    </span>
+                    {/* +/- controls */}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: (prev[p.name] ?? 0) + 1 }))}
@@ -3230,10 +3240,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         style={{ backgroundColor: "#001A00", color: "#8BC34A", border: "1px solid #8BC34A44" }}>
                         +
                       </button>
-                      <span className="text-base font-black tabular-nums w-6 text-center"
-                        style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
-                        {count}
-                      </span>
                       <button
                         onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
                         disabled={count === 0}
@@ -3285,7 +3291,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               </p>
             </div>
             <div className="mt-2 px-6 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid #FF8F0033" }}>
-              <p className="text-xs" style={{ color: "#555" }}>المدينة تستعد للنوم...</p>
+              <p className="text-xs" style={{ color: "#555" }}>القرية تستعد للنوم...</p>
             </div>
           </div>
         </div>
@@ -4025,7 +4031,7 @@ function MainMenu({ onCreateRoom, onJoinRoom, onBack }: { onCreateRoom: () => vo
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h1>
-          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>المدينة تنام.. والقاتل يصحو</p>
+          <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>القرية تنام.. والقاتل يصحو</p>
         </div>
         <div className="flex flex-col gap-5 w-full">
           <button onClick={onCreateRoom} className={BASE_BUTTON} style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
@@ -4506,7 +4512,7 @@ function NightRoleSleepingOverlay({ phase }: { phase: string }) {
               {sleepingRole} ينام
             </p>
             <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: "#555555" }}>
-              المدينة هادئة
+              القرية هادئة
             </p>
           </motion.div>
         </motion.div>
@@ -4748,7 +4754,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
           <div className="w-full rounded-2xl flex flex-col items-center gap-2 py-4 px-4"
             style={{ backgroundColor: "#0A1200", border: "1px solid #33691E" }}>
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#8BC34A" }} />
-            <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع المدينة</p>
+            <p className="text-sm font-bold" style={{ color: "#8BC34A" }}>النهار بدأ — ناقش مع القرية</p>
           </div>
         )}
 
@@ -4839,7 +4845,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 <Lock size={28} color="#2A2A2A" />
                 <p className="text-sm font-semibold text-center" style={{ color: "#555555" }}>
                   {({
-                    night_sleep:  "المدينة نائمة... الكل يغمض عيونه",
+                    night_sleep:  "القرية نائمة... الكل يغمض عيونه",
                     night_wolf:   "الولد يتحرك الآن...",
                     night_shadow: "الإكة تتحرك الآن...",
                     night_seer:   "الشايب يحقق الآن...",
@@ -5212,7 +5218,7 @@ function GameOverScreen({ result, isHost, onEnd }: {
         </button>
       </div>
 
-      <p className="text-xs" style={{ color: "#333333" }}>المدينة تنام.. والقاتل يصحو</p>
+      <p className="text-xs" style={{ color: "#333333" }}>القرية تنام.. والقاتل يصحو</p>
     </div>
   );
 }
@@ -5353,7 +5359,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
 
   // Phase labels for host status display
   const NIGHT_PHASE_LABELS: Record<string, string> = {
-    night_sleep:  "المدينة نائمة — الكل يغمض عيونه",
+    night_sleep:  "القرية نائمة — الكل يغمض عيونه",
     night_wolf:   "الولد — يتحرك الآن",
     night_shadow: "الإكة — تُسكت الآن",
     night_seer:   "الشايب — يحقق الآن",
