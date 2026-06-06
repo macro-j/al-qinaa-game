@@ -9,16 +9,26 @@ The Qinaa SPA (`artifacts/qinaa`) is wrapped with Supabase auth + a 2-free-game
 entitlement gate. Auth/entitlement code lives in `src/lib/auth.tsx`,
 `src/lib/supabase.ts`, `src/lib/shop.tsx`; gameplay is in `src/App.tsx`.
 
-## Gate must be fail-CLOSED
-**Rule:** `canStartGame` is only `true` when entitlements have actually loaded
-and permit play. While entitlements are `null` (loading OR fetch/insert error)
-the gate stays closed.
-**Why:** An earlier version was fail-open (`!entitlements ? true : ...`) and on
-error set `DEFAULT_ENTITLEMENTS`, which let a user slip past the free-game limit
-during the fetch or whenever the backend failed. Code review caught this.
-**How to apply:** Never grant a trial on backend failure. The app gate only
-waits on `authLoading`, not entitlement load, so the start-game check itself
-must be the thing that blocks until entitlements are trustworthy.
+## Entitlement load is now fail-SAFE (was fail-closed)
+**Rule:** `loadEntitlements` (`src/lib/auth.tsx`) must NEVER leave `entitlements`
+as `null` after it finishes. On any error path — query error, insert error, or a
+thrown exception — it sets `DEFAULT_ENTITLEMENTS` (0 games, no purchases) and
+clears loading in a `finally`. `canStartGame` still stays closed only while
+`entitlements === null` (i.e. genuinely mid-fetch).
+**Why:** The UI shows `entitlements === null` as a permanent "verifying account"
+(جارٍ التحقق من الحساب) state, so the old fail-CLOSED design (leave `null` on
+error) hung the whole app forever whenever the backend failed — most commonly
+when the `user_entitlements` table / RLS / RPC schema had not been applied in the
+Supabase project. The user explicitly chose "never hang" over "never grant a
+trial on failure" on 2026-06-06.
+**Tradeoff to remember:** This is fail-OPEN. Any backend failure now grants the
+2-free-game trial (0 < FREE_GAME_LIMIT). If `increment_games_played` also fails
+(e.g. schema missing) the count never persists → effectively unlimited free
+games. The real fix for production is to apply `supabase/schema.sql` so the happy
+path works; the fail-safe is only a guard against hanging.
+**How to apply:** Keep the no-hang guarantee. If monetization tightening is ever
+requested, do it by making the schema reliable + server-verified paid flags, NOT
+by reverting to leaving `entitlements` null on error.
 
 ## Single chokepoint
 **Rule:** The only place a new narrator round is gated is `handleDistribute` in

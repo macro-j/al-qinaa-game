@@ -57,8 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeUidRef = useRef<string | null>(null);
 
   // ── Fetch-or-create the user's entitlements row ──
-  // Fail-closed: on any error we leave entitlements `null` (locked) rather
-  // than granting a fresh trial, so a backend failure can't unlock play.
+  // Fail-SAFE: the UI shows a "verifying account" state while entitlements are
+  // `null`, so on ANY error (query error, thrown exception, or a missing row we
+  // cannot create) we must fall back to safe defaults (0 games played, no
+  // purchases) and clear loading — never leave `null`, which would hang the app
+  // forever. `setEntitlementsLoading(false)` is guaranteed via `finally`.
   const loadEntitlements = async (uid: string) => {
     setEntitlementsLoading(true);
     try {
@@ -71,8 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (activeUidRef.current !== uid) return; // stale: user changed mid-flight
 
       if (error) {
-        console.error("[auth] failed to load entitlements:", error.message);
-        setEntitlements(null);
+        console.error("Supabase Entitlement Error:", error);
+        setEntitlements(DEFAULT_ENTITLEMENTS); // fail safe — don't hang
         return;
       }
 
@@ -85,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // No row yet — initialize one.
+      // No row yet — try to initialize one.
       const { data: inserted, error: insertError } = await supabase
         .from("user_entitlements")
         .insert({ user_id: uid, ...DEFAULT_ENTITLEMENTS })
@@ -95,8 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (activeUidRef.current !== uid) return; // stale
 
       if (insertError) {
-        console.error("[auth] failed to create entitlements:", insertError.message);
-        setEntitlements(null);
+        console.error("Supabase Entitlement Error:", insertError);
+        setEntitlements(DEFAULT_ENTITLEMENTS); // fail safe — don't hang
         return;
       }
 
@@ -105,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         has_base_game: !!inserted.has_base_game,
         has_all_access: !!inserted.has_all_access,
       });
+    } catch (error) {
+      // Network throw or any unexpected failure: never hang the UI.
+      console.error("Supabase Entitlement Error:", error);
+      if (activeUidRef.current === uid) setEntitlements(DEFAULT_ENTITLEMENTS);
     } finally {
       if (activeUidRef.current === uid) setEntitlementsLoading(false);
     }
