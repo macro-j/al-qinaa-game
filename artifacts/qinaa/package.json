@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
     "react-qr-code": "^2.0.18",
     "socket.io-client": "^4.8.3"
   }

@@ -1,0 +1,25 @@
+"Act as a Senior Full-Stack Engineer and SaaS Architect. We are connecting our React SPA to our Supabase backend. We need to install the client, build an Auth UI, and enforce the 2-game limit rule.
+SUPABASE CREDENTIALS:
+URL: https://ftfizfcrxgochuthofnd.supabase.co
+Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0Zml6ZmNyeGdvY2h1dGhvZm5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTg4ODYsImV4cCI6MjA5NjMzNDg4Nn0.jgYetV7ueqE6TSQjnwswT1Lq0j5C6dijMcmL3MugrOs
+THE TASK:
+1. Install & Initialize Supabase:
+Install @supabase/supabase-js.
+Create a initialization file or helper inside the project to setup the supabase client using the credentials above.
+2. Authentication Flow & Auth UI:
+Create a global authentication state (user).
+If the user is NOT logged in, they should NOT see the main game screen. Instead, display a stunning, high-fidelity Arabic Login Screen (dir="rtl") that matches our current dark aesthetic.
+The login screen must offer two simple options:
+تسجيل الدخول باستخدام Google (OAuth)
+تسجيل الدخول السريع عبر البريد الإلكتروني (Magic Link or Email/Password setup).
+Once logged in, automatically fetch or initialize their row in the user_entitlements table. If no row exists, create it via insert.
+3. Enforce the 2-Free-Games Limit:
+Track games_played from the user_entitlements table.
+Every time a game officially ends (when the 'إنهاء اللعبة' logic or victory sequence is triggered), increment the games_played counter by 1 in the database for that specific user.
+The Gatekeeper Logic: When clicking 'لعب محلي' or attempting to start a new round, check the user's data:
+If games_played >= 2 AND has_base_game is false AND has_all_access is false: BLOCK the game from starting.
+Instead of starting, automatically trigger and open the ShopModal (باقات اللعبة) that we just built, and show a clear error/alert toast: لقد استهلكت تجربتك المجانية (مرتين). يرجى الاشتراك لمتابعة اللعب!
+CRITICAL GUARDRAILS:
+Strictly maintain the dark cinematic UI theme, RTL layout, and Tajawal font.
+Ensure all database updates happen asynchronously without blocking the local UI performance.
+Do NOT touch any existing local gameplay logic, role selections, custom speeds, or timers. This is strictly a wrapper enforcing Auth and checking Entitlements."

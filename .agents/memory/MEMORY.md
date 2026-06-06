@@ -1,0 +1,2 @@
+- [Qinaa auth + entitlement gating](qinaa-auth-entitlements.md) — fail-closed gate design, where the single chokepoint lives, and guardrails around gameplay code.
+- [Vite env vars need workflow restart](vite-env-restart.md) — VITE_* vars set after a dev server starts aren't exposed until the workflow restarts.
