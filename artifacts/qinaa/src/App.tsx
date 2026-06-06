@@ -46,6 +46,7 @@ import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
 import { LoginScreen } from "./components/LoginScreen";
+import { FREE_GAME_LIMIT } from "./lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -299,6 +300,8 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   const [showTerms,   setShowTerms]   = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const { openShop } = useShop();
+  const { user, entitlements, signOut } = useAuth();
+  const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
 
   return (
     <div className="min-h-full w-full flex flex-col relative" style={ROOT_STYLE}>
@@ -385,6 +388,56 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         </div>
       </div>
       </div>{/* end flex-1 centering region */}
+
+      {/* ── Signed-in user strip ──
+          Anchored above the footer so the player always knows which account
+          they're on and can sign out. Pure dir="rtl", same dark language. */}
+      {user && (
+        <div dir="rtl" className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-6 pb-3">
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl"
+            style={{ backgroundColor: "#0D0D0D", border: "1px solid #1F1F1F" }}>
+            {/* Identity + status */}
+            <div className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-[11px]" style={{ color: "#666666" }}>
+                المستخدم:{" "}
+                <span dir="ltr" className="text-xs font-bold align-middle" style={{ color: "#9E9E9E" }}>
+                  {user.email ?? "—"}
+                </span>
+              </span>
+              {entitlements ? (
+                entitlements.has_all_access ? (
+                  <span
+                    className="inline-flex w-fit items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: "#1A1206", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.4)" }}>
+                    الباقة الشاملة 👑
+                  </span>
+                ) : entitlements.has_base_game ? (
+                  <span
+                    className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: "#161616", color: "#DDDDDD", border: "1px solid #333333" }}>
+                    اللعبة الأساسية
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: "#120808", color: "#EF9A9A", border: "1px solid rgba(211,47,47,0.3)" }}>
+                    التجربة المجانية (المتبقي: {freeRemaining})
+                  </span>
+                )
+              ) : (
+                <span className="text-[11px]" style={{ color: "#555555" }}>جارٍ التحقق من الحساب…</span>
+              )}
+            </div>
+            {/* Logout */}
+            <button
+              onClick={() => { void signOut(); }}
+              className="shrink-0 text-red-400 hover:text-red-300 border border-red-500/20 bg-red-500/5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors active:scale-95">
+              تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Legal Footer ──
           Anchored to the bottom of the 100dvh flex column. Position in
