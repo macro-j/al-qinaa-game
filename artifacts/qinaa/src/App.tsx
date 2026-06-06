@@ -906,35 +906,22 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             {/* ── A-la-carte add-ons ── */}
             <div className="w-full h-px bg-neutral-800 my-6"></div>
             <h4 className="text-white font-bold mb-4 text-right">الإضافات المفردة (تتطلب اللعبة الأساسية)</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-              {/* Add-on 1 — Magician */}
-              <div
-                dir="rtl"
-                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-                <span className="text-sm font-bold text-white text-right">دور الساحر</span>
-                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
-              </div>
-
-              {/* Add-on 2 — Madman */}
-              <div
-                dir="rtl"
-                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-                <span className="text-sm font-bold text-white text-right">دور المجنون</span>
-                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
-              </div>
-
-              {/* Add-on 3 — Remove Ads */}
-              <div
-                dir="rtl"
-                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
-                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-                <span className="text-sm font-bold text-white text-right">إزالة الإعلانات</span>
-                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[
+                "دور الساحر",
+                "دور المجنون",
+                "دور المنتقم",
+                "دور التوأم",
+                "إزالة الإعلانات",
+              ].map((title) => (
+                <div
+                  key={title}
+                  dir="rtl"
+                  className="bg-neutral-900/40 border border-neutral-800/60 rounded-xl p-3 flex justify-between items-center gap-3">
+                  <span className="text-sm font-bold text-white text-right">{title}</span>
+                  <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
+                </div>
+              ))}
             </div>
 
             <p className="text-center text-xs" style={{ color: "#555555" }}>
