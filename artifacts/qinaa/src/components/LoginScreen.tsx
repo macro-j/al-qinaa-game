@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { VenetianMask, Mail, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { PrivacyModal, TermsModal } from "./LegalModals";
 
 function GoogleIcon() {
   return (
@@ -19,6 +20,8 @@ export function LoginScreen() {
   const [busy, setBusy] = useState<"google" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   const handleGoogle = async () => {
     setError(null);
@@ -141,9 +144,26 @@ export function LoginScreen() {
         )}
 
         <p className="text-center text-xs leading-relaxed" style={{ color: "#555555" }}>
-          بتسجيل الدخول، فإنك توافق على شروط الاستخدام وسياسة الخصوصية الخاصة بتطبيق قناع.
+          بتسجيل الدخول، فإنك توافق على{" "}
+          <button
+            type="button"
+            onClick={() => setShowTerms(true)}
+            className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+            شروط الاستخدام
+          </button>{" "}
+          و
+          <button
+            type="button"
+            onClick={() => setShowPrivacy(true)}
+            className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+            سياسة الخصوصية
+          </button>{" "}
+          الخاصة بلعبة القناع.
         </p>
       </div>
+
+      <TermsModal open={showTerms} onClose={() => setShowTerms(false)} />
+      <PrivacyModal open={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
   );
 }
