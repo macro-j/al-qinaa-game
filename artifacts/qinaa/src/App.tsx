@@ -294,6 +294,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms,   setShowTerms]   = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [showShop,    setShowShop]    = useState(false);
 
   return (
     <div className="min-h-full w-full flex flex-col relative" style={ROOT_STYLE}>
@@ -388,8 +389,16 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           overflow:hidden with a finite 100dvh height. */}
       <footer
         dir="rtl"
-        className="w-full flex justify-center gap-6 pb-5 pt-2 text-[11px] sm:text-xs"
+        className="w-full flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pb-5 pt-2 text-[11px] sm:text-xs"
         style={{ color: "#444444" }}>
+        {/* Shop — prominent amber entry point */}
+        <button
+          onClick={() => setShowShop(true)}
+          className="flex items-center gap-1.5 font-bold text-amber-400 transition-all duration-150 hover:text-amber-300 active:scale-95"
+          style={{ textShadow: "0 0 12px rgba(251,191,36,0.45)" }}>
+          <span>🛒</span>
+          <span>باقات اللعبة</span>
+        </button>
         <button
           onClick={() => setShowPrivacy(true)}
           className="transition-colors duration-150 hover:text-neutral-300 active:scale-95">
@@ -665,12 +674,13 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <div className="flex flex-col gap-3 text-sm leading-relaxed text-right" style={{ color: "#AAAAAA" }}>
-              <p>نحن في القناع نحترم خصوصيتكم ونلتزم بحماية بياناتكم الشخصية وفق أعلى المعايير.</p>
-              <p><span className="text-white font-bold">البيانات التي نجمعها:</span> لا نجمع أي بيانات شخصية تعريفية. تُخزَّن إعدادات اللعبة محلياً على جهازكم فقط عبر localStorage ولا تُرسَل إلى أي خادم.</p>
-              <p><span className="text-white font-bold">ملفات تعريف الارتباط:</span> لا نستخدم ملفات تعريف الارتباط (Cookies) لأغراض التتبع أو الإعلانات.</p>
-              <p><span className="text-white font-bold">مشاركة البيانات:</span> لا نبيع أو نشارك أو ننقل أي معلومات إلى أطراف ثالثة تحت أي ظرف.</p>
-              <p><span className="text-white font-bold">الأمان:</span> نطبّق أفضل الممارسات الأمنية لضمان سلامة تجربتكم داخل التطبيق.</p>
-              <p><span className="text-white font-bold">التواصل:</span> إن كان لديكم أي استفسار حول سياسة الخصوصية، تواصلوا معنا عبر البريد الإلكتروني: qinaa.support@gmail.com</p>
+              <p>نحن في «قناع» نحترم خصوصيتكم ونلتزم بحماية بياناتكم وفق أعلى المعايير. توضّح هذه السياسة كيفية تعاملنا مع بياناتكم أثناء استخدام التطبيق وخدماته المدفوعة.</p>
+              <p><span className="text-white font-bold">البيانات التي نجمعها:</span> لا نجمع بيانات شخصية تعريفية أثناء اللعب. تُحفظ إعدادات اللعبة وتقدّمكم محلياً على جهازكم عبر localStorage. عند الشراء، تُعالَج بيانات الدفع بأمان من خلال مزوّد بوابة الدفع، ولا نطّلع على بيانات بطاقتكم أو نخزّنها لدينا.</p>
+              <p><span className="text-white font-bold">المشتريات والاشتراكات:</span> يوفّر «قناع» تجربة مجانية محدودة بجولتين، إضافةً إلى مشتريات لمرة واحدة تشمل اللعبة الأساسية، وإضافات الأدوار الفردية، وباقة الوصول الشامل (VIP). نحتفظ بسجلّ مشترياتكم لتفعيل المحتوى الذي حصلتم عليه واستعادته عند الحاجة.</p>
+              <p><span className="text-white font-bold">ملفات تعريف الارتباط:</span> لا نستخدم ملفات تعريف الارتباط (Cookies) لأغراض التتبّع الإعلاني.</p>
+              <p><span className="text-white font-bold">مشاركة البيانات:</span> لا نبيع أو نؤجّر بياناتكم. تقتصر المشاركة على مزوّدي خدمات الدفع والبنية التحتية بالقدر اللازم لإتمام المعاملة وتشغيل الخدمة.</p>
+              <p><span className="text-white font-bold">الأمان:</span> نطبّق أفضل الممارسات الأمنية لحماية تجربتكم ومعاملاتكم داخل التطبيق.</p>
+              <p><span className="text-white font-bold">التواصل:</span> لأي استفسار حول الخصوصية أو المشتريات، تواصلوا معنا عبر البريد الإلكتروني: qinaa.support@gmail.com</p>
               <p className="text-xs" style={{ color: "#555" }}>آخر تحديث: يونيو 2026</p>
             </div>
           </div>
@@ -703,11 +713,14 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <div className="flex flex-col gap-3 text-sm leading-relaxed text-right" style={{ color: "#AAAAAA" }}>
-              <p>باستخدامكم تطبيق القناع، فإنكم توافقون على الشروط والأحكام التالية:</p>
-              <p><span className="text-white font-bold">الاستخدام:</span> التطبيق مخصص للاستخدام الترفيهي الشخصي في المجالس والتجمعات. يُحظر استخدامه لأي غرض تجاري أو غير قانوني.</p>
-              <p><span className="text-white font-bold">الملكية الفكرية:</span> جميع حقوق الملكية الفكرية لتطبيق القناع — بما يشمل التصميم والكود والمحتوى — محفوظة لصانعيه.</p>
-              <p><span className="text-white font-bold">إخلاء المسؤولية:</span> التطبيق مقدَّم "كما هو" دون أي ضمانات صريحة أو ضمنية. لا نتحمل المسؤولية عن أي خسائر ناتجة عن الاستخدام.</p>
-              <p><span className="text-white font-bold">التعديلات:</span> نحتفظ بحق تعديل هذه الشروط في أي وقت. الاستمرار في الاستخدام بعد التعديل يُعدّ قبولاً للشروط الجديدة.</p>
+              <p>باستخدامكم تطبيق «قناع»، فإنكم توافقون على الشروط والأحكام التالية:</p>
+              <p><span className="text-white font-bold">الاستخدام:</span> التطبيق مخصّص للاستخدام الترفيهي الشخصي في المجالس والتجمعات. يُحظر استخدامه لأي غرض غير قانوني أو إعادة بيعه دون إذن.</p>
+              <p><span className="text-white font-bold">التجربة المجانية:</span> يتيح «قناع» تجربة مجانية محدودة بجولتين لاستكشاف أجواء اللعبة قبل الشراء.</p>
+              <p><span className="text-white font-bold">المشتريات الرقمية:</span> تشمل المشتريات: اللعبة الأساسية (لعب غير محدود للأدوار الرئيسية)، وإضافات الأدوار الفردية، وباقة الوصول الشامل (VIP) بسعر 29.99 ر.س التي تمنح جميع الأدوار الحالية والمستقبلية مع إزالة الإعلانات. جميعها مشتريات لمرة واحدة ما لم يُذكر خلاف ذلك.</p>
+              <p><span className="text-white font-bold">المدفوعات والاسترداد:</span> تُعالَج المدفوعات عبر بوابة دفع آمنة. نظراً للطبيعة الرقمية للمحتوى وتفعيله الفوري بعد الشراء، تكون جميع المبيعات نهائية وغير قابلة للاسترداد إلا في حدود ما يقتضيه القانون المعمول به.</p>
+              <p><span className="text-white font-bold">الملكية الفكرية:</span> جميع حقوق الملكية الفكرية لتطبيق «قناع» — التصميم والكود والمحتوى — محفوظة لصانعيه.</p>
+              <p><span className="text-white font-bold">إخلاء المسؤولية:</span> التطبيق مقدَّم «كما هو» دون أي ضمانات صريحة أو ضمنية، ولا نتحمل المسؤولية عن أي خسائر ناتجة عن الاستخدام.</p>
+              <p><span className="text-white font-bold">التعديلات:</span> نحتفظ بحق تعديل هذه الشروط أو الأسعار أو الباقات في أي وقت. الاستمرار في الاستخدام بعد التعديل يُعدّ قبولاً للشروط الجديدة.</p>
               <p><span className="text-white font-bold">القانون المعمول به:</span> تخضع هذه الشروط للقوانين المعمول بها في مكان الإصدار.</p>
               <p className="text-xs" style={{ color: "#555" }}>آخر تحديث: يونيو 2026</p>
             </div>
@@ -786,6 +799,112 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 </div>
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Shop / Pricing Modal ──
+          UI/content only — no payment logic (Supabase/Moyasar wired later). */}
+      {showShop && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
+          onClick={() => setShowShop(false)}>
+          <div
+            dir="rtl"
+            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
+            <button
+              onClick={() => setShowShop(false)}
+              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+              style={{ backgroundColor: "rgba(13,13,13,0.55)", border: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+          <div
+            dir="rtl"
+            className="w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[85vh]"
+            style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.08)" }}
+            onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex flex-col items-center gap-1 text-center pt-1">
+              <h2 className="text-xl font-black text-white">باقات قناع</h2>
+              <p className="text-sm" style={{ color: "#888888" }}>اختر تجربتك</p>
+            </div>
+            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+            {/* Pricing grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+              {/* Card 1 — Free */}
+              <div className="flex flex-col gap-4 rounded-2xl p-5"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
+                <div className="flex flex-col gap-1">
+                  <span className="text-base font-black text-white">التجربة المجانية</span>
+                  <span className="text-2xl font-black" style={{ color: "#AAAAAA" }}>مجاناً</span>
+                </div>
+                <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
+                <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
+                  تجربة اللعبة لمرة أو مرتين مجاناً لاستكشاف الأجواء.
+                </p>
+                <div
+                  className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
+                  style={{ backgroundColor: "#1A1A1A", color: "#666666", border: "1px solid #2A2A2A" }}>
+                  الباقة الحالية
+                </div>
+              </div>
+
+              {/* Card 2 — Base */}
+              <div className="flex flex-col gap-4 rounded-2xl p-5"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+                <div className="flex flex-col gap-1">
+                  <span className="text-base font-black text-white">اللعبة الأساسية</span>
+                  <span className="text-2xl font-black text-white">يحدد لاحقاً</span>
+                </div>
+                <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
+                <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
+                  لعب غير محدود للأدوار الرئيسية للأبد.
+                </p>
+                <div
+                  className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
+                  style={{ backgroundColor: "#1A1A1A", color: "#999999", border: "1px solid #333333" }}>
+                  قريباً
+                </div>
+              </div>
+
+              {/* Card 3 — All-Access VIP (highlighted) */}
+              <div className="relative flex flex-col gap-4 rounded-2xl p-5"
+                style={{ backgroundColor: "#161106", border: "1px solid #F59E0B", boxShadow: "0 0 28px rgba(245,158,11,0.18)" }}>
+                {/* Top badge */}
+                <span
+                  className="absolute -top-3 right-5 text-[11px] font-black px-3 py-1 rounded-full"
+                  style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
+                  الأكثر قيمة
+                </span>
+                <div className="flex flex-col gap-1">
+                  <span className="flex items-center gap-1.5 text-base font-black" style={{ color: "#FBBF24" }}>
+                    الباقة الشاملة <span>👑</span>
+                  </span>
+                  <span className="text-2xl font-black" style={{ color: "#FBBF24" }}>
+                    29.99 <span className="text-base font-bold">ر.س</span>
+                  </span>
+                </div>
+                <div style={{ height: "1px", backgroundColor: "rgba(245,158,11,0.22)" }} />
+                <p className="text-sm leading-relaxed flex-1" style={{ color: "#D4B97A" }}>
+                  كل الأدوار الحالية والمستقبلية + إزالة الإعلانات.
+                </p>
+                <div
+                  className="w-full text-center py-2.5 rounded-xl text-sm font-black"
+                  style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
+                  احصل عليها
+                </div>
+              </div>
+
+            </div>
+
+            <p className="text-center text-xs" style={{ color: "#555555" }}>
+              الأسعار قابلة للتغيير. تُعالَج المدفوعات عبر بوابة دفع آمنة.
+            </p>
           </div>
         </div>
       )}
