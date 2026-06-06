@@ -394,10 +394,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         {/* Shop — prominent amber entry point */}
         <button
           onClick={() => setShowShop(true)}
-          className="flex items-center gap-1.5 font-bold text-amber-400 transition-all duration-150 hover:text-amber-300 active:scale-95"
+          className="font-bold text-amber-400 transition-all duration-150 hover:text-amber-300 active:scale-95"
           style={{ textShadow: "0 0 12px rgba(251,191,36,0.45)" }}>
-          <span>🛒</span>
-          <span>باقات اللعبة</span>
+          باقات اللعبة
         </button>
         <button
           onClick={() => setShowPrivacy(true)}
@@ -845,7 +844,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 </div>
                 <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
                 <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
-                  تجربة اللعبة لمرة أو مرتين مجاناً لاستكشاف الأجواء.
+                  تجربة اللعبة لمرتين مجاناً بالأدوار الأساسية فقط لاستكشاف الأجواء.
                 </p>
                 <div
                   className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
@@ -859,7 +858,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
                 <div className="flex flex-col gap-1">
                   <span className="text-base font-black text-white">اللعبة الأساسية</span>
-                  <span className="text-2xl font-black text-white">يحدد لاحقاً</span>
+                  <span className="text-2xl font-black text-white">
+                    14.99 <span className="text-base font-bold">ر.س</span>
+                  </span>
                 </div>
                 <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
                 <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
@@ -898,6 +899,40 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                   style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
                   احصل عليها
                 </div>
+              </div>
+
+            </div>
+
+            {/* ── A-la-carte add-ons ── */}
+            <div className="w-full h-px bg-neutral-800 my-6"></div>
+            <h4 className="text-white font-bold mb-4 text-right">الإضافات المفردة (تتطلب اللعبة الأساسية)</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+              {/* Add-on 1 — Magician */}
+              <div
+                dir="rtl"
+                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
+                <span className="text-sm font-bold text-white text-right">دور الساحر</span>
+                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
+              </div>
+
+              {/* Add-on 2 — Madman */}
+              <div
+                dir="rtl"
+                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
+                <span className="text-sm font-bold text-white text-right">دور المجنون</span>
+                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
+              </div>
+
+              {/* Add-on 3 — Remove Ads */}
+              <div
+                dir="rtl"
+                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
+                <span className="text-sm font-bold text-white text-right">إزالة الإعلانات</span>
+                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
               </div>
 
             </div>
