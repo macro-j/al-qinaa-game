@@ -2,26 +2,41 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/auth";
 
 /**
- * Pricing / packages modal. Every "buy" button starts a Stripe Checkout for the
- * All-Access package (test phase — individual product mapping comes later). The
- * actual entitlement unlock happens server-side via the verified Stripe webhook.
+ * Pricing / packages modal. Each "buy" button starts a Stripe Checkout for its
+ * specific item (the actual entitlement unlock happens server-side via the
+ * verified Stripe webhook / verify-on-return). The card footers react to the
+ * live entitlement state so the user's current tier is always reflected.
  * Rendered globally via ShopProvider so it can be opened from anywhere
  * (footer button, entitlement gatekeeper, etc.).
  */
 export function ShopModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [loading, setLoading] = useState(false);
+  // Track WHICH item is checking out so only its button shows the loading
+  // state; the rest stay normal-looking but disabled while one is in flight.
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  const { entitlements, entitlementsLoading } = useAuth();
+
+  const hasBase = !!entitlements?.has_base_game;
+  const hasAll = !!entitlements?.has_all_access;
+  const currentTier: "free" | "base" | "all_access" = hasAll
+    ? "all_access"
+    : hasBase
+      ? "base"
+      : "free";
+
+  const busy = loadingItemId !== null;
 
   const handleBuy = async (itemId: string) => {
-    if (loading) return;
-    setLoading(true);
+    if (busy) return;
+    setLoadingItemId(itemId);
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) {
         toast.error("يرجى تسجيل الدخول أولاً.");
-        setLoading(false);
+        setLoadingItemId(null);
         return;
       }
 
@@ -38,16 +53,26 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
       const { url } = (await resp.json()) as { url?: string };
       if (!url) throw new Error("missing checkout url");
 
-      // Navigate to Stripe-hosted Checkout (no setLoading reset — we leave the page).
+      // Navigate to Stripe-hosted Checkout (no reset — we leave the page).
       window.location.href = url;
     } catch (err) {
       console.error("Checkout error:", err);
       toast.error("تعذّر بدء عملية الدفع. حاول مرة أخرى.");
-      setLoading(false);
+      setLoadingItemId(null);
     }
   };
 
   if (!open) return null;
+
+  // Neutral placeholder shown in the tier card footers while we don't yet know
+  // the user's entitlements (avoids briefly assuming the free tier).
+  const checkingBadge = (
+    <div
+      className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
+      style={{ backgroundColor: "#1A1A1A", color: "#666666", border: "1px solid #2A2A2A" }}>
+      جارٍ التحقق…
+    </div>
+  );
 
   const addOns = [
     { id: "role_wizard", title: "دور الساحر" },
@@ -99,11 +124,15 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
               تجربة اللعبة لمرتين مجاناً بالأدوار الأساسية فقط لاستكشاف الأجواء.
             </p>
-            <div
-              className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
-              style={{ backgroundColor: "#1A1A1A", color: "#666666", border: "1px solid #2A2A2A" }}>
-              الباقة الحالية
-            </div>
+            {entitlementsLoading ? (
+              checkingBadge
+            ) : (
+              <div
+                className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
+                style={{ backgroundColor: "#1A1A1A", color: "#666666", border: "1px solid #2A2A2A" }}>
+                {currentTier === "free" ? "الباقة الحالية" : "تمت الترقية"}
+              </div>
+            )}
           </div>
 
           {/* Card 2 — Base */}
@@ -119,14 +148,28 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
               لعب غير محدود للأدوار الرئيسية للأبد.
             </p>
-            <button
-              type="button"
-              onClick={() => handleBuy("base_game")}
-              disabled={loading}
-              className="w-full text-center py-2.5 rounded-xl text-sm font-bold transition-all duration-150 hover:bg-neutral-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "#1A1A1A", color: "#FFFFFF", border: "1px solid #333333" }}>
-              {loading ? "جارٍ التحويل…" : "شراء"}
-            </button>
+            {entitlementsLoading ? (
+              checkingBadge
+            ) : hasBase ? (
+              <div
+                className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
+                style={{
+                  backgroundColor: "rgba(34,197,94,0.12)",
+                  color: "#4ADE80",
+                  border: "1px solid rgba(34,197,94,0.35)",
+                }}>
+                {currentTier === "base" ? "الباقة الحالية ✓" : "مُضمّنة ✓"}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleBuy("base_game")}
+                disabled={busy}
+                className="w-full text-center py-2.5 rounded-xl text-sm font-bold transition-all duration-150 hover:bg-neutral-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#1A1A1A", color: "#FFFFFF", border: "1px solid #333333" }}>
+                {loadingItemId === "base_game" ? "جارٍ التحويل…" : "شراء"}
+              </button>
+            )}
           </div>
 
           {/* Card 3 — All-Access VIP (highlighted) */}
@@ -150,14 +193,28 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#D4B97A" }}>
               كل الأدوار الحالية والمستقبلية + إزالة الإعلانات.
             </p>
-            <button
-              type="button"
-              onClick={() => handleBuy("all_access")}
-              disabled={loading}
-              className="w-full text-center py-2.5 rounded-xl text-sm font-black transition-all duration-150 hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
-              {loading ? "جارٍ التحويل…" : "احصل عليها"}
-            </button>
+            {entitlementsLoading ? (
+              checkingBadge
+            ) : hasAll ? (
+              <div
+                className="w-full text-center py-2.5 rounded-xl text-sm font-black"
+                style={{
+                  backgroundColor: "rgba(245,158,11,0.16)",
+                  color: "#FBBF24",
+                  border: "1px solid rgba(245,158,11,0.5)",
+                }}>
+                الباقة الحالية ✓
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleBuy("all_access")}
+                disabled={busy}
+                className="w-full text-center py-2.5 rounded-xl text-sm font-black transition-all duration-150 hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
+                {loadingItemId === "all_access" ? "جارٍ التحويل…" : "احصل عليها"}
+              </button>
+            )}
           </div>
 
         </div>
@@ -178,13 +235,13 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
               <button
                 type="button"
                 onClick={() => handleBuy(id)}
-                disabled={loading}
+                disabled={busy}
                 className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{
                   backgroundColor: "rgba(245,158,11,0.08)",
                   border: "1px solid rgba(245,158,11,0.35)",
                 }}>
-                {loading ? "جارٍ التحويل…" : "شراء"}
+                {loadingItemId === id ? "جارٍ التحويل…" : "شراء"}
               </button>
             </div>
           ))}
