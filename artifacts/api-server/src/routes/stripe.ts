@@ -28,7 +28,13 @@ router.post("/checkout", async (req, res) => {
       return res.status(401).json({ error: "missing_auth_token" });
     }
 
-    const user = await getUserFromToken(token);
+    let user: Awaited<ReturnType<typeof getUserFromToken>>;
+    try {
+      user = await getUserFromToken(token);
+    } catch (authErr) {
+      req.log.warn({ err: authErr }, "Rejected checkout: invalid Supabase token");
+      return res.status(401).json({ error: "invalid_auth_token" });
+    }
 
     const stripe = await getUncachableStripeClient();
     const priceId = await getAllAccessPriceId(stripe);

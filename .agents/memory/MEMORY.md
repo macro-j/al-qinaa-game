@@ -1,2 +1,2 @@
-- [Qinaa auth + entitlement gating](qinaa-auth-entitlements.md) — fail-closed gate design, where the single chokepoint lives, and guardrails around gameplay code.
-- [Vite env vars need workflow restart](vite-env-restart.md) — VITE_* vars set after a dev server starts aren't exposed until the workflow restarts.
+- [code_execution sandbox has no secrets/runtime env](code-execution-sandbox-env.md) — process.env lacks secrets AND runtime vars (REPLIT_DOMAINS); fetch them via bash and pass literals.
+- [Replit Stripe connection shape](replit-stripe-connection.md) — settings key is `secret` (not `secret_key`), and there is NO managed webhook_secret; create the webhook + store STRIPE_WEBHOOK_SECRET yourself.
