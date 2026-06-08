@@ -117,9 +117,20 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             <div
               key={title}
               dir="rtl"
-              className="bg-neutral-900/40 border border-neutral-800/60 rounded-xl p-3 flex justify-between items-center gap-3">
-              <span className="text-sm font-bold text-white text-right">{title}</span>
-              <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
+              className="bg-neutral-900/40 border border-neutral-800/60 rounded-xl p-3.5 flex flex-col gap-3">
+              <div className="flex justify-between items-center gap-3">
+                <span className="text-sm font-bold text-white text-right">{title}</span>
+                <span className="text-sm font-black text-amber-400 shrink-0">7.99 ر.س</span>
+              </div>
+              <button
+                type="button"
+                className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95"
+                style={{
+                  backgroundColor: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.35)",
+                }}>
+                شراء
+              </button>
             </div>
           ))}
         </div>

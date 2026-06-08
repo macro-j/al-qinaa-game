@@ -40,7 +40,6 @@ import {
   VolumeX,
   ChevronDown,
   Layers,
-  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
@@ -4193,30 +4192,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         </span>
                       )}
                     </div>
-
-                    {/* ── Remove Ads — inside panel, below roles ── */}
-                    <div style={{ height: 1, backgroundColor: "#111111", margin: "0 12px" }} />
-                    <button
-                      onClick={() => console.log("Remove Ads clicked")}
-                      dir="rtl"
-                      className="w-full flex items-center justify-between px-4 py-3.5 transition-all duration-150 active:scale-95"
-                      style={{ backgroundColor: "transparent" }}>
-                      <div className="flex items-center gap-2.5">
-                        <Crown size={15} color="#CA8A04" strokeWidth={1.8} style={{ flexShrink: 0 }} />
-                        <div className="flex flex-col gap-px">
-                          <span className="text-sm font-black" style={{ color: "#EAB308" }}>إزالة الإعلانات</span>
-                          <span className="text-xs" style={{ color: "#4A3800" }}>تجربة نقية بدون انقطاع</span>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
-                        style={{
-                          backgroundColor: "rgba(202,138,4,0.10)",
-                          color: "#92650A",
-                          border: "1px solid rgba(202,138,4,0.20)",
-                        }}>
-                        مميز
-                      </span>
-                    </button>
 
                   </motion.div>
                 )}
