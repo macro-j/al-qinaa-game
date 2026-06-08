@@ -62,6 +62,11 @@ app.post(
       return res.status(400).json({ error: "invalid_signature" });
     }
 
+    req.log.info(
+      { eventId: event.id, eventType: event.type },
+      "Stripe webhook received and verified",
+    );
+
     try {
       if (event.type === "checkout.session.completed") {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -69,6 +74,11 @@ app.post(
           session.metadata?.supabase_user_id ??
           session.client_reference_id ??
           null;
+
+        req.log.info(
+          { userId, paymentStatus: session.payment_status, sessionId: session.id },
+          "Processing checkout.session.completed",
+        );
 
         if (session.payment_status === "paid" && userId) {
           await unlockAllAccess(userId);
