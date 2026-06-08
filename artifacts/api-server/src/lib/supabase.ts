@@ -59,7 +59,7 @@ export async function getUserFromToken(
  * RPC, using the service-role key. This is the ONLY server-side write path for
  * the paid flags and must be called only after a verified, completed payment.
  * The RPC unlocks exactly the item identified by `itemId` (e.g. base_game,
- * all_access, ad_removal, role_*).
+ * all_access, role_*).
  */
 export async function grantSpecificEntitlement(
   userId: string,

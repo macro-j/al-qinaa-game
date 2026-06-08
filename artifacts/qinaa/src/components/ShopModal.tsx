@@ -79,7 +79,6 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     { id: "role_madman", title: "دور المجنون" },
     { id: "role_avenger", title: "دور المنتقم" },
     { id: "role_twins", title: "دور التوأم" },
-    { id: "ad_removal", title: "إزالة الإعلانات" },
   ];
 
   return (
@@ -191,7 +190,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(245,158,11,0.22)" }} />
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#D4B97A" }}>
-              كل الأدوار الحالية والمستقبلية + إزالة الإعلانات.
+              كل الأدوار الحالية والمستقبلية.
             </p>
             {entitlementsLoading ? (
               checkingBadge

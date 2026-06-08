@@ -29,7 +29,7 @@ alter table public.user_entitlements
 alter table public.user_entitlements
   add column if not exists updated_at timestamptz not null default now();
 -- Records every specific a-la-carte item the user has purchased (e.g.
--- ad_removal, role_wizard, …). The two booleans above remain the gate for the
+-- role_wizard, role_twins, …). The two booleans above remain the gate for the
 -- base game / all-access; this array tracks granular add-ons and future items.
 alter table public.user_entitlements
   add column if not exists owned_items text[] not null default '{}';
@@ -118,7 +118,7 @@ grant execute on function public.unlock_all_access(uuid) to service_role;
 -- the service-role key, after Stripe has verified a completed payment.
 --   • base_game  → has_base_game
 --   • all_access → has_all_access (+ implies base_game)
---   • everything else (ad_removal, role_*) → appended to owned_items
+--   • everything else (role_*) → appended to owned_items
 -- Idempotent: re-running for the same item is a no-op, so the webhook and the
 -- verify-on-return path can both call it safely. SECURITY DEFINER so it can
 -- write despite there being no client UPDATE policy; execute granted ONLY to
@@ -141,7 +141,7 @@ begin
      set has_base_game  = has_base_game  or item_id in ('base_game', 'all_access'),
          has_all_access = has_all_access or item_id = 'all_access',
          -- base_game / all_access are tracked via the booleans above; only the
-         -- granular add-ons (ad_removal, role_*) are recorded in owned_items.
+         -- granular add-ons (role_*) are recorded in owned_items.
          owned_items    = case
            when item_id in ('base_game', 'all_access') then owned_items
            else (

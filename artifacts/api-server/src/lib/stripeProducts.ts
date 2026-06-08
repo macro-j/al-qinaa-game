@@ -29,12 +29,6 @@ export const CATALOG: Record<string, CatalogItem> = {
     amount: 2999,
     currency: "sar",
   },
-  ad_removal: {
-    id: "ad_removal",
-    name: "قناع — إزالة الإعلانات",
-    amount: 799,
-    currency: "sar",
-  },
   role_wizard: {
     id: "role_wizard",
     name: "قناع — دور الساحر",
