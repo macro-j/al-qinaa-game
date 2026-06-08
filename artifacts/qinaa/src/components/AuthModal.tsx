@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { VenetianMask, Mail, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Mail, Loader2, ArrowRight, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { PrivacyModal, TermsModal } from "./LegalModals";
 
@@ -14,7 +14,13 @@ function GoogleIcon() {
   );
 }
 
-export function LoginScreen() {
+/**
+ * Login / sign-up modal. Triggered from the Landing page "Play Now" CTA so the
+ * user never leaves the page just to see the auth options. Supports Google
+ * OAuth and email magic-link (both inherently redirect on submit). The same
+ * dark, crimson Al-Qinaa aesthetic as the rest of the app.
+ */
+export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { signInWithGoogle, signInWithEmail } = useAuth();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState<"google" | "email" | null>(null);
@@ -22,6 +28,17 @@ export function LoginScreen() {
   const [sent, setSent] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // Reset transient form state whenever the modal is closed so a reopen always
+  // starts clean (no stale email/error/sent state from a previous attempt).
+  useEffect(() => {
+    if (!open) {
+      setEmail("");
+      setBusy(null);
+      setError(null);
+      setSent(false);
+    }
+  }, [open]);
 
   const handleGoogle = async () => {
     setError(null);
@@ -52,31 +69,53 @@ export function LoginScreen() {
     setSent(true);
   };
 
+  if (!open) return null;
+
   return (
     <div
-      dir="rtl"
-      className="min-h-full w-full flex flex-col items-center justify-center px-6 py-10 relative"
-      style={{ backgroundColor: "#000000" }}>
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
+      onClick={onClose}>
 
-      {/* Ambient crimson glow */}
+      {/* Top navbar — single right-side X, taps fall through to backdrop */}
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(60% 50% at 50% 25%, rgba(211,47,47,0.10), transparent 70%)" }} />
+        dir="rtl"
+        className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
+        <button
+          onClick={onClose}
+          title="إغلاق"
+          aria-label="إغلاق تسجيل الدخول"
+          className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+          style={{
+            backgroundColor: "rgba(13,13,13,0.55)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+          }}>
+          <X size={18} strokeWidth={2} />
+        </button>
+      </div>
 
-      <div className="relative w-full max-w-sm flex flex-col items-center gap-8">
+      <div
+        dir="rtl"
+        className="relative w-full max-w-sm rounded-2xl p-6 flex flex-col items-center gap-7 shadow-2xl"
+        style={{ backgroundColor: "#0D0D0D", border: "1px solid rgba(255,255,255,0.08)" }}
+        onClick={(e) => e.stopPropagation()}>
 
-        {/* Brand */}
-        <div className="flex flex-col items-center gap-4">
-          <VenetianMask size={56} strokeWidth={1.5} style={{ color: "#D32F2F" }} />
-          <div className="flex flex-col items-center gap-1.5 text-center">
-            <h1 className="text-5xl font-black tracking-tight" style={{ color: "#D32F2F" }}>القناع</h1>
-            <p className="text-sm" style={{ color: "#888888" }}>سجّل دخولك لتبدأ اللعب</p>
-          </div>
+        {/* Ambient crimson glow */}
+        <div
+          className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden"
+          style={{ background: "radial-gradient(60% 50% at 50% 0%, rgba(211,47,47,0.10), transparent 70%)" }} />
+
+        {/* Heading */}
+        <div className="relative flex flex-col items-center gap-1.5 text-center pt-1">
+          <h2 className="text-2xl font-black" style={{ color: "#ffffff" }}>ابدأ اللعب</h2>
+          <p className="text-sm" style={{ color: "#888888" }}>سجّل دخولك لتبدأ اللعب</p>
         </div>
 
         {sent ? (
           /* Magic-link sent state */
-          <div className="w-full flex flex-col items-center gap-4 text-center">
+          <div className="relative w-full flex flex-col items-center gap-4 text-center">
             <CheckCircle2 size={48} strokeWidth={1.6} className="text-emerald-400" />
             <p className="text-base font-bold text-white">تحقّق من بريدك الإلكتروني</p>
             <p className="text-sm leading-relaxed" style={{ color: "#999999" }}>
@@ -91,7 +130,7 @@ export function LoginScreen() {
             </button>
           </div>
         ) : (
-          <div className="w-full flex flex-col gap-4">
+          <div className="relative w-full flex flex-col gap-4">
 
             {/* Google OAuth */}
             <button
@@ -143,7 +182,7 @@ export function LoginScreen() {
           </div>
         )}
 
-        <p className="text-center text-xs leading-relaxed" style={{ color: "#555555" }}>
+        <p className="relative text-center text-xs leading-relaxed" style={{ color: "#555555" }}>
           بتسجيل الدخول، فإنك توافق على{" "}
           <button
             type="button"

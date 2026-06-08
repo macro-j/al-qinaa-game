@@ -44,7 +44,9 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
-import { LoginScreen } from "./components/LoginScreen";
+import { LandingPage } from "./components/LandingPage";
+import { GuideModal } from "./components/GuideModal";
+import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 
@@ -282,15 +284,6 @@ function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
   );
 }
 
-// ─── Main Menu ────────────────────────────────────────────────────────────────
-
-const GUIDE_ROLES = [
-  { label: "الولد",   color: "#D32F2F", desc: "القاتل، يختار ضحية كل ليلة ويحاول البقاء مجهولًا." },
-  { label: "الإكة",  color: "#B71C1C", desc: "الكاتم، تسكت لاعبًا وتمنعه من الكلام صباحًا." },
-  { label: "الشايب", color: "#FF8F00", desc: "العرّاف، يكشف هوية لاعبًا كل ليلة، مافيا أم بريء." },
-  { label: "البنت",  color: "#1565C0", desc: "الحارس، تحمي لاعبًا من القتل تلك الليلة." },
-];
-
 // ─── Game Mode Selector (top-level entry point) ───────────────────────────────
 
 function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator") => void }) {
@@ -483,226 +476,10 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
       </button>
 
       {/* ── About Modal ── */}
-      {showAbout && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-5"
-          style={{ backgroundColor: "rgba(0,0,0,0.82)", backdropFilter: "blur(12px)" }}
-          onClick={() => setShowAbout(false)}>
-
-          {/* ── Unified Top Navbar (modal scope) ──
-              Mirrors the in-app navbar exactly: fixed top, pointer-events
-              gated so taps fall through to the backdrop (which dismisses
-              the modal), single right-side X button that re-enables
-              pointer events. z-[60] sits above the modal overlay (z-50).
-              Mute is intentionally omitted here — this modal opens from
-              GameModeSelector, which has no audio state (isMuted lives
-              in NarratorMode). A non-functional mute would mislead. */}
-          <div
-            dir="rtl"
-            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
-            <button
-              onClick={() => setShowAbout(false)}
-              title="إغلاق"
-              aria-label="إغلاق صناع القناع"
-              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
-              style={{
-                backgroundColor: "rgba(13,13,13,0.55)",
-                border: "1px solid rgba(255,255,255,0.06)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-              }}>
-              <X size={18} strokeWidth={2} />
-            </button>
-          </div>
-
-          <div
-            className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl p-6 flex flex-col gap-5 shadow-2xl"
-            style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.08)" }}
-            onClick={(e) => e.stopPropagation()}>
-
-            {/* In-card X removed — navbar above owns the dismiss action. */}
-
-            {/* Logo + Title */}
-            <div className="flex flex-col items-center gap-3 pt-2">
-              <div style={{ filter: "drop-shadow(0 0 28px #D32F2F55)" }}>
-                <VenetianMask size={56} color="#D32F2F" strokeWidth={0.9} />
-              </div>
-              <h2 className="text-4xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h2>
-              <p className="text-xs text-center leading-relaxed" style={{ color: "#666666" }}>
-                لعبة استنتاج وخداع صُنعت للمجالس
-              </p>
-              <span className="text-xs font-semibold px-3 py-1 rounded-full"
-                style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-                الإصدار التجريبي الثالث — Beta v3.0.0
-              </span>
-            </div>
-
-            {/* Divider */}
-            <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
-
-            {/* Credits */}
-            <div className="flex flex-col gap-3">
-              <span className="text-[10px] font-bold tracking-[0.3em] text-center" style={{ color: "#444444" }}>
-                صُنّاع القناع
-              </span>
-
-              {/* Minimalist credits — zero chrome, name-as-link only. The
-                  entire vertical block is a single anchor so the role line
-                  is part of the tappable target. Hover/tap collapses the
-                  white name into the crimson accent for instant affordance. */}
-              <div className="grid grid-cols-2 gap-6 text-center">
-                <a
-                  href="https://x.com/Yzk5_"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block transition-all duration-200 active:scale-95"
-                  style={{ textDecoration: "none" }}>
-                  <div className="text-sm font-black tracking-wide text-white transition-colors duration-200 group-hover:text-[#D32F2F] group-active:text-[#D32F2F]">
-                    Mohammed
-                  </div>
-                  <div className="flex items-center justify-center gap-1 text-xs text-white/50 mt-1 leading-snug">
-                    {/* X (Twitter) logo */}
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" aria-hidden="true">
-                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
-                    </svg>
-                    <span>التطوير والتصميم البصري</span>
-                  </div>
-                </a>
-
-                <a
-                  href="https://www.tiktok.com/@abdullah.jj57"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block transition-all duration-200 active:scale-95"
-                  style={{ textDecoration: "none" }}>
-                  <div className="text-sm font-black tracking-wide text-white transition-colors duration-200 group-hover:text-[#D32F2F] group-active:text-[#D32F2F]">
-                    Abdullah
-                  </div>
-                  <div className="text-xs text-white/50 mt-1 leading-snug">
-                    تصميم اللعب وقوانين المجلس
-                  </div>
-                </a>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <p className="text-center text-xs" style={{ color: "#2A2A2A" }}>© 2026 القناع</p>
-          </div>
-        </div>
-      )}
+      <AboutModal open={showAbout} onClose={() => setShowAbout(false)} />
 
       {/* ── Game Guide Modal ── */}
-      {showGuide && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ backgroundColor: "rgba(0,0,0,0.88)" }}
-          onClick={() => setShowGuide(false)}>
-
-          {/* ── Unified Top Navbar (modal scope) ──
-              Mirrors the in-app navbar exactly: fixed top, pointer-events
-              gated so taps fall through to the backdrop (which dismisses
-              the modal), single right-side X button that re-enables
-              pointer events. z-[60] sits above the modal overlay (z-50). */}
-          <div
-            dir="rtl"
-            className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
-            <button
-              onClick={() => setShowGuide(false)}
-              title="إغلاق"
-              aria-label="إغلاق شرح اللعبة"
-              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
-              style={{
-                backgroundColor: "rgba(13,13,13,0.55)",
-                border: "1px solid rgba(255,255,255,0.06)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-              }}>
-              <X size={18} strokeWidth={2} />
-            </button>
-          </div>
-
-          <div
-            className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl flex flex-col gap-4 p-5 overflow-y-auto max-h-[90vh] font-sans"
-            style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
-            onClick={(e) => e.stopPropagation()}>
-            {/* Header — X removed; navbar above owns the dismiss action */}
-            <div className="flex items-center gap-2">
-              <BookOpen size={18} color="#D32F2F" />
-              <span className="font-black text-base" style={{ color: "#ffffff" }}>شرح اللعبة</span>
-            </div>
-
-            {/* ── Objective — full-width featured card ── */}
-            <div className="rounded-xl px-4 py-4 flex flex-col gap-2"
-              style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
-              <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#CCCCCC" }}>
-                أنت في قرية غامضة، لكل فريق هدف واحد:
-              </p>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#AAAAAA" }}>
-                • الشعب: اكشفوا المافيا وصوّتوا ضدهم للنجاة.
-              </p>
-              <p className="text-sm leading-relaxed text-right" style={{ color: "#AAAAAA" }}>
-                • المافيا: تصفية الشعب والسيطرة على القرية دون الانكشاف.
-              </p>
-            </div>
-
-            {/* ── Main Roles — responsive card grid ── */}
-            <div className="flex flex-col gap-3">
-              <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {GUIDE_ROLES.map((r) => (
-                  <div
-                    key={r.label}
-                    className="rounded-xl p-4 flex flex-col gap-3 transition-colors duration-200"
-                    style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-                    {/* Card header: name on right (RTL first), icon on left (RTL last) */}
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-sm" style={{ color: r.color }}>{r.label}</span>
-                      <VenetianMask size={16} color={r.color} strokeWidth={1.6} className="flex-shrink-0 opacity-80" />
-                    </div>
-                    <span className="text-xs leading-relaxed text-right" style={{ color: "#888888" }}>{r.desc}</span>
-                  </div>
-                ))}
-                {/* المواطن — dimmed card, no special power */}
-                <div
-                  className="rounded-xl p-4 flex flex-col gap-3 transition-colors duration-200"
-                  style={{ backgroundColor: "#0D0D0D", border: "1px solid #1A1A1A" }}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-sm" style={{ color: "#666666" }}>المواطن</span>
-                    <VenetianMask size={16} color="#444444" strokeWidth={1.6} className="flex-shrink-0" />
-                  </div>
-                  <span className="text-xs leading-relaxed text-right" style={{ color: "#555555" }}>من الشعب، لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا.</span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Expansion Roles — responsive card grid ── */}
-            <div className="flex flex-col gap-3">
-              <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#555555" }}>أدوار الإضافات</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {([
-                  { label: "المجنون", color: "#E879F9", desc: "لاعب مستقل، هدفه إقناع المجلس بالتصويت ضده وإعدامه في النهار ليفوز وحده وتخسر القرية." },
-                  { label: "التوأم",  color: "#22D3EE", desc: "قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً." },
-                  { label: "المنتقم", color: "#F59E0B", desc: "قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر." },
-                  { label: "الساحر",  color: "#84CC16", desc: "يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب." },
-                ] as const).map(({ label, color, desc }) => (
-                  <div
-                    key={label}
-                    className="rounded-xl p-4 flex flex-col gap-3 transition-colors duration-200"
-                    style={{ backgroundColor: "#0D0D0D", border: "1px solid #222222" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-sm" style={{ color }}>{label}</span>
-                      <VenetianMask size={16} color={color} strokeWidth={1.6} className="flex-shrink-0 opacity-80" />
-                    </div>
-                    <span className="text-xs leading-relaxed text-right" style={{ color: "#888888" }}>{desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
+      <GuideModal open={showGuide} onClose={() => setShowGuide(false)} />
 
       {/* ── Privacy Policy Modal ── */}
       <PrivacyModal open={showPrivacy} onClose={() => setShowPrivacy(false)} />
@@ -6948,7 +6725,7 @@ export default function App() {
     );
   }
   if (!user) {
-    return <LoginScreen />;
+    return <LandingPage />;
   }
 
   // ── Top-level mode gate — shown before any game screen ───────────────────
