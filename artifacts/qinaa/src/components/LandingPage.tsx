@@ -47,8 +47,13 @@ export function LandingPage() {
               onClick={() => setShowAuth(true)}
               className="w-full flex items-center justify-center gap-3 px-5 py-5 rounded-2xl font-black text-lg text-white transition-all duration-200 active:scale-95"
               style={{ backgroundColor: "#D32F2F", boxShadow: "0 0 32px #D32F2F44" }}>
-              <Play size={20} strokeWidth={2.2} fill="currentColor" />
               <span>العب الآن</span>
+              <Play
+                size={20}
+                strokeWidth={2.2}
+                fill="currentColor"
+                className="[transform:scaleX(-1)]"
+              />
             </button>
 
             {/* How to Play — public rules, ghost style */}
