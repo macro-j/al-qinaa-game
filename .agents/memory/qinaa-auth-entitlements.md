@@ -44,13 +44,34 @@ Entitlement fetches compare against `activeUidRef` before calling setState, and
 entitlements are cleared on user switch, so a response for a signed-out/switched
 account can't overwrite the current user's state.
 
-## Security boundary (must keep)
-Client may READ its own row and INSERT only the all-false/zero default row. There
-is deliberately **no client UPDATE policy**. `games_played` is bumped via the
-`increment_games_played` SECURITY DEFINER RPC scoped to `auth.uid()`. Paid flags
-(`has_base_game`, `has_all_access`) must be set server-side with the service-role
-key after a verified payment — never trust the client to self-grant. Schema +
-RLS + RPC live in `artifacts/qinaa/supabase/schema.sql`.
+## Live table is keyed on `id`, NOT `user_id`
+**Rule:** The production `user_entitlements` table uses `id uuid primary key`
+(= the auth user's uuid) as the user key — there is NO `user_id` column. All
+client queries (select/insert/update) in `src/lib/auth.tsx` must key on `id`.
+**Why:** The original repo schema used `user_id`; the user's live table was
+created with `id`. The mismatch made every read/insert error out → fail-safe
+defaulted to 0 games → counter looked permanently "stuck at 2", and the
+`increment_games_played` RPC didn't exist in their DB either. Discovered
+2026-06-08.
+**How to apply:** Keep code and `supabase/schema.sql` both keyed on `id`.
+
+## Security boundary (current model: direct client update, no RPC)
+**Rule:** On explicit user instruction (2026-06-08) `games_played` is now bumped
+by a DIRECT client update (`incrementGamesPlayed`: read current `games_played`,
++1, `update(...).eq("id", uid)`) — NO RPC, no custom DB functions/triggers. This
+requires an RLS UPDATE policy. Paid flags stay protected via a COLUMN-LEVEL grant:
+`grant update (games_played) ... to authenticated` (after `revoke update`), so the
+client can write only `games_played`, never `has_base_game`/`has_all_access`.
+Insert policy still forces `games_played = 0`; table has `check (games_played >= 0)`.
+**Why:** The user's DB never had the SECURITY DEFINER RPC, so the RPC-based bump
+silently failed. They chose direct updates over fixing the RPC.
+**Tradeoff (informed-consent, flagged to user):** A client can set its OWN
+`games_played` to any non-negative value (e.g. reset to 0) → metering integrity is
+NOT enforceable with pure client writes. The only real fixes (atomic SECURITY
+DEFINER RPC, or a BEFORE UPDATE trigger blocking decreases) were declined ("no
+RPC/functions"). Paid-flag self-granting IS still prevented by the column grant.
+**How to apply:** Do NOT add a client UPDATE policy that covers the paid-flag
+columns. If metering abuse ever matters, revisit the no-RPC constraint.
 
 ## Gameplay guardrails (do NOT touch)
 Fisher-Yates shuffle, audio, voting math, Tajawal font, timers, role selections,

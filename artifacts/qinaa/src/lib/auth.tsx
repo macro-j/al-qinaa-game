@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from("user_entitlements")
         .select("games_played, has_base_game, has_all_access")
-        .eq("user_id", uid)
+        .eq("id", uid)
         .maybeSingle();
 
       if (activeUidRef.current !== uid) return; // stale: user changed mid-flight
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // No row yet — try to initialize one.
       const { data: inserted, error: insertError } = await supabase
         .from("user_entitlements")
-        .insert({ user_id: uid, ...DEFAULT_ENTITLEMENTS })
+        .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
         .select("games_played, has_base_game, has_all_access")
         .single();
 
@@ -182,14 +182,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const incrementGamesPlayed = async () => {
     if (!user) return;
+    const uid = user.id;
+
     // Optimistic local bump so the gate reacts instantly without blocking UI.
     setEntitlements((prev) =>
       prev ? { ...prev, games_played: prev.games_played + 1 } : prev,
     );
-    const { error } = await supabase.rpc("increment_games_played");
-    if (error) {
-      console.error("[auth] increment_games_played failed:", error.message);
-      // Re-sync from the source of truth on failure.
+
+    try {
+      // Read the current count straight from the row (source of truth), then
+      // write back current + 1 via a direct table update — no RPC.
+      const { data, error: readError } = await supabase
+        .from("user_entitlements")
+        .select("games_played")
+        .eq("id", uid)
+        .maybeSingle();
+
+      if (readError) {
+        console.error("Supabase Entitlement Error:", readError);
+        void refreshEntitlements();
+        return;
+      }
+
+      // No row yet (provisioning skipped/failed) — create the safe default
+      // row first (the insert RLS policy requires games_played = 0), then fall
+      // through to the same direct update so this game still gets counted.
+      const current = data ? (data.games_played ?? 0) : 0;
+      if (!data) {
+        const { error: insertError } = await supabase
+          .from("user_entitlements")
+          .insert({ ...DEFAULT_ENTITLEMENTS, id: uid });
+        if (insertError) {
+          console.error("Supabase Entitlement Error:", insertError);
+          void refreshEntitlements();
+          return;
+        }
+      }
+
+      const nextCount = current + 1;
+      const { error: updateError } = await supabase
+        .from("user_entitlements")
+        .update({ games_played: nextCount })
+        .eq("id", uid);
+
+      if (updateError) {
+        console.error("Supabase Entitlement Error:", updateError);
+        // Re-sync from the source of truth on failure.
+        void refreshEntitlements();
+      }
+    } catch (error) {
+      console.error("Supabase Entitlement Error:", error);
       void refreshEntitlements();
     }
   };
