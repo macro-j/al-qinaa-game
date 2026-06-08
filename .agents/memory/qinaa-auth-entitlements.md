@@ -55,23 +55,22 @@ defaulted to 0 games → counter looked permanently "stuck at 2", and the
 2026-06-08.
 **How to apply:** Keep code and `supabase/schema.sql` both keyed on `id`.
 
-## Security boundary (current model: direct client update, no RPC)
-**Rule:** On explicit user instruction (2026-06-08) `games_played` is now bumped
-by a DIRECT client update (`incrementGamesPlayed`: read current `games_played`,
-+1, `update(...).eq("id", uid)`) — NO RPC, no custom DB functions/triggers. This
-requires an RLS UPDATE policy. Paid flags stay protected via a COLUMN-LEVEL grant:
-`grant update (games_played) ... to authenticated` (after `revoke update`), so the
-client can write only `games_played`, never `has_base_game`/`has_all_access`.
-Insert policy still forces `games_played = 0`; table has `check (games_played >= 0)`.
-**Why:** The user's DB never had the SECURITY DEFINER RPC, so the RPC-based bump
-silently failed. They chose direct updates over fixing the RPC.
-**Tradeoff (informed-consent, flagged to user):** A client can set its OWN
-`games_played` to any non-negative value (e.g. reset to 0) → metering integrity is
-NOT enforceable with pure client writes. The only real fixes (atomic SECURITY
-DEFINER RPC, or a BEFORE UPDATE trigger blocking decreases) were declined ("no
-RPC/functions"). Paid-flag self-granting IS still prevented by the column grant.
-**How to apply:** Do NOT add a client UPDATE policy that covers the paid-flag
-columns. If metering abuse ever matters, revisit the no-RPC constraint.
+## Security boundary (current model: SECURITY DEFINER RPC)
+**Rule:** `games_played` is bumped ONLY via `supabase.rpc("increment_games_played")`
+— a SECURITY DEFINER function scoped to `auth.uid()` (= the `id` column) that does
+insert-on-conflict. The client has NO direct UPDATE privilege (revoked from
+`authenticated`) and NO UPDATE RLS policy. Client may READ its own row and INSERT
+only the all-false/zero default row. Paid flags (`has_base_game`/`has_all_access`)
+are server-only via the service-role key after verified payment. Table keeps
+`check (games_played >= 0)`; insert policy forces `games_played = 0`.
+**Why:** A brief 2026-06-08 experiment used direct client `.update()` (with a
+column-level grant) because the user's DB lacked the RPC — but that let a user
+reset their own counter, so there was no metering integrity. Same day, the user
+created the secure RPC + revoked client UPDATE, and we reverted to the RPC call.
+**How to apply:** Keep the increment as the RPC call. Do NOT reintroduce a client
+UPDATE policy/privilege or a direct `.update()` on user_entitlements. Exactly-once
+counting is still owned by the `phase === "game_over"` ref-guarded effect — don't
+add a second increment site.
 
 ## Gameplay guardrails (do NOT touch)
 Fisher-Yates shuffle, audio, voting math, Tajawal font, timers, role selections,

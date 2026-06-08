@@ -7,10 +7,10 @@
 -- 1) Entitlements table -------------------------------------------------------
 -- One row per authenticated user. `id` IS the auth user's uuid (it references
 -- auth.users.id directly), so the row key and the user key are the same value.
--- The client may READ its own row, INSERT its own initial (all-false / zero)
--- row, and UPDATE *only* its own games_played counter (see column grant below).
--- The paid flags (has_base_game / has_all_access) are NOT client-writable —
--- they are granted only by a trusted server path (payment webhook) using the
+-- The client may READ its own row and INSERT its own initial (all-false / zero)
+-- row, but must NEVER write directly: the counter is bumped only via the
+-- SECURITY DEFINER RPC below, and the paid flags (has_base_game / has_all_access)
+-- are granted only by a trusted server path (payment webhook) using the
 -- service-role key, which bypasses RLS.
 create table if not exists public.user_entitlements (
   id             uuid primary key references auth.users (id) on delete cascade,
@@ -43,19 +43,30 @@ create policy "insert own entitlements"
     and has_all_access = false
   );
 
--- Update own row. The row-level guard keeps users locked to their own row.
--- Column-level privilege (below) keeps the paid flags off-limits so this
--- direct-update path can never self-grant has_base_game / has_all_access.
+-- Deliberately NO client UPDATE policy. The counter is bumped via the
+-- SECURITY DEFINER RPC below; paid flags are set server-side with the
+-- service-role key after a verified payment. Defense-in-depth: also strip any
+-- direct UPDATE privilege from the client role.
 drop policy if exists "update own entitlements" on public.user_entitlements;
-create policy "update own entitlements"
-  on public.user_entitlements
-  for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
-
--- 3) Column-level privileges --------------------------------------------------
--- Authenticated users may write ONLY games_played. Without games_played in this
--- grant the client update silently affects 0 rows; without restricting the
--- grant to games_played a client could flip the paid flags for free.
 revoke update on public.user_entitlements from authenticated;
-grant update (games_played) on public.user_entitlements to authenticated;
+
+-- 3) Counter RPC --------------------------------------------------------------
+-- SECURITY DEFINER so it can write the row despite there being no client UPDATE
+-- policy/privilege. Hard-scoped to the caller's own uid (= the `id` column).
+create or replace function public.increment_games_played()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.user_entitlements (id, games_played)
+  values (auth.uid(), 1)
+  on conflict (id)
+  do update set games_played = public.user_entitlements.games_played + 1,
+                updated_at   = now();
+end;
+$$;
+
+revoke all on function public.increment_games_played() from public;
+grant execute on function public.increment_games_played() to authenticated;
