@@ -70,3 +70,30 @@ $$;
 
 revoke all on function public.increment_games_played() from public;
 grant execute on function public.increment_games_played() to authenticated;
+
+-- 4) All-Access fulfillment RPC (server-only) ---------------------------------
+-- Grants the lifetime All-Access entitlement (which also implies the base game)
+-- to a specific user. Called ONLY by the trusted Stripe payment webhook using
+-- the service-role key, after Stripe has verified a completed payment.
+-- SECURITY DEFINER so it can write despite there being no client UPDATE policy.
+-- Execute is granted ONLY to service_role — never to anon/authenticated — so a
+-- logged-in client can NEVER self-grant access by calling this directly.
+create or replace function public.unlock_all_access(target_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.user_entitlements (id, has_all_access, has_base_game)
+  values (target_user, true, true)
+  on conflict (id)
+  do update set has_all_access = true,
+                has_base_game  = true,
+                updated_at      = now();
+end;
+$$;
+
+revoke all on function public.unlock_all_access(uuid) from public;
+revoke all on function public.unlock_all_access(uuid) from anon, authenticated;
+grant execute on function public.unlock_all_access(uuid) to service_role;

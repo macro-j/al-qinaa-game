@@ -3,12 +3,14 @@ import { Toaster } from "sonner";
 import App from "./App";
 import { AuthProvider } from "./lib/auth";
 import { ShopProvider } from "./lib/shop";
+import { CheckoutReturn } from "./components/CheckoutReturn";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
   <AuthProvider>
     <ShopProvider>
       <App />
+      <CheckoutReturn />
       <Toaster
         position="top-center"
         dir="rtl"
