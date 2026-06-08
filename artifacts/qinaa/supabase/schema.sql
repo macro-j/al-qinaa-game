@@ -21,6 +21,14 @@ create table if not exists public.user_entitlements (
   updated_at     timestamptz not null default now()
 );
 
+-- Self-heal older databases whose table predates these columns. `create table
+-- if not exists` does NOT alter an existing table, so add any missing columns
+-- here (the unlock_all_access / increment_games_played RPCs write to updated_at).
+alter table public.user_entitlements
+  add column if not exists created_at timestamptz not null default now();
+alter table public.user_entitlements
+  add column if not exists updated_at timestamptz not null default now();
+
 alter table public.user_entitlements enable row level security;
 
 -- 2) RLS policies -------------------------------------------------------------
