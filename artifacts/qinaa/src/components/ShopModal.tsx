@@ -229,6 +229,9 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {addOns.map(({ id, title, role, color, desc }) => {
             const flipped = flippedId === id;
+            // All-Access cascades to every add-on; otherwise the role must be in
+            // the user's purchased owned_items list.
+            const owned = hasAll || (entitlements?.owned_items?.includes(id) ?? false);
             return (
               <div key={id} dir="rtl" className="h-52 [perspective:1200px]">
                 <div
@@ -247,7 +250,11 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
                       <VenetianMask size={44} color={color} strokeWidth={1} />
                     </div>
                     <span className="text-base font-black" style={{ color }}>{title}</span>
-                    <span className="text-lg font-black text-amber-400">7.99 ر.س</span>
+                    {owned ? (
+                      <span className="text-lg font-black" style={{ color: "#4ADE80" }}>مملوك ✓</span>
+                    ) : (
+                      <span className="text-lg font-black text-amber-400">7.99 ر.س</span>
+                    )}
                     <span className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "#777777" }}>
                       <RotateCw size={12} strokeWidth={2} />
                       اضغط لمعرفة القدرة
@@ -272,17 +279,29 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
                     <p className="flex-1 text-xs leading-relaxed text-right overflow-y-auto" style={{ color: "#AAAAAA" }}>
                       {desc}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => handleBuy(id)}
-                      disabled={busy}
-                      className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                      style={{
-                        backgroundColor: "rgba(245,158,11,0.08)",
-                        border: "1px solid rgba(245,158,11,0.35)",
-                      }}>
-                      {loadingItemId === id ? "جارٍ التحويل…" : "شراء • 7.99 ر.س"}
-                    </button>
+                    {owned ? (
+                      <div
+                        className="w-full py-2 rounded-lg text-sm font-black text-center"
+                        style={{
+                          backgroundColor: "rgba(34,197,94,0.12)",
+                          color: "#4ADE80",
+                          border: "1px solid rgba(34,197,94,0.35)",
+                        }}>
+                        مملوك ✓
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleBuy(id)}
+                        disabled={busy || entitlementsLoading}
+                        className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                        style={{
+                          backgroundColor: "rgba(245,158,11,0.08)",
+                          border: "1px solid rgba(245,158,11,0.35)",
+                        }}>
+                        {loadingItemId === id ? "جارٍ التحويل…" : "شراء • 7.99 ر.س"}
+                      </button>
+                    )}
                   </div>
 
                 </div>

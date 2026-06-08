@@ -13,6 +13,7 @@ const DEFAULT_ENTITLEMENTS: Entitlements = {
   games_played: 0,
   has_base_game: false,
   has_all_access: false,
+  owned_items: [],
 };
 
 const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL ?? "/"}`;
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase
         .from("user_entitlements")
-        .select("games_played, has_base_game, has_all_access")
+        .select("games_played, has_base_game, has_all_access, owned_items")
         .eq("id", uid)
         .maybeSingle();
 
@@ -84,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           games_played: data.games_played ?? 0,
           has_base_game: !!data.has_base_game,
           has_all_access: !!data.has_all_access,
+          owned_items: Array.isArray(data.owned_items) ? data.owned_items : [],
         });
         return;
       }
@@ -92,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: inserted, error: insertError } = await supabase
         .from("user_entitlements")
         .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
-        .select("games_played, has_base_game, has_all_access")
+        .select("games_played, has_base_game, has_all_access, owned_items")
         .single();
 
       if (activeUidRef.current !== uid) return; // stale
@@ -107,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         games_played: inserted.games_played ?? 0,
         has_base_game: !!inserted.has_base_game,
         has_all_access: !!inserted.has_all_access,
+        owned_items: Array.isArray(inserted.owned_items) ? inserted.owned_items : [],
       });
     } catch (error) {
       // Network throw or any unexpected failure: never hang the UI.

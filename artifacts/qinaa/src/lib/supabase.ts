@@ -20,6 +20,8 @@ export type Entitlements = {
   games_played: number;
   has_base_game: boolean;
   has_all_access: boolean;
+  /** A-la-carte items the user owns (e.g. role_wizard, role_twins, …). */
+  owned_items: string[];
 };
 
 export const FREE_GAME_LIMIT = 2;

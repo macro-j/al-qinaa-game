@@ -760,6 +760,14 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
 
 // Slot cost per mod — used for player-count validation
 const MOD_COST: Record<string, number> = { madman: 1, twins: 2, avenger: 1, magician: 1 };
+// Maps an expansion mod's logic id → its store/owned_items catalog id, so the
+// setup UI can check whether the host actually owns each premium role.
+const MOD_TO_ITEM: Record<string, string> = {
+  madman: "role_madman",
+  twins: "role_twins",
+  avenger: "role_avenger",
+  magician: "role_wizard",
+};
 // Base roles that always consume slots (Boy, Akka, Old Man, Girl)
 const BASE_ROLES_COUNT = 4;
 
@@ -947,6 +955,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const toggleMod = (id: string) => {
     setActiveMods(prev => {
       if (prev[id]) return { ...prev, [id]: false }; // always allow turning off
+      // Premium gate — a locked role (not owned, no all-access) can never be enabled.
+      const itemId = MOD_TO_ITEM[id];
+      if (itemId && !entitlements?.has_all_access
+        && !(entitlements?.owned_items?.includes(itemId) ?? false)) {
+        return prev;
+      }
       // minPlayers guard — hard block regardless of UI state
       const mod = EXPANSION_MODS.find(m => m.id === id);
       if (mod && players.length < mod.minPlayers) return prev;
@@ -960,6 +974,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       return { ...prev, [id]: true };
     });
   };
+
+  // Premium safety: once entitlements are known, force OFF any active mod the
+  // user does not own (e.g. a stale selection persisted from a prior session or
+  // a different account) so a paid role can never leak into the deck.
+  useEffect(() => {
+    if (!entitlements) return;
+    setActiveMods(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [id, on] of Object.entries(prev)) {
+        const itemId = MOD_TO_ITEM[id];
+        if (on && itemId && !entitlements.has_all_access
+          && !entitlements.owned_items.includes(itemId)) {
+          next[id] = false;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [entitlements]);
 
   // Auto-reset: turn off mods that violate minPlayers or exceed vanilla-reserve capacity
   useEffect(() => {
@@ -3838,6 +3872,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         const belowMinPlayers = players.length < mod.minPlayers;
                         const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
                         const isDisabled = belowMinPlayers || !canAfford;
+                        // Premium gate: locked unless the host owns All-Access or this specific role.
+                        const itemId = MOD_TO_ITEM[mod.id];
+                        const isPremiumLocked = !!itemId
+                          && !entitlements?.has_all_access
+                          && !(entitlements?.owned_items?.includes(itemId) ?? false);
                         return (
                           <div key={mod.id}
                             dir="rtl"
@@ -3845,7 +3884,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             style={{
                               backgroundColor: isOn ? mod.glow : "#050505",
                               border: `1px solid ${isOn ? mod.border : "#141414"}`,
-                              opacity: isDisabled ? 0.4 : 1,
+                              opacity: isPremiumLocked ? 0.5 : (isDisabled ? 0.4 : 1),
                               transition: "background-color 0.25s, border-color 0.25s, opacity 0.2s",
                             }}>
 
@@ -3858,6 +3897,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                     style={{ color: isOn ? mod.accent : "#555555", transition: "color 0.2s" }}>
                                     {mod.name}
                                   </span>
+                                  {isPremiumLocked && (
+                                    <Lock size={12} color="#D32F2F" strokeWidth={2.4} style={{ flexShrink: 0 }} />
+                                  )}
                                   {cost === 2 && (
                                     <span className="text-xs px-1.5 py-px rounded font-semibold flex-shrink-0"
                                       style={{ backgroundColor: "#111111", color: "#3A3A3A", border: "1px solid #1E1E1E" }}>
@@ -3875,29 +3917,51 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                     يتطلب {mod.minPlayers} لاعبين كحد أدنى
                                   </span>
                                 )}
+                                {isPremiumLocked && (
+                                  <span className="text-xs mt-0.5 font-bold" style={{ color: "#D32F2F" }}>
+                                    هذا الدور يتطلب الشراء
+                                  </span>
+                                )}
                               </div>
 
-                              {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element */}
-                              <button
-                                onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
-                                disabled={isDisabled}
-                                style={{
-                                  width: 38, height: 22, borderRadius: 11, flexShrink: 0,
-                                  backgroundColor: isOn ? mod.accent : "#181818",
-                                  border: `1px solid ${isOn ? mod.accent : "#252525"}`,
-                                  position: "relative",
-                                  cursor: isDisabled ? "not-allowed" : "pointer",
-                                  transition: "background-color 0.2s, border-color 0.2s",
-                                }}>
-                                <div style={{
-                                  width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
-                                  position: "absolute", top: 3,
-                                  right: isOn ? 3 : undefined,
-                                  left: isOn ? undefined : 3,
-                                  boxShadow: "0 1px 3px #0006",
-                                  transition: "right 0.2s, left 0.2s",
-                                }} />
-                              </button>
+                              {/* Last in DOM = leftmost in RTL: individual toggle — ONLY interactive element.
+                                  When premium-locked, the switch is replaced by a lock button that routes
+                                  to the store (toast + open shop) instead of toggling the role on. */}
+                              {isPremiumLocked ? (
+                                <button
+                                  onClick={e => { e.stopPropagation(); toast.error("هذا الدور يتطلب الشراء"); openShop(); }}
+                                  aria-label={`${mod.name} — مقفل، اضغط للشراء`}
+                                  className="flex items-center justify-center active:scale-90 transition-transform"
+                                  style={{
+                                    width: 38, height: 22, borderRadius: 11, flexShrink: 0,
+                                    backgroundColor: "#181818",
+                                    border: "1px solid #2A2A2A",
+                                    cursor: "pointer",
+                                  }}>
+                                  <Lock size={12} color="#D32F2F" strokeWidth={2.4} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
+                                  disabled={isDisabled}
+                                  style={{
+                                    width: 38, height: 22, borderRadius: 11, flexShrink: 0,
+                                    backgroundColor: isOn ? mod.accent : "#181818",
+                                    border: `1px solid ${isOn ? mod.accent : "#252525"}`,
+                                    position: "relative",
+                                    cursor: isDisabled ? "not-allowed" : "pointer",
+                                    transition: "background-color 0.2s, border-color 0.2s",
+                                  }}>
+                                  <div style={{
+                                    width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
+                                    position: "absolute", top: 3,
+                                    right: isOn ? 3 : undefined,
+                                    left: isOn ? undefined : 3,
+                                    boxShadow: "0 1px 3px #0006",
+                                    transition: "right 0.2s, left 0.2s",
+                                  }} />
+                                </button>
+                              )}
                             </div>
 
                             {/* ── Magician potion-mode sub-config ──

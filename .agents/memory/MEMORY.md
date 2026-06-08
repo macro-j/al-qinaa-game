@@ -2,3 +2,4 @@
 - [Replit Stripe connection shape](replit-stripe-connection.md) — settings key is `secret` (not `secret_key`), and there is NO managed webhook_secret; create the webhook + store STRIPE_WEBHOOK_SECRET yourself.
 - [Stripe fulfillment reliability](stripe-fulfillment-reliability.md) — webhook-only unlock is fragile on dev domains (pending_webhooks); add a synchronous verify-on-return endpoint as the authoritative path.
 - [qinaa typecheck baseline](qinaa-typecheck-baseline.md) — qinaa has 7 intentional pre-existing TS errors (online-mode, App.tsx), api-server 3; keep counts from growing after edits.
+- [qinaa entitlements & freemium gates](qinaa-entitlements.md) — per-role ownership lives in user_entitlements.owned_items; gate = has_all_access || owned_items.includes(id); magician→role_wizard id mismatch.
