@@ -13,7 +13,7 @@ import { supabase } from "../lib/supabase";
 export function ShopModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
 
-  const handleBuy = async () => {
+  const handleBuy = async (itemId: string) => {
     if (loading) return;
     setLoading(true);
     try {
@@ -31,6 +31,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ itemId }),
       });
       if (!resp.ok) throw new Error(`checkout failed: ${resp.status}`);
 
@@ -48,7 +49,13 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
 
   if (!open) return null;
 
-  const addOns = ["دور الساحر", "دور المجنون", "دور المنتقم", "دور التوأم", "إزالة الإعلانات"];
+  const addOns = [
+    { id: "role_wizard", title: "دور الساحر" },
+    { id: "role_madman", title: "دور المجنون" },
+    { id: "role_avenger", title: "دور المنتقم" },
+    { id: "role_twins", title: "دور التوأم" },
+    { id: "ad_removal", title: "إزالة الإعلانات" },
+  ];
 
   return (
     <div
@@ -114,7 +121,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </p>
             <button
               type="button"
-              onClick={handleBuy}
+              onClick={() => handleBuy("base_game")}
               disabled={loading}
               className="w-full text-center py-2.5 rounded-xl text-sm font-bold transition-all duration-150 hover:bg-neutral-700 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ backgroundColor: "#1A1A1A", color: "#FFFFFF", border: "1px solid #333333" }}>
@@ -145,7 +152,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </p>
             <button
               type="button"
-              onClick={handleBuy}
+              onClick={() => handleBuy("all_access")}
               disabled={loading}
               className="w-full text-center py-2.5 rounded-xl text-sm font-black transition-all duration-150 hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ backgroundColor: "#F59E0B", color: "#1A1206" }}>
@@ -159,9 +166,9 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
         <div className="w-full h-px bg-neutral-800 my-6"></div>
         <h4 className="text-white font-bold mb-4 text-right">الإضافات المفردة (تتطلب اللعبة الأساسية)</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {addOns.map((title) => (
+          {addOns.map(({ id, title }) => (
             <div
-              key={title}
+              key={id}
               dir="rtl"
               className="bg-neutral-900/40 border border-neutral-800/60 rounded-xl p-3.5 flex flex-col gap-3">
               <div className="flex justify-between items-center gap-3">
@@ -170,7 +177,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
               </div>
               <button
                 type="button"
-                onClick={handleBuy}
+                onClick={() => handleBuy(id)}
                 disabled={loading}
                 className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{

@@ -55,25 +55,35 @@ export async function getUserFromToken(
 }
 
 /**
- * Grants the All-Access entitlement to a user via the SECURITY DEFINER RPC,
- * using the service-role key. This is the ONLY server-side write path for the
- * paid flags and must be called only after a verified, completed payment.
+ * Grants a SPECIFIC purchased entitlement to a user via the SECURITY DEFINER
+ * RPC, using the service-role key. This is the ONLY server-side write path for
+ * the paid flags and must be called only after a verified, completed payment.
+ * The RPC unlocks exactly the item identified by `itemId` (e.g. base_game,
+ * all_access, ad_removal, role_*).
  */
-export async function unlockAllAccess(userId: string): Promise<void> {
+export async function grantSpecificEntitlement(
+  userId: string,
+  itemId: string,
+): Promise<void> {
   const serviceRoleKey = getServiceRoleKey();
-  const resp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/unlock_all_access`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+  const resp = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/grant_specific_entitlement`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ target_user: userId, item_id: itemId }),
+      signal: AbortSignal.timeout(10_000),
     },
-    body: JSON.stringify({ target_user: userId }),
-    signal: AbortSignal.timeout(10_000),
-  });
+  );
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`unlock_all_access RPC failed: ${resp.status} ${text}`);
+    throw new Error(
+      `grant_specific_entitlement RPC failed: ${resp.status} ${text}`,
+    );
   }
 }

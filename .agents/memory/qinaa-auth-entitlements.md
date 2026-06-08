@@ -72,6 +72,37 @@ UPDATE policy/privilege or a direct `.update()` on user_entitlements. Exactly-on
 counting is still owned by the `phase === "game_over"` ref-guarded effect — don't
 add a second increment site.
 
+## Every paid column MUST be locked down in the INSERT RLS WITH CHECK
+**Rule:** When you add ANY new entitlement column to `user_entitlements`
+(e.g. the `owned_items text[]` array for a-la-carte add-ons), you MUST also add it
+to the `insert own entitlements` policy's `with check` forced to its empty/false
+default (`owned_items = '{}'`). The client INSERTs its own initial row, so any
+column not pinned there is self-grantable for free.
+**Why:** The first cut of `owned_items` pinned `games_played`/`has_base_game`/
+`has_all_access` but not `owned_items`, so a logged-in user could insert their row
+with `owned_items` pre-filled and self-grant paid add-ons (role_*, ad_removal)
+without ever paying. Caught in code review 2026-06-08.
+**How to apply:** Booleans/arrays representing purchases are written ONLY by the
+service-role RPC after a verified Stripe payment; the insert policy must keep the
+client's row at the all-default state.
+
+## Dynamic per-item checkout + fulfillment (current model)
+**Rule:** Price is server-authoritative. `/api/checkout` accepts ONLY `{ itemId }`;
+the server resolves name+amount from the `CATALOG` in
+`api-server/src/lib/stripeProducts.ts` and builds the Stripe session via
+`line_items.price_data` (never a client-sent price). `item_id` is stored in session
+metadata. Both the webhook (`app.ts`) and the verify-on-return route
+(`routes/stripe.ts`) read `session.metadata.item_id` and call the idempotent
+`grant_specific_entitlement(target_user, item_id)` RPC (service-role only).
+Mapping: `base_game`→`has_base_game`; `all_access`→`has_all_access`+`has_base_game`;
+everything else → appended to `owned_items` (base/all_access are NOT duplicated into
+owned_items). Frontend `Entitlements` type still only carries the two booleans +
+counter — gating reads those, so add-ons in `owned_items` have no UI consumer yet.
+**How to apply:** To add a new purchasable item, add it to `CATALOG` and pass its id
+from `ShopModal.tsx`. The RPC is permissive (records any non-base item id), so no DB
+change is needed for new add-ons — but the metadata source is trusted server code,
+not the client.
+
 ## Gameplay guardrails (do NOT touch)
 Fisher-Yates shuffle, audio, voting math, Tajawal font, timers, role selections,
 night-phase logic. Online multiplayer mode is intentionally hidden behind

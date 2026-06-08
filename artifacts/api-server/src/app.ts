@@ -5,7 +5,7 @@ import type Stripe from "stripe";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { getUncachableStripeClient } from "./lib/stripeClient";
-import { unlockAllAccess } from "./lib/supabase";
+import { grantSpecificEntitlement } from "./lib/supabase";
 
 const app: Express = express();
 
@@ -74,19 +74,28 @@ app.post(
           session.metadata?.supabase_user_id ??
           session.client_reference_id ??
           null;
+        const itemId = session.metadata?.item_id ?? null;
 
         req.log.info(
-          { userId, paymentStatus: session.payment_status, sessionId: session.id },
+          {
+            userId,
+            itemId,
+            paymentStatus: session.payment_status,
+            sessionId: session.id,
+          },
           "Processing checkout.session.completed",
         );
 
-        if (session.payment_status === "paid" && userId) {
-          await unlockAllAccess(userId);
-          req.log.info({ userId }, "Granted All-Access after verified payment");
+        if (session.payment_status === "paid" && userId && itemId) {
+          await grantSpecificEntitlement(userId, itemId);
+          req.log.info(
+            { userId, itemId },
+            "Granted entitlement after verified payment",
+          );
         } else {
           req.log.warn(
-            { paymentStatus: session.payment_status, userId },
-            "checkout.session.completed ignored (not paid or no user id)",
+            { paymentStatus: session.payment_status, userId, itemId },
+            "checkout.session.completed ignored (not paid, or missing user/item id)",
           );
         }
       }

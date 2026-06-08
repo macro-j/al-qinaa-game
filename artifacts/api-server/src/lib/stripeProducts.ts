@@ -1,43 +1,69 @@
-import type Stripe from "stripe";
-
 /**
- * The single "All-Access" product the test checkout sells. Resolved (and lazily
- * created) in Stripe via a stable lookup_key so this is idempotent across
- * restarts and never duplicates products/prices.
+ * Server-side catalog of purchasable items. This is the SINGLE source of truth
+ * for pricing — the client only sends an `itemId`; it never gets to dictate the
+ * amount charged. Each Checkout Session is built dynamically from this catalog
+ * via Stripe `price_data` (no pre-created Products/Prices needed).
+ *
+ * `itemId` values are also written into the session metadata and used by the
+ * fulfillment RPC to unlock exactly the purchased item.
  */
-const ALL_ACCESS_LOOKUP_KEY = "qinaa_all_access";
-const ALL_ACCESS_AMOUNT = 2999; // 29.99 SAR, in the currency's minor unit
-const ALL_ACCESS_CURRENCY = "sar";
+export type CatalogItem = {
+  id: string;
+  /** Name shown on the Stripe-hosted Checkout page. */
+  name: string;
+  /** Price in the currency's minor unit (halalas for SAR; 14.99 SAR = 1499). */
+  amount: number;
+  currency: string;
+};
 
-let cachedPriceId: string | null = null;
+export const CATALOG: Record<string, CatalogItem> = {
+  base_game: {
+    id: "base_game",
+    name: "قناع — اللعبة الأساسية",
+    amount: 1499,
+    currency: "sar",
+  },
+  all_access: {
+    id: "all_access",
+    name: "قناع — الباقة الشاملة",
+    amount: 2999,
+    currency: "sar",
+  },
+  ad_removal: {
+    id: "ad_removal",
+    name: "قناع — إزالة الإعلانات",
+    amount: 799,
+    currency: "sar",
+  },
+  role_wizard: {
+    id: "role_wizard",
+    name: "قناع — دور الساحر",
+    amount: 799,
+    currency: "sar",
+  },
+  role_madman: {
+    id: "role_madman",
+    name: "قناع — دور المجنون",
+    amount: 799,
+    currency: "sar",
+  },
+  role_avenger: {
+    id: "role_avenger",
+    name: "قناع — دور المنتقم",
+    amount: 799,
+    currency: "sar",
+  },
+  role_twins: {
+    id: "role_twins",
+    name: "قناع — دور التوأم",
+    amount: 799,
+    currency: "sar",
+  },
+};
 
-export async function getAllAccessPriceId(stripe: Stripe): Promise<string> {
-  if (cachedPriceId) return cachedPriceId;
-
-  const existing = await stripe.prices.list({
-    lookup_keys: [ALL_ACCESS_LOOKUP_KEY],
-    active: true,
-    limit: 1,
-  });
-  if (existing.data.length > 0 && existing.data[0]) {
-    cachedPriceId = existing.data[0].id;
-    return cachedPriceId;
-  }
-
-  const product = await stripe.products.create({
-    name: "قناع — الباقة الشاملة (All-Access)",
-    description: "كل الأدوار الحالية والمستقبلية + إزالة الإعلانات",
-    metadata: { qinaa_package: "all_access" },
-  });
-
-  const price = await stripe.prices.create({
-    product: product.id,
-    unit_amount: ALL_ACCESS_AMOUNT,
-    currency: ALL_ACCESS_CURRENCY,
-    lookup_key: ALL_ACCESS_LOOKUP_KEY,
-    metadata: { qinaa_package: "all_access" },
-  });
-
-  cachedPriceId = price.id;
-  return cachedPriceId;
+/** Returns the catalog item for an id, or null if the id is unknown. */
+export function getCatalogItem(itemId: string): CatalogItem | null {
+  return Object.prototype.hasOwnProperty.call(CATALOG, itemId)
+    ? CATALOG[itemId]!
+    : null;
 }

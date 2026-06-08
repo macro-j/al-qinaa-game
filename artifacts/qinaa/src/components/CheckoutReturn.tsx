@@ -4,6 +4,16 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
 /**
+ * The checkout params, captured at MODULE LOAD — the instant the bundle runs,
+ * before React renders or supabase's `detectSessionInUrl` runs. This guarantees
+ * we still have `?checkout=success&session_id=...` even if something later calls
+ * history.replaceState and clears the query (which was swallowing the success
+ * toast before).
+ */
+const INITIAL_SEARCH =
+  typeof window !== "undefined" ? window.location.search : "";
+
+/**
  * Handles the return from Stripe Checkout. Stripe redirects back to
  * `/?checkout=success&session_id=...` (or `?checkout=cancel`).
  *
@@ -20,17 +30,20 @@ export function CheckoutReturn() {
   useEffect(() => {
     if (handled.current) return;
 
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(INITIAL_SEARCH);
     const status = params.get("checkout");
     if (!status) return;
 
     const sessionId = params.get("session_id");
     handled.current = true;
 
-    // Strip the params so a refresh doesn't re-trigger this flow.
-    params.delete("checkout");
-    params.delete("session_id");
-    const query = params.toString();
+    // Strip the params so a refresh doesn't re-trigger this flow. We rebuild the
+    // query from the CURRENT url (not INITIAL_SEARCH) in case other params were
+    // added meanwhile, then drop only the checkout ones.
+    const liveParams = new URLSearchParams(window.location.search);
+    liveParams.delete("checkout");
+    liveParams.delete("session_id");
+    const query = liveParams.toString();
     const newUrl =
       window.location.pathname +
       (query ? `?${query}` : "") +
@@ -45,14 +58,14 @@ export function CheckoutReturn() {
     if (status !== "success") return;
 
     void (async () => {
-      toast.success("تم الدفع بنجاح! جارٍ تفعيل الباقة الشاملة…");
+      let confirmed = false;
 
       // Authoritative, synchronous confirmation via our server.
       try {
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
         if (token && sessionId) {
-          await fetch("/api/checkout/verify", {
+          const resp = await fetch("/api/checkout/verify", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -60,10 +73,21 @@ export function CheckoutReturn() {
             },
             body: JSON.stringify({ sessionId }),
           });
+          confirmed = resp.ok;
         }
       } catch (err) {
         console.error("Checkout verify error:", err);
       }
+
+      // Highly visible success toast. We show it whenever we returned from a
+      // successful checkout; on a confirmed 200 the entitlement is already
+      // granted, otherwise the verified webhook finishes the job moments later.
+      toast.success("تم الشراء بنجاح", {
+        description: confirmed
+          ? "تم تفعيل مشترياتك."
+          : "جارٍ تفعيل مشترياتك…",
+        duration: 6000,
+      });
 
       // Pull the (now-updated) entitlements, with a short fallback poll.
       let tries = 0;

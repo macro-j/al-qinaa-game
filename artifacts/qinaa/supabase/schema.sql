@@ -28,6 +28,11 @@ alter table public.user_entitlements
   add column if not exists created_at timestamptz not null default now();
 alter table public.user_entitlements
   add column if not exists updated_at timestamptz not null default now();
+-- Records every specific a-la-carte item the user has purchased (e.g.
+-- ad_removal, role_wizard, …). The two booleans above remain the gate for the
+-- base game / all-access; this array tracks granular add-ons and future items.
+alter table public.user_entitlements
+  add column if not exists owned_items text[] not null default '{}';
 
 alter table public.user_entitlements enable row level security;
 
@@ -49,6 +54,7 @@ create policy "insert own entitlements"
     and games_played = 0
     and has_base_game = false
     and has_all_access = false
+    and owned_items = '{}'
   );
 
 -- Deliberately NO client UPDATE policy. The counter is bumped via the
@@ -105,3 +111,51 @@ $$;
 revoke all on function public.unlock_all_access(uuid) from public;
 revoke all on function public.unlock_all_access(uuid) from anon, authenticated;
 grant execute on function public.unlock_all_access(uuid) to service_role;
+
+-- 5) Per-item fulfillment RPC (server-only) -----------------------------------
+-- Grants exactly ONE purchased item, identified by `item_id`, to a specific
+-- user. Called ONLY by the trusted Stripe payment webhook / verify route using
+-- the service-role key, after Stripe has verified a completed payment.
+--   • base_game  → has_base_game
+--   • all_access → has_all_access (+ implies base_game)
+--   • everything else (ad_removal, role_*) → appended to owned_items
+-- Idempotent: re-running for the same item is a no-op, so the webhook and the
+-- verify-on-return path can both call it safely. SECURITY DEFINER so it can
+-- write despite there being no client UPDATE policy; execute granted ONLY to
+-- service_role so a client can never self-grant.
+create or replace function public.grant_specific_entitlement(
+  target_user uuid,
+  item_id text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.user_entitlements (id)
+  values (target_user)
+  on conflict (id) do nothing;
+
+  update public.user_entitlements
+     set has_base_game  = has_base_game  or item_id in ('base_game', 'all_access'),
+         has_all_access = has_all_access or item_id = 'all_access',
+         -- base_game / all_access are tracked via the booleans above; only the
+         -- granular add-ons (ad_removal, role_*) are recorded in owned_items.
+         owned_items    = case
+           when item_id in ('base_game', 'all_access') then owned_items
+           else (
+             select array(
+               select distinct
+                 unnest(coalesce(owned_items, '{}') || array[item_id])
+             )
+           )
+         end,
+         updated_at     = now()
+   where id = target_user;
+end;
+$$;
+
+revoke all on function public.grant_specific_entitlement(uuid, text) from public;
+revoke all on function public.grant_specific_entitlement(uuid, text) from anon, authenticated;
+grant execute on function public.grant_specific_entitlement(uuid, text) to service_role;

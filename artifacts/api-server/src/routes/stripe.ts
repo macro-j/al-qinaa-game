@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getUncachableStripeClient } from "../lib/stripeClient";
-import { getAllAccessPriceId } from "../lib/stripeProducts";
-import { getUserFromToken, unlockAllAccess } from "../lib/supabase";
+import { getCatalogItem } from "../lib/stripeProducts";
+import { getUserFromToken, grantSpecificEntitlement } from "../lib/supabase";
 
 const router: IRouter = Router();
 
@@ -36,15 +36,32 @@ router.post("/checkout", async (req, res) => {
       return res.status(401).json({ error: "invalid_auth_token" });
     }
 
+    // The client only sends an itemId; pricing/name come from the server-side
+    // catalog so a tampered request can never change the amount charged.
+    const itemId =
+      typeof req.body?.itemId === "string" ? req.body.itemId : null;
+    const item = itemId ? getCatalogItem(itemId) : null;
+    if (!item) {
+      return res.status(400).json({ error: "unknown_item" });
+    }
+
     const stripe = await getUncachableStripeClient();
-    const priceId = await getAllAccessPriceId(stripe);
     const base = publicBaseUrl();
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: item.currency,
+            unit_amount: item.amount,
+            product_data: { name: item.name },
+          },
+        },
+      ],
       client_reference_id: user.id,
-      metadata: { supabase_user_id: user.id },
+      metadata: { supabase_user_id: user.id, item_id: item.id },
       customer_email: user.email ?? undefined,
       success_url: `${base}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${base}/?checkout=cancel`,
@@ -102,13 +119,15 @@ router.post("/checkout/verify", async (req, res) => {
       return res.status(403).json({ error: "session_user_mismatch" });
     }
 
-    if (session.payment_status === "paid") {
-      await unlockAllAccess(user.id);
+    const itemId = session.metadata?.item_id ?? null;
+
+    if (session.payment_status === "paid" && itemId) {
+      await grantSpecificEntitlement(user.id, itemId);
       req.log.info(
-        { userId: user.id, sessionId },
-        "Verified checkout on return — granted All-Access",
+        { userId: user.id, sessionId, itemId },
+        "Verified checkout on return — granted entitlement",
       );
-      return res.json({ unlocked: true });
+      return res.json({ unlocked: true, itemId });
     }
 
     req.log.info(
