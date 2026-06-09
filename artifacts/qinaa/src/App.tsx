@@ -44,7 +44,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
-import { LandingPage } from "./components/LandingPage";
+import { AuthModal } from "./components/AuthModal";
 import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
@@ -292,6 +292,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms,   setShowTerms]   = useState(false);
   const [showSupport, setShowSupport] = useState(false);
+  const [showAuth,    setShowAuth]    = useState(false);
   const { openShop } = useShop();
   const { user, entitlements, signOut } = useAuth();
   const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
@@ -319,7 +320,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               No items-end / no flex-row-reverse — pure dir="rtl" flow. */}
           <button
             dir="rtl"
-            onClick={() => onSelect("narrator")}
+            onClick={() => { if (!user) { setShowAuth(true); return; } onSelect("narrator"); }}
             className="w-full flex items-center px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
             style={{ backgroundColor: "#061210", border: "1px solid #10B98133", boxShadow: "0 0 24px #10B98111" }}>
             {/* Child 1 — RIGHT: icon */}
@@ -441,9 +442,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         dir="rtl"
         className="w-full flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pb-5 pt-2 text-[11px] sm:text-xs"
         style={{ color: "#444444" }}>
-        {/* Shop — prominent amber entry point */}
+        {/* Shop — prominent amber entry point (auth-gated for guests) */}
         <button
-          onClick={openShop}
+          onClick={() => { if (!user) { setShowAuth(true); return; } openShop(); }}
           className="font-bold text-amber-400 transition-all duration-150 hover:text-amber-300 active:scale-95"
           style={{ textShadow: "0 0 12px rgba(251,191,36,0.45)" }}>
           باقات اللعبة
@@ -474,6 +475,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
         <Info size={18} strokeWidth={1.8} />
       </button>
+
+      {/* ── Auth Modal — opened when a guest taps a gated action ── */}
+      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
 
       {/* ── About Modal ── */}
       <AboutModal open={showAbout} onClose={() => setShowAbout(false)} />
@@ -6198,6 +6202,18 @@ export default function App() {
     else localStorage.removeItem(STORAGE_MODE);
   }, [selectedMode]);
 
+  // Deferred-auth safety: once auth has resolved, a signed-out user must never
+  // sit inside a game mode (stale persisted mode, storage tampering, or a fresh
+  // sign-out). Drop the mode + narrator state so they return to the public
+  // dashboard. Guarded on !authLoading so a legit user's persisted mode survives
+  // the initial auth check.
+  useEffect(() => {
+    if (!authLoading && !user && selectedMode !== null) {
+      clearNarratorState();
+      setSelectedMode(null);
+    }
+  }, [authLoading, user, selectedMode]);
+
   const [screen, setScreen]         = useState<Screen>("rejoining");
   const [lobby, setLobby]           = useState<LobbyState | null>(null);
   const [game, setGame]             = useState<GameState | null>(null);
@@ -6788,12 +6804,13 @@ export default function App() {
       </div>
     );
   }
-  if (!user) {
-    return <LandingPage />;
-  }
-
   // ── Top-level mode gate — shown before any game screen ───────────────────
-  if (selectedMode === null) {
+  // Deferred auth: the dashboard (GameModeSelector) is public for everyone, and
+  // gated actions (Council Mode, Shop) intercept guests into the AuthModal from
+  // within GameModeSelector. A guest can never be inside a game mode — the
+  // `!user` check also covers a stale "narrator" persisted from a prior session
+  // or localStorage tampering.
+  if (selectedMode === null || !user) {
     return <GameModeSelector onSelect={setSelectedMode} />;
   }
   if (selectedMode === "narrator") {

@@ -26,3 +26,19 @@ If adding a new freemium gate, confirm `owned_items` is in the `Entitlements` ty
 **How to apply:** entitlements can be `null` while loading — gates must fail-closed (treat as not
 owned / locked) and ideally disable buy CTAs while `entitlementsLoading`. Never gate gameplay engine
 logic (shuffle/deck/voting/timers/night); gate only setup UI + sanitize `activeMods` by ownership.
+
+# Deferred-auth gating (client routing)
+
+qinaa uses **deferred auth**: the dashboard (GameModeSelector) is public; gated
+actions (Council/narrator mode, Shop) intercept guests into the AuthModal.
+
+**Trap:** `selectedMode` is hydrated from localStorage (`qinaa_selected_mode`) and
+drives top-level routing in App. Gating ONLY the dashboard buttons is insufficient —
+a signed-out user with a stale/ tampered persisted mode routes straight into
+NarratorMode (and its internal openShop calls) without ever passing the button gate.
+
+**Rule:** any auth/entitlement gate on a persisted-state-driven route must ALSO be
+enforced at the route decision point, not just on the button. Fix used: route gate
+`if (selectedMode === null || !user) return <GameModeSelector/>` + an effect that
+clears mode/narrator state once auth resolves to no-user (guarded on !authLoading so
+a legit user's persisted mode survives the initial check).
