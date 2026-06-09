@@ -49,7 +49,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
           </p>
           <span className="text-xs font-semibold px-3 py-1 rounded-full"
             style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-            الإصدار التجريبي الثالث — Beta v3.0.0
+            الإصدار الأول — v1.0.0
           </span>
         </div>
 
@@ -100,7 +100,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs" style={{ color: "#2A2A2A" }}>© 2026 القناع</p>
+        <p className="text-center text-xs" style={{ color: "#2A2A2A" }}>© 2024 القناع</p>
       </div>
     </div>
   );
