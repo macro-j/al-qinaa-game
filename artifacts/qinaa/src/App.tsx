@@ -44,6 +44,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
+import { preloadSfx, unlockSfx, setSfxMuted, playSfx, startHeartbeat, stopHeartbeat } from "./lib/sfx";
 import { AuthModal } from "./components/AuthModal";
 import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
@@ -1047,13 +1048,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       "s1.m4a", "s2.m4a", "s3.m4a",
       "b1.m4a", "b2.m4a", "b3.m4a",
       "morning.m4a", "success.m4a", "fail.m4a",
-      "mafia_win.mp3", "town_win.mp3",
+      "mafia_win.mp3", "town_win.mp3", "madman_win.mp3",
     ];
     files.forEach(file => {
       const audio = new Audio("/audio/" + file);
       audio.preload = "auto";
       audioCache.current[file] = audio;
     });
+    // Register the non-narrator SFX (flip / reveal / heartbeat) in the shared
+    // SFX layer so they overlap the narrator instead of interrupting it.
+    preloadSfx();
 
     // ── One-time audio unlock on first user interaction ───────────────────
     // Browsers (esp. iOS Safari) block audio until a user gesture resumes
@@ -1074,10 +1078,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       Object.values(audioCache.current).forEach(a => {
         try { a.load(); } catch { /* ignored */ }
       });
+      unlockSfx();
     };
     document.addEventListener("pointerdown", unlock, { once: true });
     return () => document.removeEventListener("pointerdown", unlock);
   }, []);
+
+  // Mirror mute state into the shared SFX layer so flip/reveal/heartbeat
+  // cues honor the same mute toggle as the narrator.
+  useEffect(() => { setSfxMuted(isMuted); }, [isMuted]);
 
   const playGameAudio = (fileName: string) => {
     if (isMuted) return;
@@ -1118,7 +1127,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (phase !== "game_over" || !gameOver) return;
     if (gameOver.winner === "madman") {
-      // TODO: Play Madman Win Audio
+      playGameAudio("madman_win.mp3");
       return;
     }
     playGameAudio(gameOver.winner === "mafia" ? "mafia_win.mp3" : "town_win.mp3");
@@ -1752,7 +1761,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ── Madman Win — INSTANT bypass of all standard win/cascade logic ──
     // Per spec: if the executed player is the madman, the game ends immediately.
     if (executedPlayer.role === "madman") {
-      // TODO: Play Madman Win Audio
       const updated = livePlayers.map(p =>
         p.name === name
           ? { ...p, isAlive: false, deathReason: "vote" as const, isSilenced: false }
@@ -1968,7 +1976,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               linger or peek through during the transition. */}
           <div
             key={currentIndex}
-            onClick={() => !isCardFlipped && setIsCardFlipped(true)}
+            onClick={() => {
+              if (isCardFlipped) return;
+              setIsCardFlipped(true);
+              playSfx("card_flip.mp3");
+              playSfx("role_reveal.mp3");
+            }}
             style={{ perspective: "900px", height: CARD_HEIGHT, cursor: isCardFlipped ? "default" : "pointer" }}
             className="w-full select-none">
 
@@ -3290,7 +3303,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <span className="text-xs font-bold tracking-widest" style={{ color: "#FFB300" }}>النقاش مفتوح</span>
                 <h1 className="text-2xl font-black text-white">الكل يدافع عن نفسه</h1>
                 <div className="mt-1 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#141414", border: "1px solid #222" }}>
-                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.discuss} />
+                  <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.discuss} heartbeat />
                 </div>
               </div>
               {morningBanner}
@@ -4936,7 +4949,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 
         <div className="flex items-center justify-between px-1">
           <span className="text-sm font-semibold" style={{ color: "#9E9E9E" }}>{role.myName}</span>
-          <Countdown endsAt={phaseEndsAt} />
+          <Countdown endsAt={phaseEndsAt} heartbeat={gamePhase === "day_discussion" || gamePhase === "voting"} />
         </div>
 
         {/* Dead player screen — overlays content when eliminated */}
@@ -5339,7 +5352,7 @@ function AutoAdvanceDiscussion({
 }
 
 // ── DayTimerBar — animated progress bar + countdown for day phases ────────────
-function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | null; maxSeconds: number; urgentAt?: number }) {
+function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10, heartbeat = false }: { endsAt: number | null; maxSeconds: number; urgentAt?: number; heartbeat?: boolean }) {
   const [secs, setSecs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -5349,6 +5362,14 @@ function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | n
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [endsAt]);
+
+  // Tension heartbeat — loops through the final 10s, clears at 0 / phase change.
+  useEffect(() => {
+    if (!heartbeat) return;
+    if (secs !== null && secs > 0 && secs <= 10) startHeartbeat();
+    else stopHeartbeat();
+  }, [heartbeat, secs]);
+  useEffect(() => () => stopHeartbeat(), []);
 
   if (secs === null) return null;
 
@@ -5394,7 +5415,7 @@ function DayTimerBar({ endsAt, maxSeconds, urgentAt = 10 }: { endsAt: number | n
 }
 
 // ── Countdown component ───────────────────────────────────────────────────────
-function Countdown({ endsAt }: { endsAt: number | null }) {
+function Countdown({ endsAt, heartbeat = false }: { endsAt: number | null; heartbeat?: boolean }) {
   const [secs, setSecs] = useState<number | null>(null);
 
   useEffect(() => {
@@ -5407,6 +5428,14 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [endsAt]);
+
+  // Tension heartbeat — loops through the final 10s, clears at 0 / phase change.
+  // Gated to the active voting/discussion timer only (callers pass heartbeat).
+  useEffect(() => {
+    if (heartbeat && secs !== null && secs > 0 && secs <= 10) startHeartbeat();
+    else stopHeartbeat();
+  }, [heartbeat, secs]);
+  useEffect(() => () => stopHeartbeat(), []);
 
   if (secs === null || secs <= 0) return null;
   const urgent = secs <= 5;
@@ -5671,7 +5700,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
         </div>
 
         {/* Countdown bar */}
-        <Countdown endsAt={phaseEndsAt} />
+        <Countdown endsAt={phaseEndsAt} heartbeat={activeGamePhase === "day_discussion" || activeGamePhase === "voting"} />
 
         {/* ── My Role Card: big centered card only during role_reveal phase ── */}
         {myEntry && activeGamePhase === "role_reveal" && (

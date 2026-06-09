@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { VenetianMask, Lock, Unlock } from "lucide-react";
 import { ROLE_META, getRoleName } from "../lib/roles";
+import { playSfx } from "../lib/sfx";
 
 /**
  * Catalog clone of the in-game "Introductory Night" (الليلة التعريفية) reveal
@@ -18,7 +19,7 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
 
   return (
     <div
-      onClick={() => setFlipped((f) => !f)}
+      onClick={() => { setFlipped((f) => !f); playSfx("card_flip.mp3"); }}
       style={{ perspective: "900px", height, cursor: "pointer" }}
       className="w-full select-none">
       <div
