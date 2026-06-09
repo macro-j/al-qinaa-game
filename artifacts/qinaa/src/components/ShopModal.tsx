@@ -3,6 +3,7 @@ import { X, VenetianMask, RotateCw, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { AuthModal } from "./AuthModal";
 
 /**
  * Pricing / packages modal. Each "buy" button starts a Stripe Checkout for its
@@ -18,7 +19,10 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   // Which add-on flip card is currently showing its back (power description).
   const [flippedId, setFlippedId] = useState<string | null>(null);
-  const { entitlements, entitlementsLoading } = useAuth();
+  // When a guest taps a purchase / try action we surface the login flow instead
+  // of hitting checkout — the catalog itself stays public for browsing.
+  const [showAuth, setShowAuth] = useState(false);
+  const { user, entitlements, entitlementsLoading } = useAuth();
 
   const hasBase = !!entitlements?.has_base_game;
   const hasAll = !!entitlements?.has_all_access;
@@ -32,6 +36,8 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
 
   const handleBuy = async (itemId: string) => {
     if (busy) return;
+    // Guests can browse the catalog but must authenticate before any checkout.
+    if (!user) { setShowAuth(true); return; }
     setLoadingItemId(itemId);
     try {
       const { data } = await supabase.auth.getSession();
@@ -87,6 +93,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
   ];
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
@@ -130,6 +137,14 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </p>
             {entitlementsLoading ? (
               checkingBadge
+            ) : !user ? (
+              <button
+                type="button"
+                onClick={() => setShowAuth(true)}
+                className="w-full text-center py-2.5 rounded-xl text-sm font-bold transition-all duration-150 hover:bg-neutral-700 active:scale-95"
+                style={{ backgroundColor: "#1A1A1A", color: "#FFFFFF", border: "1px solid #333333" }}>
+                جرب الآن
+              </button>
             ) : (
               <div
                 className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
@@ -315,5 +330,13 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
         </p>
       </div>
     </div>
+    {/* Login popup — surfaced when a guest taps Try Now / Buy inside the shop.
+        Wrapped in a z-70 stacking context so it sits above the shop's z-60 header. */}
+    {showAuth && (
+      <div style={{ position: "relative", zIndex: 70 }}>
+        <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+      </div>
+    )}
+    </>
   );
 }

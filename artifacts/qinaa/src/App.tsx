@@ -442,9 +442,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
         dir="rtl"
         className="w-full flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pb-5 pt-2 text-[11px] sm:text-xs"
         style={{ color: "#444444" }}>
-        {/* Shop — prominent amber entry point (auth-gated for guests) */}
+        {/* Shop — prominent amber entry point (public; purchase actions inside are auth-gated) */}
         <button
-          onClick={() => { if (!user) { setShowAuth(true); return; } openShop(); }}
+          onClick={openShop}
           className="font-bold text-amber-400 transition-all duration-150 hover:text-amber-300 active:scale-95"
           style={{ textShadow: "0 0 12px rgba(251,191,36,0.45)" }}>
           باقات اللعبة

@@ -42,3 +42,21 @@ enforced at the route decision point, not just on the button. Fix used: route ga
 `if (selectedMode === null || !user) return <GameModeSelector/>` + an effect that
 clears mode/narrator state once auth resolves to no-user (guarded on !authLoading so
 a legit user's persisted mode survives the initial check).
+
+# Public shop, gated actions (in-modal AuthModal)
+
+ShopModal is rendered globally via ShopProvider and is PUBLIC (guests can open it
+to browse tiers + flip premium role cards). Purchase/try actions are gated inside
+the modal, not at the entry point.
+
+**Single choke point:** every paid-tier and premium-role buy button routes through
+`handleBuy(itemId)`. Guarding it with `if (!user) { setShowAuth(true); return; }`
+intercepts ALL buys at once. The Free tier needs its OWN guest CTA ("جرب الآن")
+since it has no buy button — for guests show a button → setShowAuth(true); when
+logged in keep the tier-badge logic.
+
+**Modal-over-modal z-index:** ShopModal backdrop is z-50 with a z-[60] fixed
+header. A nested AuthModal (also z-50 internally) would let the shop's z-60 header
+button bleed through. Fix: wrap the AuthModal in a `position:relative; zIndex:70`
+div — that establishes a stacking context above the shop header. Don't edit the
+shared AuthModal's own z-index.
