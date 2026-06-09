@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { X, VenetianMask, RotateCw, ArrowLeft } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { getRoleName } from "../lib/roles";
+import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
 
 /**
@@ -17,8 +19,6 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
   // Track WHICH item is checking out so only its button shows the loading
   // state; the rest stay normal-looking but disabled while one is in flight.
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
-  // Which add-on flip card is currently showing its back (power description).
-  const [flippedId, setFlippedId] = useState<string | null>(null);
   // When a guest taps a purchase / try action we surface the login flow instead
   // of hitting checkout — the catalog itself stays public for browsing.
   const [showAuth, setShowAuth] = useState(false);
@@ -82,14 +82,14 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     </div>
   );
 
-  // Each add-on is a flip card: front shows icon/name/price, back reveals the
-  // role's in-game power plus the Buy button. Colors + descriptions mirror the
-  // expansion roles shown in the game guide.
-  const addOns = [
-    { id: "role_wizard", title: "دور الساحر", role: "الساحر", color: "#84CC16", desc: "يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب." },
-    { id: "role_madman", title: "دور المجنون", role: "المجنون", color: "#E879F9", desc: "لاعب مستقل، هدفه إقناع المجلس بالتصويت ضده وإعدامه في النهار ليفوز وحده وتخسر القرية." },
-    { id: "role_avenger", title: "دور المنتقم", role: "المنتقم", color: "#F59E0B", desc: "قروي يملك فرصة للرد، إذا قُتل أو أُعدم يختار لاعباً ليأخذه معه للقبر." },
-    { id: "role_twins", title: "دور التوأم", role: "التوأم", color: "#22D3EE", desc: "قرويان يثقان ببعضهما ويظهران لبعضهما بالليلة الأولى، وإذا مات أحدهما مات الآخر حزناً." },
+  // Each add-on is the shared in-game RoleRevealCard (single source of truth for
+  // the role art + ability copy) with its purchase control beneath it. roleKey
+  // maps to ROLE_META / getRoleName in ./lib/roles.
+  const addOns: { id: string; roleKey: string }[] = [
+    { id: "role_wizard", roleKey: "magician" },
+    { id: "role_madman", roleKey: "madman" },
+    { id: "role_avenger", roleKey: "avenger" },
+    { id: "role_twins", roleKey: "twin" },
   ];
 
   return (
@@ -242,84 +242,37 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
         <div className="w-full h-px bg-neutral-800 my-6"></div>
         <h4 className="text-white font-bold mb-4 text-right">الإضافات المفردة (تتطلب اللعبة الأساسية)</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {addOns.map(({ id, title, role, color, desc }) => {
-            const flipped = flippedId === id;
+          {addOns.map(({ id, roleKey }) => {
             // All-Access cascades to every add-on; otherwise the role must be in
             // the user's purchased owned_items list.
             const owned = hasAll || (entitlements?.owned_items?.includes(id) ?? false);
+            const name = getRoleName(roleKey);
             return (
-              <div key={id} dir="rtl" className="h-52 [perspective:1200px]">
-                <div
-                  className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d]"
-                  style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}>
-
-                  {/* ── Front ── icon / name / price */}
+              <div key={id} dir="rtl" className="flex flex-col gap-3">
+                <RoleRevealCard roleKey={roleKey} />
+                {owned ? (
+                  <div
+                    className="w-full py-2 rounded-lg text-sm font-black text-center"
+                    style={{
+                      backgroundColor: "rgba(34,197,94,0.12)",
+                      color: "#4ADE80",
+                      border: "1px solid rgba(34,197,94,0.35)",
+                    }}>
+                    {name} • مملوك ✓
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setFlippedId(id)}
-                    aria-pressed={flipped}
-                    aria-label={`عرض قدرة ${role}`}
-                    className="absolute inset-0 [backface-visibility:hidden] rounded-2xl p-5 flex flex-col items-center justify-center gap-3 text-center transition-colors duration-200 active:scale-[0.98]"
-                    style={{ backgroundColor: "#0D0D0D", border: `1px solid ${color}33` }}>
-                    <div style={{ filter: `drop-shadow(0 0 18px ${color}55)` }}>
-                      <VenetianMask size={44} color={color} strokeWidth={1} />
-                    </div>
-                    <span className="text-base font-black" style={{ color }}>{title}</span>
-                    {owned ? (
-                      <span className="text-lg font-black" style={{ color: "#4ADE80" }}>مملوك ✓</span>
-                    ) : (
-                      <span className="text-lg font-black text-amber-400">7.99 ر.س</span>
-                    )}
-                    <span className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "#777777" }}>
-                      <RotateCw size={12} strokeWidth={2} />
-                      اضغط لمعرفة القدرة
-                    </span>
+                    onClick={() => handleBuy(id)}
+                    disabled={busy || entitlementsLoading}
+                    className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: "rgba(245,158,11,0.08)",
+                      border: "1px solid rgba(245,158,11,0.35)",
+                    }}>
+                    {loadingItemId === id ? "جارٍ التحويل…" : `شراء ${name} • 7.99 ر.س`}
                   </button>
-
-                  {/* ── Back ── power description + buy ── */}
-                  <div
-                    className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] rounded-2xl p-4 flex flex-col gap-2"
-                    style={{ backgroundColor: "#0D0D0D", border: `1px solid ${color}55` }}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-black" style={{ color }}>{role}</span>
-                      <button
-                        type="button"
-                        onClick={() => setFlippedId(null)}
-                        aria-label="رجوع"
-                        className="flex items-center justify-center w-7 h-7 rounded-full text-white/50 hover:text-white transition-colors active:scale-90"
-                        style={{ backgroundColor: "#161616", border: "1px solid #2A2A2A" }}>
-                        <ArrowLeft size={14} strokeWidth={2} />
-                      </button>
-                    </div>
-                    <p className="flex-1 text-xs leading-relaxed text-right overflow-y-auto" style={{ color: "#AAAAAA" }}>
-                      {desc}
-                    </p>
-                    {owned ? (
-                      <div
-                        className="w-full py-2 rounded-lg text-sm font-black text-center"
-                        style={{
-                          backgroundColor: "rgba(34,197,94,0.12)",
-                          color: "#4ADE80",
-                          border: "1px solid rgba(34,197,94,0.35)",
-                        }}>
-                        مملوك ✓
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleBuy(id)}
-                        disabled={busy || entitlementsLoading}
-                        className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                        style={{
-                          backgroundColor: "rgba(245,158,11,0.08)",
-                          border: "1px solid rgba(245,158,11,0.35)",
-                        }}>
-                        {loadingItemId === id ? "جارٍ التحويل…" : "شراء • 7.99 ر.س"}
-                      </button>
-                    )}
-                  </div>
-
-                </div>
+                )}
               </div>
             );
           })}

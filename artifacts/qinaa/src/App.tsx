@@ -49,6 +49,7 @@ import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
+import { ROLE_META, getRoleName } from "./lib/roles";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -635,28 +636,9 @@ const formatTimeOption = (sec: number): string => {
   return Number.isInteger(m) ? `${m} ${m === 1 ? "دقيقة" : m === 2 ? "دقيقتان" : "دقائق"}` : `${sec} ثانية`;
 };
 
-const ROLE_META: Record<string, { color: string; glow: string; desc: string }> = {
-  "الولد":   { color: "#D32F2F", glow: "#D32F2F33", desc: "القاتل — يختار ضحية كل ليلة ويحاول البقاء مجهولاً." },
-  "الإكة":   { color: "#B71C1C", glow: "#B71C1C33", desc: "الكاتم — يسكت لاعباً ويمنعه من الكلام صباحاً." },
-  "الشايب":  { color: "#FF8F00", glow: "#FF8F0033", desc: "العرّاف — يكشف هوية لاعب كل ليلة (مافيا أم بريء)." },
-  "البنت":   { color: "#1565C0", glow: "#1565C033", desc: "الحارس — يحمي لاعباً من القتل تلك الليلة." },
-  "المواطن": { color: "#555555", glow: "#55555522", desc: "من الشعب — ابحث عن المافيا وصوّت ضدهم." },
-  // ── Expansion Pack roles (Phase 1 — engine-level identity, behavior wired in later phases) ──
-  "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
-  "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
-  "avenger":  { color: "#A0522D", glow: "#A0522D33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
-  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب." },
-};
-
-// Maps English logic keys → Arabic display names for the expansion roles.
-// Base roles use their Arabic name as the key itself, so they fall through to key.
-const ROLE_DISPLAY_NAME: Record<string, string> = {
-  madman:   "المجنون",
-  twin:     "التوأم",
-  avenger:  "المنتقم",
-  magician: "الساحر",
-};
-const getRoleName = (role: string): string => ROLE_DISPLAY_NAME[role] ?? role;
+// Role identity, descriptions, and display-name mapping (ROLE_META,
+// ROLE_DISPLAY_NAME, getRoleName) live in ./lib/roles — the single source of
+// truth shared by the in-game reveal, the Shop, and the Guide.
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];

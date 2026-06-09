@@ -3,3 +3,4 @@
 - [Stripe fulfillment reliability](stripe-fulfillment-reliability.md) — webhook-only unlock is fragile on dev domains (pending_webhooks); add a synchronous verify-on-return endpoint as the authoritative path.
 - [qinaa typecheck baseline](qinaa-typecheck-baseline.md) — qinaa has 7 intentional pre-existing TS errors (online-mode, App.tsx), api-server 3; keep counts from growing after edits.
 - [qinaa entitlements & freemium gates](qinaa-entitlements.md) — per-role ownership lives in user_entitlements.owned_items; gate = has_all_access || owned_items.includes(id); magician→role_wizard id mismatch.
+- [qinaa role data & card single source](qinaa-role-source-of-truth.md) — role copy/colors live in src/lib/roles.ts; Shop/Guide MUST reuse RoleRevealCard (clone of in-game reveal card); never author role text.
