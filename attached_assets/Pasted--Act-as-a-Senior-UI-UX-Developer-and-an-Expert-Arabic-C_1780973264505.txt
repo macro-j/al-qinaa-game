@@ -1,0 +1,23 @@
+"Act as a Senior UI/UX Developer and an Expert Arabic Copywriter. The user completely rejected the current GuideModal.tsx. The text is poorly written, the layout relies on cheap emojis, and there is no real user interaction. We are redesigning it to be highly interactive using the 'Flip Card' mechanic.
+THE TASKS:
+1. Interactive Flip Cards (Real Interaction):
+Replace the static role list with interactive CSS Flip Cards (using transform: rotateY), exactly like the ones we built in ShopModal.tsx.
+Front Side: Show the VenetianMask icon, the Role Name, and a sleek CSS Badge for the team (e.g., <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-900/30 text-red-500 border border-red-800">المافيا</span>). STRICTLY NO EMOJIS.
+Back Side: Show the Role Description (text provided below).
+2. High-Quality Arabic Copy (Replace the old text exactly with this):
+الهدف: القرية تحاول كشف المافيا للنجاة، والمافيا تغتال سكان القرية في الظلام.
+دورة اللعبة - الليل: تُطفأ الأنوار.. تستيقظ المافيا لاختيار الضحية، ويبدأ أصحاب القدرات الخاصة باستخدام قواهم بصمت.
+دورة اللعبة - النهار: تشرق الشمس.. يبدأ النقاش، الاتهامات، والدفاع عن النفس، وينتهي المجلس بتصويت لإعدام المشتبه به.
+الولد (المافيا): يغتال لاعباً واحداً كل ليلة بدم بارد.
+الإكة (المافيا): الكاتم؛ يُسكت لاعباً ويمنعه من الكلام والتصويت في النهار.
+الشايب (القرية): العرّاف؛ يكشف هوية لاعب واحد كل ليلة (مافيا أم بريء).
+البنت (القرية): الحارس؛ تحمي لاعباً من الاغتيال ليلة واحدة.
+المواطن (القرية): لا يملك قدرة ليلية، سلاحه الوحيد هو الذكاء، النقاش، والتصويت.
+المجنون (مستقل): يفوز وحده فقط إذا أقنع المجلس بالتصويت ضده وإعدامه!
+التوأم (القرية): قرويان يعرفان بعضهما.. إذا مات أحدهما، مات الآخر حزناً.
+المنتقم (القرية): إذا قُتل، يختار لاعباً ليأخذه معه إلى القبر فوراً.
+الساحر (القرية): يملك جرعة حياة للإنقاذ، وجرعة سم للقتل (تستخدم مرة واحدة فقط).
+3. Strict UI Polish:
+Ensure perfect RTL layout (dir="rtl", text aligned right).
+Group the roles logically (Main Roles vs. Add-ons).
+Maintain the dark, premium aesthetic. No compile errors."

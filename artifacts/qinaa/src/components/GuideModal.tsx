@@ -1,61 +1,106 @@
 import { useState } from "react";
-import { VenetianMask, BookOpen, X, Moon, Sun } from "lucide-react";
+import { VenetianMask, BookOpen, X, Moon, Sun, RotateCw, ArrowLeft } from "lucide-react";
 
 /**
  * "شرح اللعبة" — public game guide. Self-contained so it can be shown both on
  * the unauthenticated Landing page and from the authenticated GameModeSelector.
- * Pure presentational content (objective + phases + roles); no gameplay logic.
+ * Roles are interactive flip cards (front: identity, back: ability); no gameplay
+ * logic lives here — purely presentational.
  */
 
 type Team = "mafia" | "village" | "solo";
 
-const TEAM_STYLE: Record<Team, { label: string; dot: string; color: string; bg: string; border: string }> = {
-  mafia: { label: "المافيا", dot: "🔴", color: "#F87171", bg: "rgba(211,47,47,0.12)", border: "rgba(211,47,47,0.35)" },
-  village: { label: "القرية", dot: "🟢", color: "#4ADE80", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.35)" },
-  solo: { label: "مستقل", dot: "🟡", color: "#FBBF24", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.35)" },
+const TEAM_LABEL: Record<Team, string> = { mafia: "المافيا", village: "القرية", solo: "مستقل" };
+const TEAM_BADGE: Record<Team, string> = {
+  mafia: "bg-red-900/30 text-red-500 border-red-800",
+  village: "bg-green-900/30 text-green-500 border-green-800",
+  solo: "bg-amber-900/30 text-amber-500 border-amber-800",
 };
 
 type Role = { label: string; color: string; team: Team; desc: string };
 
 const MAIN_ROLES: Role[] = [
-  { label: "الولد", color: "#D32F2F", team: "mafia", desc: "القاتل، يختار ضحية كل ليلة ويبقى مجهولًا." },
-  { label: "الإكة", color: "#B71C1C", team: "mafia", desc: "الكاتم، تُسكت لاعبًا وتمنعه من الكلام صباحًا." },
-  { label: "الشايب", color: "#FF8F00", team: "village", desc: "العرّاف، يكشف هوية لاعب كل ليلة: مافيا أم بريء." },
-  { label: "البنت", color: "#1565C0", team: "village", desc: "الحارس، تحمي لاعبًا من القتل تلك الليلة." },
-  { label: "المواطن", color: "#777777", team: "village", desc: "لا سلطة ليلية، يعتمد على النقاش والتصويت لكشف المافيا." },
+  { label: "الولد", color: "#D32F2F", team: "mafia", desc: "يغتال لاعباً واحداً كل ليلة بدم بارد." },
+  { label: "الإكة", color: "#B71C1C", team: "mafia", desc: "الكاتم؛ يُسكت لاعباً ويمنعه من الكلام والتصويت في النهار." },
+  { label: "الشايب", color: "#FF8F00", team: "village", desc: "العرّاف؛ يكشف هوية لاعب واحد كل ليلة (مافيا أم بريء)." },
+  { label: "البنت", color: "#1565C0", team: "village", desc: "الحارس؛ تحمي لاعباً من الاغتيال ليلة واحدة." },
+  { label: "المواطن", color: "#9CA3AF", team: "village", desc: "لا يملك قدرة ليلية، سلاحه الوحيد هو الذكاء، النقاش، والتصويت." },
 ];
 
 const EXPANSION_ROLES: Role[] = [
-  { label: "المجنون", color: "#E879F9", team: "solo", desc: "يفوز وحده إذا أقنع المجلس بإعدامه نهارًا." },
-  { label: "التوأم", color: "#22D3EE", team: "village", desc: "قرويان يعرفان بعضهما، وإذا مات أحدهما مات الآخر حزنًا." },
-  { label: "المنتقم", color: "#F59E0B", team: "village", desc: "إذا قُتل أو أُعدم، يأخذ لاعبًا معه إلى القبر." },
-  { label: "الساحر", color: "#84CC16", team: "village", desc: "يملك جرعة حياة لإنقاذ ضحية، وجرعة سم للقتل." },
+  { label: "المجنون", color: "#E879F9", team: "solo", desc: "يفوز وحده فقط إذا أقنع المجلس بالتصويت ضده وإعدامه!" },
+  { label: "التوأم", color: "#22D3EE", team: "village", desc: "قرويان يعرفان بعضهما.. إذا مات أحدهما، مات الآخر حزناً." },
+  { label: "المنتقم", color: "#F59E0B", team: "village", desc: "إذا قُتل، يختار لاعباً ليأخذه معه إلى القبر فوراً." },
+  { label: "الساحر", color: "#84CC16", team: "village", desc: "يملك جرعة حياة للإنقاذ، وجرعة سم للقتل (تستخدم مرة واحدة فقط)." },
 ];
 
-function RoleCard({ label, color, team, desc }: Role) {
-  const t = TEAM_STYLE[team];
+function FlipRoleCard({
+  role,
+  flipped,
+  onFlip,
+  onUnflip,
+}: {
+  role: Role;
+  flipped: boolean;
+  onFlip: () => void;
+  onUnflip: () => void;
+}) {
+  const { label, color, team, desc } = role;
   return (
-    <div
-      className="rounded-xl p-4 flex flex-col gap-2.5 transition-colors duration-200"
-      style={{ backgroundColor: "#0D0D0D", border: `1px solid ${color}22` }}>
-      <div className="flex items-center justify-between">
-        <div style={{ filter: `drop-shadow(0 0 10px ${color}55)` }}>
-          <VenetianMask size={30} color={color} strokeWidth={1.4} />
+    <div dir="rtl" className="h-48 [perspective:1200px]">
+      <div
+        className="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d]"
+        style={{ transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}>
+
+        {/* ── Front ── icon / name / team badge ── */}
+        <button
+          type="button"
+          onClick={onFlip}
+          aria-pressed={flipped}
+          aria-label={`عرض قدرة ${label}`}
+          className="absolute inset-0 [backface-visibility:hidden] rounded-2xl p-5 flex flex-col items-center justify-center gap-3 text-center transition-colors duration-200 active:scale-[0.98]"
+          style={{ backgroundColor: "#0D0D0D", border: `1px solid ${color}33` }}>
+          <div style={{ filter: `drop-shadow(0 0 18px ${color}55)` }}>
+            <VenetianMask size={44} color={color} strokeWidth={1} />
+          </div>
+          <span className="text-base font-black" style={{ color }}>{label}</span>
+          <span className={`px-2 py-1 rounded-full text-xs font-bold border ${TEAM_BADGE[team]}`}>
+            {TEAM_LABEL[team]}
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: "#777777" }}>
+            <RotateCw size={12} strokeWidth={2} />
+            اضغط لكشف القدرة
+          </span>
+        </button>
+
+        {/* ── Back ── ability description ── */}
+        <div
+          className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] rounded-2xl p-4 flex flex-col gap-2"
+          style={{ backgroundColor: "#0D0D0D", border: `1px solid ${color}55` }}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-black" style={{ color }}>{label}</span>
+            <button
+              type="button"
+              onClick={onUnflip}
+              aria-label="رجوع"
+              className="flex items-center justify-center w-7 h-7 rounded-full text-white/50 hover:text-white transition-colors active:scale-90"
+              style={{ backgroundColor: "#161616", border: "1px solid #2A2A2A" }}>
+              <ArrowLeft size={14} strokeWidth={2} />
+            </button>
+          </div>
+          <p className="flex-1 text-sm leading-relaxed text-right overflow-y-auto" style={{ color: "#BBBBBB" }}>
+            {desc}
+          </p>
         </div>
-        <span
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-          style={{ backgroundColor: t.bg, color: t.color, border: `1px solid ${t.border}` }}>
-          {t.dot} {t.label}
-        </span>
       </div>
-      <span className="font-black text-base" style={{ color }}>{label}</span>
-      <span className="text-xs leading-relaxed text-right" style={{ color: "#888888" }}>{desc}</span>
     </div>
   );
 }
 
 export function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [phase, setPhase] = useState<"night" | "day">("night");
+  // Which role card currently shows its ability (back face).
+  const [flippedId, setFlippedId] = useState<string | null>(null);
   if (!open) return null;
 
   const isNight = phase === "night";
@@ -102,8 +147,8 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
         <div className="rounded-xl px-4 py-4 flex flex-col gap-2"
           style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
           <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
-          <p className="text-sm leading-relaxed" style={{ color: "#AAAAAA" }}>
-            <span className="text-white font-bold">القرية</span> تكشف المافيا وتصوّت ضدها للنجاة، و<span className="text-white font-bold">المافيا</span> تصفّي القرية دون أن تنكشف.
+          <p className="text-sm leading-relaxed text-right" style={{ color: "#BBBBBB" }}>
+            القرية تحاول كشف المافيا للنجاة، والمافيا تغتال سكان القرية في الظلام.
           </p>
         </div>
 
@@ -133,25 +178,41 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
           <div className="rounded-xl px-4 py-4" style={{ backgroundColor: "#0D0D0D", border: `1px solid ${accent}33` }}>
             <p className="text-sm leading-relaxed text-right" style={{ color: "#BBBBBB" }}>
               {isNight
-                ? "تُطفأ الأنوار وتستيقظ الأدوار الخاصة سرًّا: المافيا تختار ضحيتها، العرّاف يكشف هويةً، والحارس يحمي لاعبًا — كل ذلك في صمتٍ تام."
-                : "تشرق الشمس ويُعلَن من سقط في الليل. يبدأ النقاش والاتهامات، يدافع كل متهمٍ عن نفسه، ثم يصوّت المجلس لإعدام المشتبه به."}
+                ? "تُطفأ الأنوار.. تستيقظ المافيا لاختيار الضحية، ويبدأ أصحاب القدرات الخاصة باستخدام قواهم بصمت."
+                : "تشرق الشمس.. يبدأ النقاش، الاتهامات، والدفاع عن النفس، وينتهي المجلس بتصويت لإعدام المشتبه به."}
             </p>
           </div>
         </div>
 
-        {/* Main roles */}
+        {/* Main roles — flip cards */}
         <div className="flex flex-col gap-3">
           <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#555555" }}>الأدوار الرئيسية</span>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {MAIN_ROLES.map((r) => <RoleCard key={r.label} {...r} />)}
+            {MAIN_ROLES.map((r) => (
+              <FlipRoleCard
+                key={r.label}
+                role={r}
+                flipped={flippedId === r.label}
+                onFlip={() => setFlippedId(r.label)}
+                onUnflip={() => setFlippedId(null)}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Expansion roles */}
+        {/* Expansion roles — flip cards */}
         <div className="flex flex-col gap-3">
           <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#555555" }}>أدوار الإضافات</span>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {EXPANSION_ROLES.map((r) => <RoleCard key={r.label} {...r} />)}
+            {EXPANSION_ROLES.map((r) => (
+              <FlipRoleCard
+                key={r.label}
+                role={r}
+                flipped={flippedId === r.label}
+                onFlip={() => setFlippedId(r.label)}
+                onUnflip={() => setFlippedId(null)}
+              />
+            ))}
           </div>
         </div>
       </div>
