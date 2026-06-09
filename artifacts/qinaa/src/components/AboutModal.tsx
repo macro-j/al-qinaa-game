@@ -100,7 +100,10 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs" style={{ color: "#2A2A2A" }}>© 2026 القناع (علامة تجارية مسجلة)</p>
+        <div className="flex items-center justify-center gap-1.5 text-xs" style={{ color: "#2A2A2A" }} dir="rtl">
+          <span>القناع (علامة تجارية مسجلة)</span>
+          <span dir="ltr">© 2026</span>
+        </div>
       </div>
     </div>
   );
