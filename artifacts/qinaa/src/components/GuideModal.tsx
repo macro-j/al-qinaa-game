@@ -58,7 +58,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
           style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
           <span className="text-[10px] font-bold tracking-[0.25em] uppercase" style={{ color: "#D32F2F" }}>الهدف</span>
           <p className="text-sm leading-relaxed text-right" style={{ color: "#BBBBBB" }}>
-            القرية تحاول كشف المافيا للنجاة، والمافيا تغتال سكان القرية في الظلام.
+          زبدة اللعبة أهل القرية يحاولون يكشفون المافيا ويصوتون ضدهم، والمافيا يحاولون يغتالون القرية واحد ورا الثاني بدون ما ينفضحون.
           </p>
         </div>
 
@@ -90,8 +90,8 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
           <div className="rounded-xl px-4 py-4" style={{ backgroundColor: "#0D0D0D", border: `1px solid ${accent}33` }}>
             <p className="text-sm leading-relaxed text-right" style={{ color: "#BBBBBB" }}>
               {isNight
-                ? "تُطفأ الأنوار.. تستيقظ المافيا لاختيار الضحية، ويبدأ أصحاب القدرات الخاصة باستخدام قواهم بصمت."
-                : "تشرق الشمس.. يبدأ النقاش، الاتهامات، والدفاع عن النفس، وينتهي المجلس بتصويت لإعدام المشتبه به."}
+                ? "لما الجميع ينام: المافيا يصحون ويتفقون على ضحية، والأدوار الخاصة يستخدمون قدراتهم بصمت."
+                : "لما الكل يصحى: تتناقشون وتحللون مين الكذاب، وتصوتون عشان تطردون أكبر مشتبه به برّا اللعبة."}
             </p>
           </div>
         </div>

@@ -116,7 +116,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
 
         {/* Header */}
         <div className="flex flex-col items-center gap-1 text-center pt-1">
-          <h2 className="text-xl font-black text-white">باقات قناع</h2>
+          <h2 className="text-xl font-black text-white">باقات القناع</h2>
           <p className="text-sm" style={{ color: "#888888" }}>اختر تجربتك</p>
         </div>
         <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
@@ -133,7 +133,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
-              تجربة اللعبة لمرتين مجاناً بالأدوار الأساسية فقط لاستكشاف الأجواء.
+            وصول مجاني للأدوار الرئيسية لمرتين فقط.
             </p>
             {entitlementsLoading ? (
               checkingBadge
@@ -165,7 +165,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#888888" }}>
-              لعب غير محدود للأدوار الرئيسية للأبد.
+              وصول لا محدود للأدوار الرئيسية للأبد.
             </p>
             {entitlementsLoading ? (
               checkingBadge
@@ -210,7 +210,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
             <div style={{ height: "1px", backgroundColor: "rgba(245,158,11,0.22)" }} />
             <p className="text-sm leading-relaxed flex-1" style={{ color: "#D4B97A" }}>
-              كل الأدوار الحالية والمستقبلية.
+            التجربة الكاملة للعبة بجميع أدوارها بلا قيود.
             </p>
             {entitlementsLoading ? (
               checkingBadge
