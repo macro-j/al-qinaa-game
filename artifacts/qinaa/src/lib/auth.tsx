@@ -225,5 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshEntitlements,
   };
 
+  // 🛑 التعديل السحري: قفل الحماية 🛑
+  // إذا كانت حالة الاتصال قيد التحقق (تحديث الصفحة)، نعرض شاشة تحميل بسيطة
+  // بدل ما نمرر الـ children وتطرد اللعبة اللاعب.
+  if (loading) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ backgroundColor: "#111111" }}
+        dir="rtl"
+      >
+        <div className="flex flex-col items-center gap-5">
+          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-white font-bold tracking-wide">جارٍ تجهيز مسرح الجريمة...</p>
+        </div>
+      </div>
+    );
+  }
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
