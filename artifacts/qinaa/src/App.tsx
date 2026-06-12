@@ -1047,6 +1047,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       "e1.m4a", "e2.m4a", "e3.m4a",
       "s1.m4a", "s2.m4a", "s3.m4a",
       "b1.m4a", "b2.m4a", "b3.m4a",
+      "wh1.m4a", "wh2.m4a", "wh3.m4a",
       "morning.m4a", "success.m4a", "fail.m4a",
       "mafia_win.mp3", "town_win.mp3", "madman_win.mp3",
     ];
@@ -1114,9 +1115,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Night-phase audio maps — used by inline triggers at every
   // setNightTransition() site so audio fires in the same callstack frame
   // as the state change (no decoupled effect, no race conditions).
-  const NIGHT_WAKE_AUDIO:   Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
-  const NIGHT_PROMPT_AUDIO: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
-  const NIGHT_SLEEP_AUDIO:  Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
+  const NIGHT_WAKE_AUDIO:   Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "magician": "wh1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
+  const NIGHT_PROMPT_AUDIO: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "magician": "wh2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
+  const NIGHT_SLEEP_AUDIO:  Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "magician": "wh3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
   const playRoleAudio = (kind: "wake" | "prompt" | "sleep", role: string) => {
     const map = kind === "wake" ? NIGHT_WAKE_AUDIO : kind === "prompt" ? NIGHT_PROMPT_AUDIO : NIGHT_SLEEP_AUDIO;
     const file = map[role];
@@ -1586,7 +1587,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (nightStep === "البنت")  newActions.protectTarget     = selectedTarget;
 
     if (nightStep === "magician") {
-      // TODO: Play Magician Voiceover
       // Potion consumption depends on `magicianPotionMode`:
       //   • "dual"   — heal and poison are independent. Each click only
       //                burns its own flag, and both may fire in the same night.
