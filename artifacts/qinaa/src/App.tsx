@@ -294,10 +294,30 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showTerms,   setShowTerms]   = useState(false);
   const [showSupport, setShowSupport] = useState(false);
-  const [showAuth,    setShowAuth]    = useState(false);
+
+  // 🛑 التعديل الذكي: قراءة الرابط عند تحميل الصفحة 🛑
+  const [showAuth, setShowAuth] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("auth") === "true";
+    }
+    return false;
+  });
+
   const { openShop } = useShop();
   const { user, entitlements, signOut } = useAuth();
   const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
+
+  // 🛑 التعديل الذكي الثاني: إضافة وحذف كلمة auth من الرابط تلقائياً 🛑
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (showAuth) {
+      url.searchParams.set("auth", "true");
+    } else {
+      url.searchParams.delete("auth");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [showAuth]);
 
   return (
     <div className="min-h-full w-full flex flex-col relative" style={ROOT_STYLE}>
