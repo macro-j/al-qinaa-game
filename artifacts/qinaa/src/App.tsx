@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { io, type Socket } from "socket.io-client";
 import QRCode from "react-qr-code";
@@ -64,6 +64,7 @@ interface SocketPlayer {
 interface AssignedPlayer extends SocketPlayer {
   roleLabel: string;
   roleColor: string;
+  isAlive?: boolean;
 }
 
 interface LobbyState {
@@ -798,11 +799,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "execution_results" | "game_over">(() => pick("phase", "setup" as const));
 
   // ── Entitlement counter — observe (never drive) the phase machine ──
-  // 🛑 التعديل: خصم المحاولة بمجرد بدء التوزيع لمنع التخريب وإلغاء اللعبة في المنتصف
-  const gameCountedRef = useRef(phase !== "setup");
+  // Init true when a finished game is restored from storage so a refresh on
+  // the game-over screen never double-counts. Resets when a new round begins.
+  const gameCountedRef = useRef(phase === "game_over");
   useEffect(() => {
-    // الخصم يصير أول ما تبدأ شاشة "الجميع ينام" (pre_distribution)
-    if (phase === "pre_distribution") {
+    if (phase === "game_over") {
       if (!gameCountedRef.current) {
         gameCountedRef.current = true;
         void incrementGamesPlayed();
@@ -811,13 +812,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       gameCountedRef.current = false;
     }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
   const [isPressing, setIsPressing]             = useState(false);
   const [hasRevealedOnce, setHasRevealedOnce]   = useState(() => pick("hasRevealedOnce", false));
   const [isCardFlipped, setIsCardFlipped]       = useState(false);
+
   // ── Game loop state ──
   const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => pick("livePlayers", [] as LivePlayer[]));
   const [nightStep, setNightStep]               = useState<string>(() => pick("nightStep", "الولد"));
@@ -6449,15 +6450,8 @@ export default function App() {
       socket.emit(
         "rejoinRoom",
         { code: session.code, userId: uid, name: session.myName },
-        (res:
-          | { code: string; players: { socketId: string; name: string }[]; started: false }
-          | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
-          | { code: string; started: true; isHost: false; myRole: { label: string; color: string };
-              activeGamePhase: string; myVote: string | null; isAlive: boolean;
-              deathReason: "assassinated" | "executed" | null }
-          | { error: string }
-        ) => {
-          if ("error" in res) {
+        (res: any) => {
+          if (res.error) {
             clearSession();
             setScreen("menu");
             return;
@@ -6793,25 +6787,20 @@ export default function App() {
     socket.emit(
       "joinRoom",
       { name, code, userId: uid },
-      (res:
-        | { code: string; players: { socketId: string; name: string }[]; started: boolean }
-        | { code: string; started: true; isHost: true;  players: AssignedPlayer[] }
-        | { code: string; started: true; isHost: false; myRole: { label: string; color: string } }
-        | { error: string }
-      ) => {
-        if ("error" in res) { onError(res.error); return; }
+      (res: any) => {
+        if (res.error) { onError(res.error); return; }
         setInitialJoinCode("");
         saveSession({ code: res.code, isHost: false, myName: name });
 
-        if ("started" in res && res.started) {
+        if (res.started) {
           // Mid-game rejoin: restore state and go straight to game screen
           setLobby({ code: res.code, isHost: res.isHost, myName: name, players: [] });
-          if (res.isHost && "players" in res) {
+          if (res.isHost && res.players) {
             isHostRef.current = true;
             setGame({ code: res.code, players: res.players, myName: name, wolfAllies: [] });
-            setAlivePlayerNames(res.players.filter((p) => p.isAlive).map((p) => p.name));
+            setAlivePlayerNames(res.players.filter((p: any) => p.isAlive).map((p: any) => p.name));
             setScreen("dashboard");
-          } else if (!res.isHost && "myRole" in res) {
+          } else if (!res.isHost && res.myRole) {
             isHostRef.current = false;
             setPlayerRole({ label: res.myRole.label, color: res.myRole.color, code: res.code, myName: name, players: [], wolfAllies: [] });
             setScreen("player-screen");
@@ -6820,7 +6809,7 @@ export default function App() {
         }
 
         // Normal pre-game join
-        const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: (res as { players: { socketId: string; name: string }[] }).players };
+        const newLobby: LobbyState = { code: res.code, isHost: false, myName: name, players: res.players };
         setLobby(newLobby);
         setScreen("lobby");
       },
