@@ -798,11 +798,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "execution_results" | "game_over">(() => pick("phase", "setup" as const));
 
   // ── Entitlement counter — observe (never drive) the phase machine ──
-  // Init true when a finished game is restored from storage so a refresh on
-  // the game-over screen never double-counts. Resets when a new round begins.
-  const gameCountedRef = useRef(phase === "game_over");
+  // 🛑 التعديل: خصم المحاولة بمجرد بدء التوزيع لمنع التخريب وإلغاء اللعبة في المنتصف
+  const gameCountedRef = useRef(phase !== "setup");
   useEffect(() => {
-    if (phase === "game_over") {
+    // الخصم يصير أول ما تبدأ شاشة "الجميع ينام" (pre_distribution)
+    if (phase === "pre_distribution") {
       if (!gameCountedRef.current) {
         gameCountedRef.current = true;
         void incrementGamesPlayed();
@@ -811,13 +811,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       gameCountedRef.current = false;
     }
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
   // Hold-to-reveal state (mirrors Online Mode's onPointerDown/Up pattern)
   const [isPressing, setIsPressing]             = useState(false);
   const [hasRevealedOnce, setHasRevealedOnce]   = useState(() => pick("hasRevealedOnce", false));
   const [isCardFlipped, setIsCardFlipped]       = useState(false);
-
   // ── Game loop state ──
   const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => pick("livePlayers", [] as LivePlayer[]));
   const [nightStep, setNightStep]               = useState<string>(() => pick("nightStep", "الولد"));
