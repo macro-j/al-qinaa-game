@@ -68,10 +68,21 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
     setBusy(null);
     
     if (error) {
-      // التفريق بين خطأ كثرة المحاولات (Rate Limit) وأي خطأ آخر
-      const errMsg = typeof error === "string" ? error.toLowerCase() : ((error as any).message || "").toLowerCase();      const status = (error as any).status;
+      // سطر للمراقبة: يطبع الخطأ الحقيقي في الكونسول عشان لو احتجناه
+      console.log("Supabase Auth Error:", error);
+
+      const errMsg = typeof error === "string" ? error.toLowerCase() : ((error as any).message || "").toLowerCase();
+      const status = (error as any).status;
       
-      if (status === 429 || errMsg.includes("rate_limit") || errMsg.includes("too many")) {
+      // شبكة صيد أوسع: تشمل كل الكلمات اللي ممكن يستخدمها سوبابيز للمنع المؤقت
+      if (
+        status === 429 || 
+        errMsg.includes("rate") || 
+        errMsg.includes("too many") || 
+        errMsg.includes("60 seconds") || 
+        errMsg.includes("security") ||
+        errMsg.includes("limit")
+      ) {
         setError("رجاءً انتظر 60 ثانية قبل طلب رابط جديد.");
       } else {
         setError("تأكد من صحة البريد وحاول مجدداً.");
