@@ -160,13 +160,13 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
               <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
             </div>
 
-            {/* Email magic link */}
-            <form onSubmit={handleEmail} className="w-full flex flex-col gap-3">
+           {/* Email magic link */}
+           <form onSubmit={handleEmail} className="w-full flex flex-col gap-3">
               
               {isCustomDomain ? (
                 // إدخال الإيميل المخصص
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)" }}>
+                  <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
                     <Mail size={18} className="shrink-0" style={{ color: "#666666" }} />
                     <input
                       type="email"
@@ -186,9 +186,9 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                   </button>
                 </div>
               ) : (
-                // القائمة المنسدلة والاسم
+                // القائمة المنسدلة والاسم (الترتيب الصحيح: الاسم يسار والنطاق يمين)
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
+                  <div className="flex-1 flex flex-row items-center gap-2 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
                     
                     {/* حقل اسم المستخدم */}
                     <input
@@ -197,13 +197,14 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                       value={emailName}
                       onChange={(e) => setEmailName(e.target.value.replace(/@.*/, ''))} // يمنع المستخدم من كتابة @ هنا
                       placeholder="username"
-                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-right"
+                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
                     />
                     
-                    <div style={{ width: "1px", height: "20px", backgroundColor: "#333" }} />
+                    {/* خط فاصل أنيق بين الاسم والنطاق */}
+                    <div style={{ width: "1px", height: "18px", backgroundColor: "rgba(255,255,255,0.15)" }} />
                     
                     {/* القائمة المنسدلة للنطاق */}
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <select
                         value={domain}
                         onChange={(e) => {
@@ -213,16 +214,16 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
                             setDomain(e.target.value);
                           }
                         }}
-                        className="appearance-none bg-transparent text-sm text-neutral-300 outline-none cursor-pointer pr-4 pl-1 text-left"
+                        className="appearance-none bg-transparent text-sm text-neutral-300 outline-none cursor-pointer pr-4 pl-1 text-left font-medium"
                         style={{ direction: "ltr" }}
                       >
-                        <option value="@gmail.com">@gmail.com</option>
-                        <option value="@hotmail.com">@hotmail.com</option>
-                        <option value="@outlook.com">@outlook.com</option>
-                        <option value="@icloud.com">@icloud.com</option>
-                        <option value="custom">مخصص...</option>
+                        <option value="@gmail.com" className="bg-neutral-900">@gmail.com</option>
+                        <option value="@hotmail.com" className="bg-neutral-900">@hotmail.com</option>
+                        <option value="@outlook.com" className="bg-neutral-900">@outlook.com</option>
+                        <option value="@icloud.com" className="bg-neutral-900">@icloud.com</option>
+                        <option value="custom" className="bg-neutral-900">مخصص...</option>
                       </select>
-                      <span className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] text-neutral-500">
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] text-neutral-500">
                         ▼
                       </span>
                     </div>
