@@ -40,6 +40,9 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
       setBusy(null);
       setError(null);
       setSent(false);
+      // 🛑 السطرين الجدد لتصفير الذاكرة 🛑
+      setShowTerms(false);
+      setShowPrivacy(false);
     }
   }, [open]);
   const handleGoogle = async () => {
@@ -95,192 +98,194 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
-      onClick={onClose}>
-
-      {/* Top navbar — single right-side X, taps fall through to backdrop */}
+    <>
       <div
-        dir="rtl"
-        className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
-        <button
-          onClick={onClose}
-          title="إغلاق"
-          aria-label="إغلاق تسجيل الدخول"
-          className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
-          style={{
-            backgroundColor: "rgba(13,13,13,0.55)",
-            border: "1px solid rgba(255,255,255,0.06)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-          }}>
-          <X size={18} strokeWidth={2} />
-        </button>
-      </div>
+        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
+        onClick={onClose}>
 
-      <div
-        dir="rtl"
-        className="relative w-full max-w-sm rounded-2xl p-6 flex flex-col items-center gap-7 shadow-2xl"
-        style={{ backgroundColor: "#0D0D0D", border: "1px solid rgba(255,255,255,0.08)" }}
-        onClick={(e) => e.stopPropagation()}>
-
-        {/* Ambient crimson glow */}
+        {/* Top navbar — single right-side X, taps fall through to backdrop */}
         <div
-          className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden"
-          style={{ background: "radial-gradient(60% 50% at 50% 0%, rgba(211,47,47,0.10), transparent 70%)" }} />
-
-        {/* Heading */}
-        <div className="relative flex flex-col items-center gap-1.5 text-center pt-1">
-          <h2 className="text-2xl font-black" style={{ color: "#ffffff" }}>ابدأ اللعب</h2>
-          <p className="text-sm" style={{ color: "#888888" }}>سجّل دخولك لتبدأ اللعب</p>
+          dir="rtl"
+          className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
+          <button
+            onClick={onClose}
+            title="إغلاق"
+            aria-label="إغلاق تسجيل الدخول"
+            className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+            style={{
+              backgroundColor: "rgba(13,13,13,0.55)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}>
+            <X size={18} strokeWidth={2} />
+          </button>
         </div>
 
-        {sent ? (
-          /* Magic-link sent state */
-          <div className="relative w-full flex flex-col items-center gap-4 text-center">
-            <CheckCircle2 size={48} strokeWidth={1.6} className="text-emerald-400" />
-            <p className="text-base font-bold text-white">تحقّق من بريدك الإلكتروني</p>
-            <p className="text-sm leading-relaxed" style={{ color: "#999999" }}>
-              أرسلنا رابط دخول سريع إلى <span dir="ltr" className="text-white font-bold inline-block">{isCustomDomain ? emailName : `${emailName}${domain}`}</span>.
-              افتح الرابط من نفس الجهاز لإكمال تسجيل الدخول.
-            </p>
-            <button
-              onClick={() => { setSent(false); setEmailName(""); setIsCustomDomain(false); }}
-              className="text-sm font-bold transition-colors hover:text-white"
-              style={{ color: "#D32F2F" }}>
-              استخدام بريد آخر
-            </button>
+        <div
+          dir="rtl"
+          className="relative w-full max-w-sm rounded-2xl p-6 flex flex-col items-center gap-7 shadow-2xl"
+          style={{ backgroundColor: "#0D0D0D", border: "1px solid rgba(255,255,255,0.08)" }}
+          onClick={(e) => e.stopPropagation()}>
+
+          {/* Ambient crimson glow */}
+          <div
+            className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden"
+            style={{ background: "radial-gradient(60% 50% at 50% 0%, rgba(211,47,47,0.10), transparent 70%)" }} />
+
+          {/* Heading */}
+          <div className="relative flex flex-col items-center gap-1.5 text-center pt-1">
+            <h2 className="text-2xl font-black" style={{ color: "#ffffff" }}>ابدأ اللعب</h2>
+            <p className="text-sm" style={{ color: "#888888" }}>سجّل دخولك لتبدأ اللعب</p>
           </div>
-        ) : (
-          <div className="relative w-full flex flex-col gap-4">
 
-            {/* Google OAuth */}
-            <button
-              onClick={handleGoogle}
-              disabled={busy !== null}
-              className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl font-bold text-sm bg-white text-neutral-900 transition-all duration-150 hover:bg-neutral-100 active:scale-[0.98] disabled:opacity-60">
-              {busy === "google" ? <Loader2 size={18} className="animate-spin" /> : <GoogleIcon />}
-              <span>تسجيل الدخول باستخدام Google</span>
-            </button>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
-              <span className="text-xs" style={{ color: "#555555" }}>أو</span>
-              <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
-            </div>
-
-           {/* Email magic link */}
-           <form onSubmit={handleEmail} className="w-full flex flex-col gap-3">
-              
-              {isCustomDomain ? (
-                // إدخال الإيميل المخصص
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
-                    <Mail size={18} className="shrink-0" style={{ color: "#666666" }} />
-                    <input
-                      type="email"
-                      dir="ltr"
-                      value={emailName}
-                      onChange={(e) => setEmailName(e.target.value)}
-                      placeholder="name@example.com"
-                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
-                    />
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={() => { setIsCustomDomain(false); setEmailName(""); setDomain("@gmail.com"); }}
-                    className="px-3 py-3 rounded-2xl text-xs font-bold transition-all active:scale-95 shrink-0"
-                    style={{ backgroundColor: "transparent", border: "1px solid #333", color: "#888" }}>
-                    رجوع
-                  </button>
-                </div>
-              ) : (
-                // القائمة المنسدلة والاسم (الترتيب الصحيح: الاسم يسار والنطاق يمين)
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex flex-row items-center gap-2 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
-                    
-                    {/* حقل اسم المستخدم */}
-                    <input
-                      type="text"
-                      dir="ltr"
-                      value={emailName}
-                      onChange={(e) => setEmailName(e.target.value.replace(/@.*/, ''))} // يمنع المستخدم من كتابة @ هنا
-                      placeholder="username"
-                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
-                    />
-                    
-                    {/* خط فاصل أنيق بين الاسم والنطاق */}
-                    <div style={{ width: "1px", height: "18px", backgroundColor: "rgba(255,255,255,0.15)" }} />
-                    
-                    {/* القائمة المنسدلة للنطاق */}
-                    <div className="relative shrink-0">
-                      <select
-                        value={domain}
-                        onChange={(e) => {
-                          if (e.target.value === "custom") {
-                            setIsCustomDomain(true);
-                          } else {
-                            setDomain(e.target.value);
-                          }
-                        }}
-                        className="appearance-none bg-transparent text-sm text-neutral-300 outline-none cursor-pointer pr-4 pl-1 text-left font-medium"
-                        style={{ direction: "ltr" }}
-                      >
-                        <option value="@gmail.com" className="bg-neutral-900">@gmail.com</option>
-                        <option value="@hotmail.com" className="bg-neutral-900">@hotmail.com</option>
-                        <option value="@outlook.com" className="bg-neutral-900">@outlook.com</option>
-                        <option value="@icloud.com" className="bg-neutral-900">@icloud.com</option>
-                        <option value="custom" className="bg-neutral-900">مخصص...</option>
-                      </select>
-                      <span className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] text-neutral-500">
-                        ▼
-                      </span>
-                    </div>
-
-                  </div>
-                </div>
-              )}
-
+          {sent ? (
+            /* Magic-link sent state */
+            <div className="relative w-full flex flex-col items-center gap-4 text-center">
+              <CheckCircle2 size={48} strokeWidth={1.6} className="text-emerald-400" />
+              <p className="text-base font-bold text-white">تحقّق من بريدك الإلكتروني</p>
+              <p className="text-sm leading-relaxed" style={{ color: "#999999" }}>
+                أرسلنا رابط دخول سريع إلى <span dir="ltr" className="text-white font-bold inline-block">{isCustomDomain ? emailName : `${emailName}${domain}`}</span>.
+                افتح الرابط من نفس الجهاز لإكمال تسجيل الدخول.
+              </p>
               <button
-                type="submit"
-                disabled={busy !== null}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-60 mt-1"
-                style={{ backgroundColor: "#D32F2F" }}>
-                {busy === "email"
-                  ? <Loader2 size={18} className="animate-spin" />
-                  : <><span>الدخول السريع عبر البريد</span><ArrowRight size={16} /></>}
+                onClick={() => { setSent(false); setEmailName(""); setIsCustomDomain(false); }}
+                className="text-sm font-bold transition-colors hover:text-white"
+                style={{ color: "#D32F2F" }}>
+                استخدام بريد آخر
               </button>
-            </form>
+            </div>
+          ) : (
+            <div className="relative w-full flex flex-col gap-4">
 
-            {error && (
-              <p className="text-sm text-center" style={{ color: "#EF5350" }}>{error}</p>
-            )}
-          </div>
-        )}
+              {/* Google OAuth */}
+              <button
+                onClick={handleGoogle}
+                disabled={busy !== null}
+                className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl font-bold text-sm bg-white text-neutral-900 transition-all duration-150 hover:bg-neutral-100 active:scale-[0.98] disabled:opacity-60">
+                {busy === "google" ? <Loader2 size={18} className="animate-spin" /> : <GoogleIcon />}
+                <span>تسجيل الدخول باستخدام Google</span>
+              </button>
 
-        <p className="relative text-center text-xs leading-relaxed" style={{ color: "#555555" }}>
-          بتسجيل الدخول، فإنك توافق على{" "}
-          <button
-            type="button"
-            onClick={() => setShowTerms(true)}
-            className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
-            شروط الاستخدام
-          </button>{" "}
-          و
-          <button
-            type="button"
-            onClick={() => setShowPrivacy(true)}
-            className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
-            سياسة الخصوصية
-          </button>{" "}
-          الخاصة بلعبة القناع.
-        </p>
+              {/* Divider */}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
+                <span className="text-xs" style={{ color: "#555555" }}>أو</span>
+                <div className="flex-1 h-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }} />
+              </div>
+
+              {/* Email magic link */}
+              <form onSubmit={handleEmail} className="w-full flex flex-col gap-3">
+                
+                {isCustomDomain ? (
+                  // إدخال الإيميل المخصص
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
+                      <Mail size={18} className="shrink-0" style={{ color: "#666666" }} />
+                      <input
+                        type="email"
+                        dir="ltr"
+                        value={emailName}
+                        onChange={(e) => setEmailName(e.target.value)}
+                        placeholder="name@example.com"
+                        className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
+                      />
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => { setIsCustomDomain(false); setEmailName(""); setDomain("@gmail.com"); }}
+                      className="px-3 py-3 rounded-2xl text-xs font-bold transition-all active:scale-95 shrink-0"
+                      style={{ backgroundColor: "transparent", border: "1px solid #333", color: "#888" }}>
+                      رجوع
+                    </button>
+                  </div>
+                ) : (
+                  // القائمة المنسدلة والاسم
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex flex-row items-center gap-2 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
+                      
+                      {/* حقل اسم المستخدم */}
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={emailName}
+                        onChange={(e) => setEmailName(e.target.value.replace(/@.*/, ''))}
+                        placeholder="username"
+                        className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
+                      />
+                      
+                      <div style={{ width: "1px", height: "18px", backgroundColor: "rgba(255,255,255,0.15)" }} />
+                      
+                      {/* القائمة المنسدلة للنطاق */}
+                      <div className="relative shrink-0">
+                        <select
+                          value={domain}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setIsCustomDomain(true);
+                            } else {
+                              setDomain(e.target.value);
+                            }
+                          }}
+                          className="appearance-none bg-transparent text-sm text-neutral-300 outline-none cursor-pointer pr-4 pl-1 text-left font-medium"
+                          style={{ direction: "ltr" }}
+                        >
+                          <option value="@gmail.com" className="bg-neutral-900">@gmail.com</option>
+                          <option value="@hotmail.com" className="bg-neutral-900">@hotmail.com</option>
+                          <option value="@outlook.com" className="bg-neutral-900">@outlook.com</option>
+                          <option value="@icloud.com" className="bg-neutral-900">@icloud.com</option>
+                          <option value="custom" className="bg-neutral-900">مخصص...</option>
+                        </select>
+                        <span className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] text-neutral-500">
+                          ▼
+                        </span>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy !== null}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-60 mt-1"
+                  style={{ backgroundColor: "#D32F2F" }}>
+                  {busy === "email"
+                    ? <Loader2 size={18} className="animate-spin" />
+                    : <><span>الدخول السريع عبر البريد</span><ArrowRight size={16} /></>}
+                </button>
+              </form>
+
+              {error && (
+                <p className="text-sm text-center" style={{ color: "#EF5350" }}>{error}</p>
+              )}
+            </div>
+          )}
+
+          <p className="relative text-center text-xs leading-relaxed" style={{ color: "#555555" }}>
+            بتسجيل الدخول، فإنك توافق على{" "}
+            <button
+              type="button"
+              onClick={() => setShowTerms(true)}
+              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+              شروط الاستخدام
+            </button>{" "}
+            و
+            <button
+              type="button"
+              onClick={() => setShowPrivacy(true)}
+              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+              سياسة الخصوصية
+            </button>{" "}
+            الخاصة بلعبة القناع.
+          </p>
+        </div>
       </div>
 
+      {/* 🛑 عزلنا النوافذ الفرعية تماماً برا الـ div الأساسي عشان ما تتأثر بالنقرات ولا تعلق 🛑 */}
       <TermsModal open={showTerms} onClose={() => setShowTerms(false)} />
       <PrivacyModal open={showPrivacy} onClose={() => setShowPrivacy(false)} />
-    </div>
+    </>
   );
 }
