@@ -22,8 +22,9 @@ function GoogleIcon() {
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { signInWithGoogle, signInWithEmail } = useAuth();
-  const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState<"google" | "email" | null>(null);
+  const [emailName, setEmailName] = useState("");
+  const [domain, setDomain] = useState("@gmail.com");
+  const [isCustomDomain, setIsCustomDomain] = useState(false);  const [busy, setBusy] = useState<"google" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -33,13 +34,14 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
   // starts clean (no stale email/error/sent state from a previous attempt).
   useEffect(() => {
     if (!open) {
-      setEmail("");
+      setEmailName("");
+      setDomain("@gmail.com");
+      setIsCustomDomain(false);
       setBusy(null);
       setError(null);
       setSent(false);
     }
   }, [open]);
-
   const handleGoogle = async () => {
     setError(null);
     setBusy("google");
@@ -53,17 +55,27 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setError("يرجى إدخال بريد إلكتروني صالح.");
+    const finalEmail = isCustomDomain ? emailName.trim() : `${emailName.trim()}${domain}`;
+    
+    if (!finalEmail || !finalEmail.includes("@")) {
+      setError("صيغة البريد غير صحيحة.");
       return;
     }
+
     setError(null);
     setBusy("email");
-    const { error } = await signInWithEmail(trimmed);
+    const { error } = await signInWithEmail(finalEmail);
     setBusy(null);
+    
     if (error) {
-      setError("تعذّر إرسال رابط الدخول. تأكد من البريد وحاول مجدداً.");
+      // التفريق بين خطأ كثرة المحاولات (Rate Limit) وأي خطأ آخر
+      const errMsg = typeof error === "string" ? error.toLowerCase() : ((error as any).message || "").toLowerCase();      const status = (error as any).status;
+      
+      if (status === 429 || errMsg.includes("rate_limit") || errMsg.includes("too many")) {
+        setError("رجاءً انتظر 60 ثانية قبل طلب رابط جديد.");
+      } else {
+        setError("تأكد من صحة البريد وحاول مجدداً.");
+      }
       return;
     }
     setSent(true);
@@ -119,11 +131,11 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             <CheckCircle2 size={48} strokeWidth={1.6} className="text-emerald-400" />
             <p className="text-base font-bold text-white">تحقّق من بريدك الإلكتروني</p>
             <p className="text-sm leading-relaxed" style={{ color: "#999999" }}>
-              أرسلنا رابط دخول سريع إلى <span className="text-white font-bold">{email}</span>.
+              أرسلنا رابط دخول سريع إلى <span dir="ltr" className="text-white font-bold inline-block">{isCustomDomain ? emailName : `${emailName}${domain}`}</span>.
               افتح الرابط من نفس الجهاز لإكمال تسجيل الدخول.
             </p>
             <button
-              onClick={() => { setSent(false); setEmail(""); }}
+              onClick={() => { setSent(false); setEmailName(""); setIsCustomDomain(false); }}
               className="text-sm font-bold transition-colors hover:text-white"
               style={{ color: "#D32F2F" }}>
               استخدام بريد آخر
@@ -150,25 +162,79 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
 
             {/* Email magic link */}
             <form onSubmit={handleEmail} className="w-full flex flex-col gap-3">
-              <div
-                className="flex items-center gap-3 px-4 py-3 rounded-2xl"
-                style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)" }}>
-                <Mail size={18} className="shrink-0" style={{ color: "#666666" }} />
-                <input
-                  type="email"
-                  inputMode="email"
-                  dir="ltr"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="example@email.com"
-                  className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-right"
-                  style={{ direction: "ltr" }}
-                />
-              </div>
+              
+              {isCustomDomain ? (
+                // إدخال الإيميل المخصص
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    <Mail size={18} className="shrink-0" style={{ color: "#666666" }} />
+                    <input
+                      type="email"
+                      dir="ltr"
+                      value={emailName}
+                      onChange={(e) => setEmailName(e.target.value)}
+                      placeholder="name@example.com"
+                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-left"
+                    />
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => { setIsCustomDomain(false); setEmailName(""); setDomain("@gmail.com"); }}
+                    className="px-3 py-3 rounded-2xl text-xs font-bold transition-all active:scale-95 shrink-0"
+                    style={{ backgroundColor: "transparent", border: "1px solid #333", color: "#888" }}>
+                    رجوع
+                  </button>
+                </div>
+              ) : (
+                // القائمة المنسدلة والاسم
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-2xl" style={{ backgroundColor: "#111111", border: "1px solid rgba(255,255,255,0.10)", direction: "ltr" }}>
+                    
+                    {/* حقل اسم المستخدم */}
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={emailName}
+                      onChange={(e) => setEmailName(e.target.value.replace(/@.*/, ''))} // يمنع المستخدم من كتابة @ هنا
+                      placeholder="username"
+                      className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-600 outline-none text-right"
+                    />
+                    
+                    <div style={{ width: "1px", height: "20px", backgroundColor: "#333" }} />
+                    
+                    {/* القائمة المنسدلة للنطاق */}
+                    <div className="relative">
+                      <select
+                        value={domain}
+                        onChange={(e) => {
+                          if (e.target.value === "custom") {
+                            setIsCustomDomain(true);
+                          } else {
+                            setDomain(e.target.value);
+                          }
+                        }}
+                        className="appearance-none bg-transparent text-sm text-neutral-300 outline-none cursor-pointer pr-4 pl-1 text-left"
+                        style={{ direction: "ltr" }}
+                      >
+                        <option value="@gmail.com">@gmail.com</option>
+                        <option value="@hotmail.com">@hotmail.com</option>
+                        <option value="@outlook.com">@outlook.com</option>
+                        <option value="@icloud.com">@icloud.com</option>
+                        <option value="custom">مخصص...</option>
+                      </select>
+                      <span className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] text-neutral-500">
+                        ▼
+                      </span>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={busy !== null}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-60 mt-1"
                 style={{ backgroundColor: "#D32F2F" }}>
                 {busy === "email"
                   ? <Loader2 size={18} className="animate-spin" />
