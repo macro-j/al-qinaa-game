@@ -6239,6 +6239,18 @@ export default function App() {
     }
   }, [authLoading, user, selectedMode]);
 
+  const [needsResume, setNeedsResume] = useState(false);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setNeedsResume(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
   const [screen, setScreen]         = useState<Screen>("rejoining");
   const [lobby, setLobby]           = useState<LobbyState | null>(null);
   const [game, setGame]             = useState<GameState | null>(null);
@@ -6809,9 +6821,58 @@ export default function App() {
     );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const audioResumeOverlay = needsResume ? (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer"
+      style={{
+        backgroundColor: "rgba(0,0,0,0.75)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+      }}
+      onClick={() => {
+        const unlockAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+        unlockAudio.play().catch(() => {});
+        setNeedsResume(false);
+      }}
+      role="button"
+      aria-label="استئناف اللعب وتشغيل الصوت"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center gap-5 px-10 py-8 text-center max-w-sm"
+      >
+        <div
+          className="flex items-center justify-center rounded-full"
+          style={{
+            width: 88,
+            height: 88,
+            backgroundColor: "rgba(211,47,47,0.15)",
+            border: "1.5px solid rgba(211,47,47,0.35)",
+            boxShadow: "0 0 40px rgba(211,47,47,0.2)",
+          }}
+        >
+          <Volume2 size={40} color="#D32F2F" strokeWidth={1.6} />
+        </div>
+        <h2 className="text-2xl font-black text-white">تم إيقاف اللعبة مؤقتاً</h2>
+        <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.65)" }}>
+          اضغط هنا لاستئناف اللعب وتشغيل الصوت
+        </p>
+      </motion.div>
+    </div>
+  ) : null;
+
+  const wrapWithResumeOverlay = (node: ReactNode) => (
+    <>
+      {audioResumeOverlay}
+      {node}
+    </>
+  );
+
   // ── Auth gate — no game screen is reachable until signed in ──────────────
   if (authLoading) {
-    return (
+    return wrapWithResumeOverlay(
       <div className="min-h-full w-full flex items-center justify-center" style={{ backgroundColor: "#000000" }}>
         <Loader2 size={32} className="animate-spin" style={{ color: "#D32F2F" }} />
       </div>
@@ -6824,47 +6885,65 @@ export default function App() {
   // `!user` check also covers a stale "narrator" persisted from a prior session
   // or localStorage tampering.
   if (selectedMode === null || !user) {
-    return <GameModeSelector onSelect={setSelectedMode} />;
+    return wrapWithResumeOverlay(<GameModeSelector onSelect={setSelectedMode} />);
   }
   if (selectedMode === "narrator") {
-    return <NarratorMode onBack={() => { clearNarratorState(); setSelectedMode(null); }} />;
+    return wrapWithResumeOverlay(
+      <NarratorMode onBack={() => { clearNarratorState(); setSelectedMode(null); }} />
+    );
   }
 
   // ── Online Mode: all existing screen rendering below (untouched) ──────────
   const banner = <ConnectionBanner connected={isConnected} />;
 
   if (screen === "rejoining") {
-    return <RejoiningScreen onGiveUp={() => { clearSession(); setScreen("menu"); }} />;
+    return wrapWithResumeOverlay(
+      <RejoiningScreen onGiveUp={() => { clearSession(); setScreen("menu"); }} />
+    );
   }
 
   // Game Over — shown on top of everything for both host and players
   if (gameOver && (screen === "dashboard" || screen === "player-screen")) {
-    return <GameOverScreen result={gameOver} isHost={screen === "dashboard"} onEnd={handleLeaveRoom} />;
+    return wrapWithResumeOverlay(
+      <GameOverScreen result={gameOver} isHost={screen === "dashboard"} onEnd={handleLeaveRoom} />
+    );
   }
 
   if (screen === "dashboard" && game) {
-    return <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} executionInfo={executionInfo} accusedPlayer={accusedPlayer} trialState={trialState} onStartTrialVote={handleStartTrialVote} onLeave={handleLeaveRoom} /></>;
+    return wrapWithResumeOverlay(
+      <>{banner}<HostDashboard game={game} activeGamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} executionInfo={executionInfo} accusedPlayer={accusedPlayer} trialState={trialState} onStartTrialVote={handleStartTrialVote} onLeave={handleLeaveRoom} /></>
+    );
   }
 
   if (screen === "player-screen" && playerRole) {
-    return <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} executionInfo={executionInfo} trialState={trialState} accusedPlayer={accusedPlayer} onLeave={handleLeaveRoom} /></>;
+    return wrapWithResumeOverlay(
+      <>{banner}<PlayerScreen role={playerRole} gamePhase={gamePhase} morningResults={morningResults} voteUpdate={voteUpdate} alivePlayerNames={alivePlayerNames} phaseEndsAt={phaseEndsAt} myDeathReason={myDeathReason} executionInfo={executionInfo} trialState={trialState} accusedPlayer={accusedPlayer} onLeave={handleLeaveRoom} /></>
+    );
   }
 
   if (screen === "lobby" && lobby) {
-    return <>{banner}<LobbyScreen lobby={lobby} onLeave={handleLeaveRoom} onGameStarted={handleGameStarted} /></>;
+    return wrapWithResumeOverlay(
+      <>{banner}<LobbyScreen lobby={lobby} onLeave={handleLeaveRoom} onGameStarted={handleGameStarted} /></>
+    );
   }
 
   if (screen === "create-name") {
-    return <CreateNameScreen onBack={() => setScreen("menu")} onSubmit={handleCreateName} />;
+    return wrapWithResumeOverlay(
+      <CreateNameScreen onBack={() => setScreen("menu")} onSubmit={handleCreateName} />
+    );
   }
 
   if (screen === "join") {
-    return <JoinRoomScreen
-      initialCode={initialJoinCode}
-      onBack={() => { setInitialJoinCode(""); setScreen("menu"); }}
-      onSubmit={handleJoinRoom}
-    />;
+    return wrapWithResumeOverlay(
+      <JoinRoomScreen
+        initialCode={initialJoinCode}
+        onBack={() => { setInitialJoinCode(""); setScreen("menu"); }}
+        onSubmit={handleJoinRoom}
+      />
+    );
   }
 
-  return <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} onBack={() => setSelectedMode(null)} />;
+  return wrapWithResumeOverlay(
+    <MainMenu onCreateRoom={() => setScreen("create-name")} onJoinRoom={() => setScreen("join")} onBack={() => setSelectedMode(null)} />
+  );
 }
