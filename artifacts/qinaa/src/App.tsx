@@ -6319,17 +6319,7 @@ export default function App() {
     }
   }, []);
 
-  const playPhaseAudio = useCallback((phase: string) => {
-    if (!isHostRef.current)           return;
-    if (!isAudioEnabledRef.current)   return;
-    const src = PHASE_AUDIO[phase];
-    if (!src) return;
-    stopCurrentAudio();
-    const audio = new Audio(src);
-    currentAudioRef.current = audio;
-    activeAudioRef.current = audio;
-    audio.play().catch(() => {});
-  }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
+  const playPhaseAudio = useCallback((_phase: string) => {}, []);
 
   // ── Helper: stop a single audio ref in-place ────────────────────────────
   const stopRef = useCallback((ref: React.MutableRefObject<HTMLAudioElement | null>) => {
@@ -6340,30 +6330,10 @@ export default function App() {
   }, []);
 
   // ── Ambient layer — night.mp3 / day.mp3 (background mood) ───────────────
-  const playAmbient = useCallback((src: string) => {
-    try {
-      stopRef(ambientRef);
-      const audio = audioRefsMap.current[src] ?? new Audio(src);
-      audio.currentTime = 0;
-      audio.volume = 1;
-      ambientRef.current = audio;
-      activeAudioRef.current = audio;
-      audio.play().catch(() => {});
-    } catch { /* silently ignore */ }
-  }, [stopRef]);
+  const playAmbient = useCallback((_src: string) => {}, []);
 
   // ── Alert layer — wake.mp3 / sleep.mp3 (role cues, higher priority) ─────
-  const playAlert = useCallback((src: string) => {
-    try {
-      stopRef(alertRef);
-      const audio = audioRefsMap.current[src] ?? new Audio(src);
-      audio.currentTime = 0;
-      audio.volume = 1;
-      alertRef.current = audio;
-      activeAudioRef.current = audio;
-      audio.play().catch(() => {});
-    } catch { /* silently ignore */ }
-  }, [stopRef]);
+  const playAlert = useCallback((_src: string) => {}, []);
 
   // ── Audio + WakeLock initializer — must be called from a user-gesture ───
   const initAudioSystem = useCallback(() => {
@@ -6857,10 +6827,8 @@ export default function App() {
           });
         };
         unlockCache(narratorAudioCacheRef.current);
-        unlockCache(audioRefsMap.current);
-        const interrupted = activeAudioRef.current ?? narratorActiveAudioRef.current;
-        if (interrupted) {
-          interrupted.play().catch(() => {});
+        if (narratorActiveAudioRef.current) {
+          narratorActiveAudioRef.current.play().catch(() => {});
         }
         setNeedsResume(false);
       }}

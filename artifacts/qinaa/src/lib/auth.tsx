@@ -237,7 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       >
         <div className="flex flex-col items-center gap-5">
           <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-white font-bold tracking-wide">جارٍ تجهيز مسرح الجريمة...</p>
+          <p className="text-white font-bold tracking-wide">جاري تهيئة اللعبة...</p>
         </div>
       </div>
     );
