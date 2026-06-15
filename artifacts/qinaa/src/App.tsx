@@ -52,6 +52,11 @@ import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
 
+// NarratorMode registers its preloaded pool here so the root App iOS-resume
+// overlay can unlock the actual HTMLAudioElement instances via user gesture.
+const narratorAudioCacheRef  = { current: {} as Record<string, HTMLAudioElement> };
+const narratorActiveAudioRef = { current: null as HTMLAudioElement | null };
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Screen = "menu" | "create-name" | "join" | "lobby" | "player-screen" | "dashboard" | "rejoining";
@@ -1050,6 +1055,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Audio Manager — preloaded cache for zero-delay playback ──
   const audioCache     = useRef<Record<string, HTMLAudioElement>>({});
   const currentPlaying = useRef<HTMLAudioElement | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const files = [
@@ -1067,6 +1073,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       audio.preload = "auto";
       audioCache.current[file] = audio;
     });
+    narratorAudioCacheRef.current = audioCache.current;
     // Register the non-narrator SFX (flip / reveal / heartbeat) in the shared
     // SFX layer so they overlap the narrator instead of interrupting it.
     preloadSfx();
@@ -1110,6 +1117,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (!audio) return;
     audio.currentTime = 0;
     currentPlaying.current = audio;
+    activeAudioRef.current = audio;
+    narratorActiveAudioRef.current = audio;
     audio.play().catch(() => {});
   };
 
@@ -6283,6 +6292,7 @@ export default function App() {
   // ── Audio + Wake Lock system (auto-initialized on join/create) ──────────
   const isHostRef           = useRef(false);
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
+  const activeAudioRef      = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef         = useRef<AudioContext | null>(null);
   const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
   const ambientRef          = useRef<HTMLAudioElement | null>(null); // night/day background tone
@@ -6317,6 +6327,7 @@ export default function App() {
     stopCurrentAudio();
     const audio = new Audio(src);
     currentAudioRef.current = audio;
+    activeAudioRef.current = audio;
     audio.play().catch(() => {});
   }, [stopCurrentAudio]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -6336,6 +6347,7 @@ export default function App() {
       audio.currentTime = 0;
       audio.volume = 1;
       ambientRef.current = audio;
+      activeAudioRef.current = audio;
       audio.play().catch(() => {});
     } catch { /* silently ignore */ }
   }, [stopRef]);
@@ -6348,6 +6360,7 @@ export default function App() {
       audio.currentTime = 0;
       audio.volume = 1;
       alertRef.current = audio;
+      activeAudioRef.current = audio;
       audio.play().catch(() => {});
     } catch { /* silently ignore */ }
   }, [stopRef]);
@@ -6830,8 +6843,25 @@ export default function App() {
         WebkitBackdropFilter: "blur(8px)",
       }}
       onClick={() => {
-        const unlockAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
-        unlockAudio.play().catch(() => {});
+        const unlockCache = (cache: Record<string, HTMLAudioElement>) => {
+          Object.values(cache).forEach((audio) => {
+            if (audio instanceof HTMLAudioElement) {
+              audio.muted = true;
+              audio.play().then(() => {
+                audio.pause();
+                audio.muted = false;
+              }).catch(() => {
+                audio.muted = false;
+              });
+            }
+          });
+        };
+        unlockCache(narratorAudioCacheRef.current);
+        unlockCache(audioRefsMap.current);
+        const interrupted = activeAudioRef.current ?? narratorActiveAudioRef.current;
+        if (interrupted) {
+          interrupted.play().catch(() => {});
+        }
         setNeedsResume(false);
       }}
       role="button"
