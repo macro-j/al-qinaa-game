@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { VenetianMask, Lock, Unlock } from "lucide-react";
 import { ROLE_META, getRoleName } from "../lib/roles";
 import { playSfx } from "../lib/sfx";
@@ -18,8 +19,9 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
   const name = getRoleName(roleKey);
 
   return (
-    <div
+    <motion.div
       onClick={() => { setFlipped((f) => !f); playSfx("card_flip.mp3"); }}
+      whileTap={{ scale: 0.98 }}
       style={{ perspective: "900px", height, cursor: "pointer" }}
       className="w-full select-none">
       <div
@@ -102,6 +104,6 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
         </div>
 
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -51,9 +51,14 @@ async function getStripeSecretKey(): Promise<string> {
 
 /**
  * Returns a fresh, authenticated Stripe client.
- * Not cached — fetches credentials on every call so rotated keys are picked up.
+ * Prefers STRIPE_SECRET_KEY from the environment (local / self-hosted).
+ * Falls back to the Replit-managed Stripe connection when unset.
  */
 export async function getUncachableStripeClient(): Promise<Stripe> {
+  const envKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (envKey) {
+    return new Stripe(envKey);
+  }
   const secretKey = await getStripeSecretKey();
   return new Stripe(secretKey);
 }

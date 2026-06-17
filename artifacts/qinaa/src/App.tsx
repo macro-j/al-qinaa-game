@@ -225,7 +225,7 @@ function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
   return (
     <div className="flex items-center justify-between">
       {onBack ? (
-        <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70" style={{ color: "#9E9E9E" }}>
+        <button onClick={onBack} className="flex items-center gap-1 text-sm transition-opacity hover:opacity-70 transition-all active:scale-95" style={{ color: "#9E9E9E" }}>
           <ArrowRight size={16} /><span>رجوع</span>
         </button>
       ) : <div />}
@@ -284,7 +284,7 @@ function RejoiningScreen({ onGiveUp }: { onGiveUp: () => void }) {
         <p className="text-white font-bold text-lg">جاري استئناف الجلسة...</p>
         <p className="text-xs" style={{ color: "#555555" }}>نحاول إعادتك إلى الغرفة</p>
       </div>
-      <button onClick={onGiveUp} className="text-xs underline" style={{ color: "#555555" }}>
+      <button onClick={onGiveUp} className="text-xs underline transition-all active:scale-95" style={{ color: "#555555" }}>
         بدء من جديد
       </button>
       <p className="text-xs" style={{ color: "#333333" }}>القرية تنام.. والقاتل يصحو</p>
@@ -2010,6 +2010,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
             {/* Rotating inner wrapper */}
             <motion.div
+              whileTap={isCardFlipped ? {} : { scale: 0.98 }}
               animate={{ rotateY: isCardFlipped ? 180 : 0 }}
               transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
               style={{
@@ -3862,7 +3863,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     border: `1px solid ${isModsEnabled ? "#B71C1C" : "#2A2A2A"}`,
                     position: "relative", cursor: "pointer",
                     transition: "background-color 0.22s, border-color 0.22s",
-                  }}>
+                  }} className="transition-all active:scale-95">
                   <div style={{
                     width: 18, height: 18, borderRadius: 9, backgroundColor: "#fff",
                     position: "absolute", top: 3,
@@ -3973,7 +3974,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                     position: "relative",
                                     cursor: isDisabled ? "not-allowed" : "pointer",
                                     transition: "background-color 0.2s, border-color 0.2s",
-                                  }}>
+                                  }} className="transition-all active:scale-95">
                                   <div style={{
                                     width: 14, height: 14, borderRadius: 7, backgroundColor: "#fff",
                                     position: "absolute", top: 3,
@@ -4584,7 +4585,7 @@ function LobbyScreen({
         <Skull size={48} color="#D32F2F" />
         <p className="text-white font-bold text-xl">تم طردك من الغرفة</p>
         <p className="text-sm text-center" style={{ color: "#9E9E9E" }}>قرر المضيف إزالتك من هذه الجلسة</p>
-        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
+        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white transition-all active:scale-95" style={{ backgroundColor: "#D32F2F" }}>
           العودة للقائمة الرئيسية
         </button>
       </div>
@@ -4597,7 +4598,7 @@ function LobbyScreen({
         <AlertCircle size={48} color="#D32F2F" />
         <p className="text-white font-bold text-lg">تم إغلاق الغرفة</p>
         <p className="text-sm" style={{ color: "#9E9E9E" }}>غادر المضيف أو انتهت الجلسة</p>
-        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white" style={{ backgroundColor: "#D32F2F" }}>
+        <button onClick={onLeave} className="mt-4 px-6 py-3 rounded-xl font-bold text-white transition-all active:scale-95" style={{ backgroundColor: "#D32F2F" }}>
           العودة للقائمة الرئيسية
         </button>
       </div>
@@ -4625,7 +4626,7 @@ function LobbyScreen({
         <div className="rounded-xl border p-5 flex flex-col gap-4" style={{ backgroundColor: "#1A1A1A", borderColor: "#D32F2F" }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#9E9E9E" }}>كود الغرفة</span>
-            <button onClick={copyCode} className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70"
+            <button onClick={copyCode} className="flex items-center gap-1 text-xs transition-opacity hover:opacity-70 transition-all active:scale-95"
               style={{ color: copied ? "#4CAF50" : "#9E9E9E" }}>
               {copied ? <Check size={13} /> : <Copy size={13} />}
               <span>{copied ? "تم النسخ" : "نسخ"}</span>
@@ -4664,7 +4665,7 @@ function LobbyScreen({
                 </div>
                 <button
                   onClick={handleShare}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors active:opacity-70"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors active:opacity-70 transition-all active:scale-95"
                   style={{
                     backgroundColor: "#0D0D0D",
                     border: "1px solid #D32F2F",
@@ -4714,7 +4715,7 @@ function LobbyScreen({
                 {lobby.isHost && player.name !== lobby.myName && (
                   <button
                     onClick={() => getSocket().emit("kickPlayer", { code: lobby.code, playerName: player.name })}
-                    className="flex items-center justify-center w-6 h-6 rounded-md flex-shrink-0 transition-opacity active:opacity-60"
+                    className="flex items-center justify-center w-6 h-6 rounded-md flex-shrink-0 transition-opacity active:opacity-60 transition-all active:scale-95"
                     style={{ backgroundColor: "#3A0000", border: "1px solid #D32F2F" }}
                     title="طرد اللاعب">
                     <span className="text-xs font-bold leading-none" style={{ color: "#D32F2F" }}>✕</span>
@@ -4982,11 +4983,12 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
 
         <div className="flex-1 flex flex-col items-center justify-center gap-6"
           style={{ display: alivePlayerNames.length > 0 && !alivePlayerNames.includes(role.myName) ? "none" : "flex" }}>
-          <div
+          <motion.div
             onPointerDown={reveal}
             onPointerUp={conceal}
             onPointerLeave={conceal}
             onPointerCancel={conceal}
+            whileTap={{ scale: 0.98 }}
             className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none transition-all duration-300"
             style={{
               backgroundColor: revealed ? "#0A0000" : "#111111",
@@ -5036,7 +5038,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 </div>
               </>
             )}
-          </div>
+          </motion.div>
 
           <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
             {revealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
@@ -5728,11 +5730,12 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
         {/* ── My Role Card: big centered card only during role_reveal phase ── */}
         {myEntry && activeGamePhase === "role_reveal" && (
           <div className="flex flex-col gap-3">
-            <div
+            <motion.div
               onPointerDown={() => setMyRoleRevealed(true)}
               onPointerUp={() => setMyRoleRevealed(false)}
               onPointerLeave={() => setMyRoleRevealed(false)}
               onPointerCancel={() => setMyRoleRevealed(false)}
+              whileTap={{ scale: 0.98 }}
               className="w-full rounded-2xl border-2 flex flex-col items-center justify-center gap-5 py-12 px-6 select-none transition-all duration-300"
               style={{
                 backgroundColor: myRoleRevealed ? "#0A0000" : "#111111",
@@ -5782,7 +5785,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                   </div>
                 </>
               )}
-            </div>
+            </motion.div>
             <p className="text-xs text-center px-4" style={{ color: "#333333" }}>
               {myRoleRevealed ? "ارفع إصبعك لإخفاء القناع مجدداً" : "اضغط مطولاً على البطاقة للكشف — سيختفي عند الرفع"}
             </p>
@@ -5793,11 +5796,12 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
         {myEntry && activeGamePhase !== "role_reveal" && (
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold uppercase tracking-widest px-1" style={{ color: "#555555" }}>بطاقة قناعي</span>
-            <div
+            <motion.div
               onPointerDown={() => setMyRoleRevealed(true)}
               onPointerUp={() => setMyRoleRevealed(false)}
               onPointerLeave={() => setMyRoleRevealed(false)}
               onPointerCancel={() => setMyRoleRevealed(false)}
+              whileTap={{ scale: 0.98 }}
               className="w-full rounded-xl border-2 flex items-center gap-4 px-4 py-3 select-none transition-all duration-300"
               style={{
                 backgroundColor: myRoleRevealed ? "#0A0000" : "#111111",
@@ -5839,7 +5843,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                   <Lock size={14} color="#333333" className="flex-shrink-0" />
                 </>
               )}
-            </div>
+            </motion.div>
           </div>
         )}
 

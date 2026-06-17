@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { supabase } from "../lib/supabase";
+import { getValidAccessToken } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { apiPost } from "../lib/api";
 
 /**
  * The checkout params, captured at MODULE LOAD — the instant the bundle runs,
@@ -62,17 +63,16 @@ export function CheckoutReturn() {
 
       // Authoritative, synchronous confirmation via our server.
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
+        const token = await getValidAccessToken();
         if (token && sessionId) {
-          const resp = await fetch("/api/checkout/verify", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ sessionId }),
-          });
+          const { resp, data } = await apiPost(
+            "/api/checkout/verify",
+            { sessionId },
+            { Authorization: `Bearer ${token}` },
+          );
+          if (!resp.ok) {
+            console.error("Checkout verify failed:", resp.status, data);
+          }
           confirmed = resp.ok;
         }
       } catch (err) {

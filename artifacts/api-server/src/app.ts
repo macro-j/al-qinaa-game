@@ -1,13 +1,16 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import type Stripe from "stripe";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { getUncachableStripeClient } from "./lib/stripeClient";
-import { grantSpecificEntitlement } from "./lib/supabase";
+import { corsOptions } from "./lib/corsOptions";
+import { handleStripeWebhook } from "./routes/stripeWebhook";
 
 const app: Express = express();
+
+// CORS must run first so browser preflight (OPTIONS) succeeds before other middleware.
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.use(
   pinoHttp({
@@ -36,81 +39,36 @@ app.use(
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sigHeader = req.headers["stripe-signature"];
-    const signature = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!signature || !webhookSecret) {
-      req.log.error("Stripe webhook missing signature or STRIPE_WEBHOOK_SECRET");
-      return res.status(400).json({ error: "bad_request" });
-    }
-
-    if (!Buffer.isBuffer(req.body)) {
-      req.log.error(
-        "Stripe webhook body is not a Buffer — express.json() ran before this route",
-      );
-      return res.status(500).json({ error: "server_misconfigured" });
-    }
-
-    let event: Stripe.Event;
-    try {
-      const stripe = await getUncachableStripeClient();
-      event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
-    } catch (err) {
-      req.log.error({ err }, "Stripe webhook signature verification failed");
-      return res.status(400).json({ error: "invalid_signature" });
-    }
-
-    req.log.info(
-      { eventId: event.id, eventType: event.type },
-      "Stripe webhook received and verified",
-    );
-
-    try {
-      if (event.type === "checkout.session.completed") {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const userId =
-          session.metadata?.supabase_user_id ??
-          session.client_reference_id ??
-          null;
-        const itemId = session.metadata?.item_id ?? null;
-
-        req.log.info(
-          {
-            userId,
-            itemId,
-            paymentStatus: session.payment_status,
-            sessionId: session.id,
-          },
-          "Processing checkout.session.completed",
-        );
-
-        if (session.payment_status === "paid" && userId && itemId) {
-          await grantSpecificEntitlement(userId, itemId);
-          req.log.info(
-            { userId, itemId },
-            "Granted entitlement after verified payment",
-          );
-        } else {
-          req.log.warn(
-            { paymentStatus: session.payment_status, userId, itemId },
-            "checkout.session.completed ignored (not paid, or missing user/item id)",
-          );
-        }
-      }
-      return res.status(200).json({ received: true });
-    } catch (err) {
-      req.log.error({ err }, "Stripe webhook fulfillment failed");
-      return res.status(500).json({ error: "fulfillment_failed" });
-    }
-  },
+  handleStripeWebhook,
 );
 
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// Always return JSON for unhandled errors (never an empty body).
+app.use(
+  (
+    err: unknown,
+    _req: Request,
+    res: Response,
+    _next: NextFunction,
+  ) => {
+    const message =
+      err instanceof Error ? err.message : "Internal Server Error";
+    console.error("Unhandled api-server error:", err);
+    if (!res.headersSent) {
+      res
+        .status(500)
+        .type("application/json")
+        .send(
+          JSON.stringify({
+            error: message || "Internal Server Error",
+          }),
+        );
+    }
+  },
+);
 
 export default app;

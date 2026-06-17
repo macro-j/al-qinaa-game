@@ -1,14 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "../supabase";
 
-// Supabase project URL + public anon key.
-// The anon key is a publishable client key (protected by Row-Level Security),
-// so it is safe to ship in the browser bundle. Hardcoded here so the client
-// always initializes instantly, independent of build-time env injection.
-const supabaseUrl = "https://ftfizfcrxgochuthofnd.supabase.co";
-const supabaseAnonKey =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0Zml6ZmNyeGdvY2h1dGhvZm5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTg4ODYsImV4cCI6MjA5NjMzNDg4Nn0.jgYetV7ueqE6TSQjnwswT1Lq0j5C6dijMcmL3MugrOs";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. " +
+      "Add them to the project root .env file.",
+  );
+}
+
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -25,3 +28,31 @@ export type Entitlements = {
 };
 
 export const FREE_GAME_LIMIT = 2;
+
+/** Returns a fresh access token, refreshing the Supabase session when stale. */
+export async function getValidAccessToken(): Promise<string | null> {
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
+  if (sessionError) {
+    console.error("getSession failed:", sessionError);
+    return null;
+  }
+
+  const session = sessionData.session;
+  if (!session) return null;
+
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = session.expires_at ?? 0;
+  const needsRefresh = expiresAt <= now + 60;
+
+  if (!needsRefresh) return session.access_token;
+
+  const { data: refreshed, error: refreshError } =
+    await supabase.auth.refreshSession();
+  if (refreshError) {
+    console.error("refreshSession failed:", refreshError);
+    return null;
+  }
+
+  return refreshed.session?.access_token ?? null;
+}

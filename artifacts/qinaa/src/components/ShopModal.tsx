@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "../lib/supabase";
+import { getValidAccessToken } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
+import { apiPost } from "../lib/api";
 
 /**
  * Pricing / packages modal. Each "buy" button starts a Stripe Checkout for its
@@ -40,26 +41,33 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     if (!user) { setShowAuth(true); return; }
     setLoadingItemId(itemId);
     try {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
+      const token = await getValidAccessToken();
       if (!token) {
         toast.error("يرجى تسجيل الدخول أولاً.");
         setLoadingItemId(null);
         return;
       }
 
-      const resp = await fetch("/api/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ itemId }),
-      });
-      if (!resp.ok) throw new Error(`checkout failed: ${resp.status}`);
+      const { resp, data } = await apiPost<{ url?: string; error?: string }>(
+        "/api/checkout",
+        { itemId },
+        { Authorization: `Bearer ${token}` },
+      );
 
-      const { url } = (await resp.json()) as { url?: string };
-      if (!url) throw new Error("missing checkout url");
+      if (!resp.ok) {
+        console.error("Checkout failed:", resp.status, data);
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : `checkout failed: ${resp.status}`,
+        );
+      }
+
+      const url = data.url;
+      if (typeof url !== "string" || !url) {
+        console.error("Checkout response missing url:", data);
+        throw new Error("missing checkout url");
+      }
 
       // Navigate to Stripe-hosted Checkout (no reset — we leave the page).
       window.location.href = url;

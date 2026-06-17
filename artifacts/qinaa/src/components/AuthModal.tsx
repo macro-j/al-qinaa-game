@@ -151,7 +151,7 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
               </p>
               <button
                 onClick={() => { setSent(false); setEmailName(""); setIsCustomDomain(false); }}
-                className="text-sm font-bold transition-colors hover:text-white"
+                className="text-sm font-bold transition-colors hover:text-white transition-all active:scale-95"
                 style={{ color: "#D32F2F" }}>
                 استخدام بريد آخر
               </button>
@@ -268,14 +268,14 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
             <button
               type="button"
               onClick={() => setShowTerms(true)}
-              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors transition-all active:scale-95">
               شروط الاستخدام
             </button>{" "}
             و
             <button
               type="button"
               onClick={() => setShowPrivacy(true)}
-              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors">
+              className="text-red-400 hover:text-red-300 underline cursor-pointer transition-colors transition-all active:scale-95">
               سياسة الخصوصية
             </button>{" "}
             الخاصة بلعبة القناع.

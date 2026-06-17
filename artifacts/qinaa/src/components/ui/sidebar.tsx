@@ -297,7 +297,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full",
         "[[data-side=left][data-collapsible=offcanvas]_&]:-right-2",
-        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2",
+        "[[data-side=right][data-collapsible=offcanvas]_&]:-left-2 transition-all active:scale-95",
         className
       )}
       {...props}

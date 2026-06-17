@@ -1,20 +1,27 @@
 /**
  * Server-side Supabase helpers used by the Stripe payment flow.
  *
- * We talk to Supabase over plain REST (no SDK) to keep the server bundle small:
- *  - getUserFromToken: verifies a client's access token → trusted user id/email.
- *  - unlockAllAccess:  grants the All-Access entitlement via a SECURITY DEFINER
- *                      RPC, authenticated with the service-role key (bypasses
- *                      RLS). Called ONLY from the verified Stripe webhook.
+ * Auth verification uses the anon key + the caller's JWT.
+ * Fulfillment (payments, profiles, entitlements) uses a service-role client
+ * that bypasses RLS.
  */
 
-// Public project URL + anon key (anon key is a publishable client key, safe to
-// embed — it is protected by Row-Level Security).
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? "https://ftfizfcrxgochuthofnd.supabase.co";
-const SUPABASE_ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0Zml6ZmNyeGdvY2h1dGhvZm5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTg4ODYsImV4cCI6MjA5NjMzNDg4Nn0.jgYetV7ueqE6TSQjnwswT1Lq0j5C6dijMcmL3MugrOs";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "../types/database";
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} is not set. Add it to the project root .env and export it ` +
+        "before starting the api-server.",
+    );
+  }
+  return value;
+}
+
+const SUPABASE_URL = requireEnv("SUPABASE_URL");
+const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
 
 function getServiceRoleKey(): string {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -28,6 +35,29 @@ function getServiceRoleKey(): string {
   return key;
 }
 
+let adminClient: SupabaseClient<Database> | null = null;
+let authVerifyClient: SupabaseClient<Database> | null = null;
+
+/** Anon-key client for verifying caller JWTs (no persisted session). */
+function getSupabaseAuthClient(): SupabaseClient<Database> {
+  if (!authVerifyClient) {
+    authVerifyClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return authVerifyClient;
+}
+
+/** Service-role client — bypasses RLS. For webhook fulfillment only. */
+export function getSupabaseAdmin(): SupabaseClient<Database> {
+  if (!adminClient) {
+    adminClient = createClient<Database>(SUPABASE_URL, getServiceRoleKey(), {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return adminClient;
+}
+
 /**
  * Verifies a Supabase access token and returns the authenticated user.
  * Throws if the token is missing/invalid.
@@ -35,55 +65,101 @@ function getServiceRoleKey(): string {
 export async function getUserFromToken(
   accessToken: string,
 ): Promise<{ id: string; email: string | null }> {
-  const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: SUPABASE_ANON_KEY,
-    },
-    signal: AbortSignal.timeout(10_000),
-  });
+  const jwt = accessToken.trim();
+  const { data, error } = await getSupabaseAuthClient().auth.getUser(jwt);
 
-  if (!resp.ok) {
-    throw new Error(`Invalid Supabase session token: ${resp.status}`);
+  if (error || !data.user) {
+    console.error(
+      "Supabase getUser failed:",
+      error?.status,
+      error?.message ?? "no user returned",
+    );
+    throw new Error(
+      `Invalid Supabase session token: ${error?.status ?? "unknown"} ${error?.message ?? "no user"}`,
+    );
   }
 
-  const user = (await resp.json()) as { id?: string; email?: string | null };
-  if (!user?.id) {
-    throw new Error("Supabase user not found for the provided token.");
-  }
-  return { id: user.id, email: user.email ?? null };
+  return { id: data.user.id, email: data.user.email ?? null };
 }
 
 /**
- * Grants a SPECIFIC purchased entitlement to a user via the SECURITY DEFINER
- * RPC, using the service-role key. This is the ONLY server-side write path for
- * the paid flags and must be called only after a verified, completed payment.
- * The RPC unlocks exactly the item identified by `itemId` (e.g. base_game,
- * all_access, role_*).
+ * Marks a payment row as completed for the given Stripe Checkout session id.
+ */
+export async function completePaymentByGatewayOrderId(
+  gatewayOrderId: string,
+): Promise<number> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .update({
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("gateway_order_id", gatewayOrderId)
+    .select("id");
+
+  if (error) {
+    throw new Error(
+      `payments update failed for gateway_order_id=${gatewayOrderId}: ${error.message}`,
+    );
+  }
+
+  return data?.length ?? 0;
+}
+
+/**
+ * Activates premium on the buyer's profile. One-time Checkout purchases are
+ * treated as lifetime premium (`premium_until = null`). Pass `premiumUntil`
+ * when fulfilling a timed subscription.
+ */
+export async function activatePremiumProfile(
+  userId: string,
+  premiumUntil: string | null = null,
+): Promise<void> {
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin
+    .from("profiles")
+    .update({
+      is_premium: true,
+      premium_until: premiumUntil,
+    })
+    .eq("id", userId)
+    .select("id");
+
+  if (error) {
+    throw new Error(`profiles update failed for id=${userId}: ${error.message}`);
+  }
+
+  if (data?.length) return;
+
+  const { error: insertError } = await admin.from("profiles").insert({
+    id: userId,
+    is_premium: true,
+    premium_until: premiumUntil,
+  });
+
+  if (insertError) {
+    throw new Error(
+      `profiles insert failed for id=${userId}: ${insertError.message}`,
+    );
+  }
+}
+
+/**
+ * Grants a SPECIFIC purchased entitlement via the SECURITY DEFINER RPC.
+ * Idempotent — safe to run alongside the webhook verify-on-return path.
  */
 export async function grantSpecificEntitlement(
   userId: string,
   itemId: string,
 ): Promise<void> {
-  const serviceRoleKey = getServiceRoleKey();
-  const resp = await fetch(
-    `${SUPABASE_URL}/rest/v1/rpc/grant_specific_entitlement`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({ target_user: userId, item_id: itemId }),
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
+  const { error } = await getSupabaseAdmin().rpc("grant_specific_entitlement", {
+    target_user: userId,
+    item_id: itemId,
+  });
 
-  if (!resp.ok) {
-    const text = await resp.text();
+  if (error) {
     throw new Error(
-      `grant_specific_entitlement RPC failed: ${resp.status} ${text}`,
+      `grant_specific_entitlement RPC failed: ${error.message}`,
     );
   }
 }

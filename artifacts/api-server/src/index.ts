@@ -1,12 +1,11 @@
 import { createServer } from "node:http";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { corsOptions, LOCAL_DEV_ORIGINS } from "./lib/corsOptions";
 import { Server as SocketServer } from "socket.io";
 
-const rawPort = process.env["PORT"];
-if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
-const port = Number(rawPort);
-if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
+const parsedPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const port = Number.isNaN(parsedPort) || parsedPort <= 0 ? 3000 : parsedPort;
 
 // ─── Room State ───────────────────────────────────────────────────────────────
 
@@ -236,7 +235,14 @@ function startNightPhase(code: string) {
 const httpServer = createServer(app);
 
 const io = new SocketServer(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: {
+    origin:
+      process.env.NODE_ENV === "production"
+        ? corsOptions.origin
+        : LOCAL_DEV_ORIGINS,
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
   pingTimeout:  60_000,
   pingInterval: 25_000,
 });
