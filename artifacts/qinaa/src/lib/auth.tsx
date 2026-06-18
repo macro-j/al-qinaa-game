@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -16,12 +17,18 @@ const DEFAULT_ENTITLEMENTS: Entitlements = {
   owned_items: [],
 };
 
+export type UserProfile = {
+  is_premium: boolean;
+  premium_until: string | null;
+};
+
 const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL ?? "/"}`;
 
 type AuthContextValue = {
   user: User | null;
   session: Session | null;
   entitlements: Entitlements | null;
+  profile: UserProfile | null;
   loading: boolean;
   /** true while the entitlements row is being fetched/created */
   entitlementsLoading: boolean;
@@ -31,7 +38,9 @@ type AuthContextValue = {
   signInWithEmail: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   incrementGamesPlayed: () => Promise<void>;
-  refreshEntitlements: () => Promise<void>;
+  refreshEntitlements: () => Promise<Entitlements | null>;
+  /** Re-fetch entitlements + profile after a verified purchase. */
+  refreshAfterPurchase: () => Promise<Entitlements | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -42,10 +51,25 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/** True when entitlements reflect the purchased item (or any paid unlock). */
+export function entitlementsIncludePurchase(
+  ent: Entitlements | null,
+  itemId: string | null,
+): boolean {
+  if (!ent) return false;
+  if (!itemId) {
+    return ent.has_base_game || ent.has_all_access || ent.owned_items.length > 0;
+  }
+  if (itemId === "all_access") return ent.has_all_access;
+  if (itemId === "base_game") return ent.has_base_game || ent.has_all_access;
+  return ent.has_all_access || ent.owned_items.includes(itemId);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [entitlementsLoading, setEntitlementsLoading] = useState(false);
 
@@ -56,14 +80,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // compare against this so a response for a signed-out / switched account
   // can never overwrite the current user's state (stale-response guard).
   const activeUidRef = useRef<string | null>(null);
+  // Latest entitlements for callers that need a return value after refresh.
+  const entitlementsRef = useRef<Entitlements | null>(null);
+
+  const mapEntitlements = (data: {
+    games_played?: number | null;
+    has_base_game?: boolean | null;
+    has_all_access?: boolean | null;
+    owned_items?: string[] | null;
+  }): Entitlements => ({
+    games_played: data.games_played ?? 0,
+    has_base_game: !!data.has_base_game,
+    has_all_access: !!data.has_all_access,
+    owned_items: Array.isArray(data.owned_items) ? data.owned_items : [],
+  });
+
+  const applyEntitlements = (next: Entitlements) => {
+    entitlementsRef.current = next;
+    setEntitlements(next);
+  };
+
+  const resolveUserId = useCallback(async (): Promise<string | null> => {
+    if (user?.id) return user.id;
+    if (activeUidRef.current) return activeUidRef.current;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id ?? null;
+  }, [user?.id]);
 
   // ── Fetch-or-create the user's entitlements row ──
-  // Fail-SAFE: the UI shows a "verifying account" state while entitlements are
-  // `null`, so on ANY error (query error, thrown exception, or a missing row we
-  // cannot create) we must fall back to safe defaults (0 games played, no
-  // purchases) and clear loading — never leave `null`, which would hang the app
-  // forever. `setEntitlementsLoading(false)` is guaranteed via `finally`.
-  const loadEntitlements = async (uid: string) => {
+  const loadEntitlements = useCallback(async (uid: string): Promise<Entitlements | null> => {
     setEntitlementsLoading(true);
     try {
       const { data, error } = await supabase
@@ -72,53 +117,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq("id", uid)
         .maybeSingle();
 
-      if (activeUidRef.current !== uid) return; // stale: user changed mid-flight
+      if (activeUidRef.current !== uid) return entitlementsRef.current;
 
       if (error) {
         console.error("Supabase Entitlement Error:", error);
-        setEntitlements(DEFAULT_ENTITLEMENTS); // fail safe — don't hang
-        return;
+        applyEntitlements(DEFAULT_ENTITLEMENTS);
+        return DEFAULT_ENTITLEMENTS;
       }
 
       if (data) {
-        setEntitlements({
-          games_played: data.games_played ?? 0,
-          has_base_game: !!data.has_base_game,
-          has_all_access: !!data.has_all_access,
-          owned_items: Array.isArray(data.owned_items) ? data.owned_items : [],
-        });
-        return;
+        const next = mapEntitlements(data);
+        applyEntitlements(next);
+        return next;
       }
 
-      // No row yet — try to initialize one.
       const { data: inserted, error: insertError } = await supabase
         .from("user_entitlements")
         .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
         .select("games_played, has_base_game, has_all_access, owned_items")
         .single();
 
-      if (activeUidRef.current !== uid) return; // stale
+      if (activeUidRef.current !== uid) return entitlementsRef.current;
 
       if (insertError) {
         console.error("Supabase Entitlement Error:", insertError);
-        setEntitlements(DEFAULT_ENTITLEMENTS); // fail safe — don't hang
-        return;
+        applyEntitlements(DEFAULT_ENTITLEMENTS);
+        return DEFAULT_ENTITLEMENTS;
       }
 
-      setEntitlements({
-        games_played: inserted.games_played ?? 0,
-        has_base_game: !!inserted.has_base_game,
-        has_all_access: !!inserted.has_all_access,
-        owned_items: Array.isArray(inserted.owned_items) ? inserted.owned_items : [],
-      });
+      const next = mapEntitlements(inserted);
+      applyEntitlements(next);
+      return next;
     } catch (error) {
-      // Network throw or any unexpected failure: never hang the UI.
       console.error("Supabase Entitlement Error:", error);
-      if (activeUidRef.current === uid) setEntitlements(DEFAULT_ENTITLEMENTS);
+      if (activeUidRef.current === uid) {
+        applyEntitlements(DEFAULT_ENTITLEMENTS);
+        return DEFAULT_ENTITLEMENTS;
+      }
+      return entitlementsRef.current;
     } finally {
       if (activeUidRef.current === uid) setEntitlementsLoading(false);
     }
-  };
+  }, []);
+
+  const loadProfile = useCallback(async (uid: string): Promise<UserProfile | null> => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_premium, premium_until")
+        .eq("id", uid)
+        .maybeSingle();
+
+      if (activeUidRef.current !== uid) return null;
+
+      if (error) {
+        console.error("Supabase Profile Error:", error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      const next: UserProfile = {
+        is_premium: !!data.is_premium,
+        premium_until: data.premium_until ?? null,
+      };
+      setProfile(next);
+      return next;
+    } catch (error) {
+      console.error("Supabase Profile Error:", error);
+      return null;
+    }
+  }, []);
+
+  const refreshEntitlements = useCallback(async (): Promise<Entitlements | null> => {
+    const uid = await resolveUserId();
+    if (!uid) return null;
+    activeUidRef.current = uid;
+    return loadEntitlements(uid);
+  }, [loadEntitlements, resolveUserId]);
+
+  const refreshAfterPurchase = useCallback(async (): Promise<Entitlements | null> => {
+    const uid = await resolveUserId();
+    if (!uid) return null;
+    activeUidRef.current = uid;
+    const [ent] = await Promise.all([loadEntitlements(uid), loadProfile(uid)]);
+    return ent;
+  }, [loadEntitlements, loadProfile, resolveUserId]);
 
   useEffect(() => {
     let active = true;
@@ -147,15 +231,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) {
       provisionedFor.current = null;
       activeUidRef.current = null;
+      entitlementsRef.current = null;
       setEntitlements(null);
+      setProfile(null);
       return;
     }
     if (provisionedFor.current === user.id) return;
     provisionedFor.current = user.id;
     activeUidRef.current = user.id;
-    setEntitlements(null); // clear any prior user's entitlements before fetch
+    setEntitlements(null);
+    setProfile(null);
     void loadEntitlements(user.id);
-  }, [user]);
+    void loadProfile(user.id);
+  }, [user, loadEntitlements, loadProfile]);
 
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -176,35 +264,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setEntitlements(null);
+    setProfile(null);
+    entitlementsRef.current = null;
     provisionedFor.current = null;
-  };
-
-  const refreshEntitlements = async () => {
-    if (user) await loadEntitlements(user.id);
   };
 
   const incrementGamesPlayed = async () => {
     if (!user) return;
 
-    // Optimistic local bump so the gate reacts instantly without blocking UI.
     setEntitlements((prev) =>
       prev ? { ...prev, games_played: prev.games_played + 1 } : prev,
     );
+    if (entitlementsRef.current) {
+      entitlementsRef.current = {
+        ...entitlementsRef.current,
+        games_played: entitlementsRef.current.games_played + 1,
+      };
+    }
 
-    // Persist via the secure SECURITY DEFINER RPC. The client has no direct
-    // UPDATE privilege on user_entitlements — this RPC is the only write path
-    // for the counter, scoped server-side to auth.uid().
     const { error } = await supabase.rpc("increment_games_played");
     if (error) {
       console.error("Supabase Entitlement Error:", error);
-      // Re-sync from the source of truth on failure.
       void refreshEntitlements();
     }
   };
 
-  // Fail-closed: only allow a game start once entitlements are loaded and
-  // actually permit it. While loading (entitlements === null) the gate stays
-  // closed so a user can't slip past the free-game limit during the fetch.
   const canStartGame = entitlements
     ? entitlements.has_base_game ||
       entitlements.has_all_access ||
@@ -215,6 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     session,
     entitlements,
+    profile,
     loading,
     entitlementsLoading,
     canStartGame,
@@ -223,11 +308,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     incrementGamesPlayed,
     refreshEntitlements,
+    refreshAfterPurchase,
   };
 
-  // 🛑 التعديل السحري: قفل الحماية 🛑
-  // إذا كانت حالة الاتصال قيد التحقق (تحديث الصفحة)، نعرض شاشة تحميل بسيطة
-  // بدل ما نمرر الـ children وتطرد اللعبة اللاعب.
   if (loading) {
     return (
       <div

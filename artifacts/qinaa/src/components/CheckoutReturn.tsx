@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { getValidAccessToken } from "../lib/supabase";
-import { useAuth } from "../lib/auth";
+import {
+  entitlementsIncludePurchase,
+  useAuth,
+} from "../lib/auth";
 import { apiPost } from "../lib/api";
 
 /**
@@ -14,6 +17,8 @@ import { apiPost } from "../lib/api";
 const INITIAL_SEARCH =
   typeof window !== "undefined" ? window.location.search : "";
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Handles the return from Stripe Checkout. Stripe redirects back to
  * `/?checkout=success&session_id=...` (or `?checkout=cancel`).
@@ -25,22 +30,20 @@ const INITIAL_SEARCH =
  * times as a fallback in case the webhook lands first.
  */
 export function CheckoutReturn() {
-  const { refreshEntitlements } = useAuth();
-  const handled = useRef(false);
+  const { loading, refreshAfterPurchase } = useAuth();
+  const processed = useRef(false);
 
   useEffect(() => {
-    if (handled.current) return;
+    if (loading || processed.current) return;
 
     const params = new URLSearchParams(INITIAL_SEARCH);
     const status = params.get("checkout");
     if (!status) return;
 
     const sessionId = params.get("session_id");
-    handled.current = true;
+    processed.current = true;
 
-    // Strip the params so a refresh doesn't re-trigger this flow. We rebuild the
-    // query from the CURRENT url (not INITIAL_SEARCH) in case other params were
-    // added meanwhile, then drop only the checkout ones.
+    // Strip the params so a refresh doesn't re-trigger this flow.
     const liveParams = new URLSearchParams(window.location.search);
     liveParams.delete("checkout");
     liveParams.delete("session_id");
@@ -60,45 +63,51 @@ export function CheckoutReturn() {
 
     void (async () => {
       let confirmed = false;
+      let purchasedItemId: string | null = null;
 
-      // Authoritative, synchronous confirmation via our server.
       try {
         const token = await getValidAccessToken();
         if (token && sessionId) {
-          const { resp, data } = await apiPost(
+          const { resp, data } = await apiPost<{
+            unlocked?: boolean;
+            itemId?: string | null;
+            error?: string;
+          }>(
             "/api/checkout/verify",
             { sessionId },
             { Authorization: `Bearer ${token}` },
           );
+
           if (!resp.ok) {
             console.error("Checkout verify failed:", resp.status, data);
+          } else {
+            confirmed = data.unlocked === true;
+            purchasedItemId =
+              typeof data.itemId === "string" ? data.itemId : null;
           }
-          confirmed = resp.ok;
         }
       } catch (err) {
         console.error("Checkout verify error:", err);
       }
 
-      // Highly visible success toast. We show it whenever we returned from a
-      // successful checkout; on a confirmed 200 the entitlement is already
-      // granted, otherwise the verified webhook finishes the job moments later.
+      // Re-fetch entitlements + profile from Supabase until the purchase shows up.
+      let latest = await refreshAfterPurchase();
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (entitlementsIncludePurchase(latest, purchasedItemId)) break;
+        await sleep(1000);
+        latest = await refreshAfterPurchase();
+      }
+
       toast.success("تم الشراء بنجاح", {
-        description: confirmed
+        description: entitlementsIncludePurchase(latest, purchasedItemId)
           ? "تم تفعيل مشترياتك."
-          : "جارٍ تفعيل مشترياتك…",
+          : confirmed
+            ? "جارٍ تفعيل مشترياتك…"
+            : "جارٍ تأكيد عملية الدفع…",
         duration: 6000,
       });
-
-      // Pull the (now-updated) entitlements, with a short fallback poll.
-      let tries = 0;
-      const poll = async () => {
-        await refreshEntitlements();
-        tries += 1;
-        if (tries < 5) setTimeout(poll, 2000);
-      };
-      await poll();
     })();
-  }, [refreshEntitlements]);
+  }, [loading, refreshAfterPurchase]);
 
   return null;
 }
