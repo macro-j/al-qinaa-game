@@ -784,6 +784,121 @@ const MOD_TO_ITEM: Record<string, string> = {
 // Base roles that always consume slots (Boy, Akka, Old Man, Girl)
 const BASE_ROLES_COUNT = 4;
 
+// ─── Setup preferences (persist across reloads / new games) ─────────────────
+
+const STORAGE_SETUP_PREFS = "qinaa_setup_prefs";
+
+interface SetupPrefs {
+  isPassPhoneMode: boolean;
+  boyInheritsAce: boolean;
+  isModsEnabled: boolean;
+  activeMods: Record<string, boolean>;
+  magicianPotionMode: "dual" | "single";
+  gameSpeed: GameSpeed;
+  customSpeedsV1: SpeedTimings;
+}
+
+function defaultActiveMods(): Record<string, boolean> {
+  return EXPANSION_MODS.reduce(
+    (acc, m) => ({ ...acc, [m.id]: false }),
+    {} as Record<string, boolean>,
+  );
+}
+
+function defaultCustomSpeeds(): SpeedTimings {
+  return { turn: 30, discuss: 90, lastWords: 45 };
+}
+
+function sanitizeCustomSpeeds(raw: unknown): SpeedTimings {
+  const defaults = defaultCustomSpeeds();
+  if (!raw || typeof raw !== "object") return defaults;
+  const obj = raw as Partial<SpeedTimings>;
+  const sane = (v: unknown, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+  return {
+    turn: sane(obj.turn, defaults.turn),
+    discuss: sane(obj.discuss, defaults.discuss),
+    lastWords: sane(obj.lastWords, defaults.lastWords),
+  };
+}
+
+function sanitizeActiveMods(raw: unknown): Record<string, boolean> {
+  const base = defaultActiveMods();
+  if (!raw || typeof raw !== "object") return base;
+  const obj = raw as Record<string, unknown>;
+  for (const id of Object.keys(base)) {
+    base[id] = obj[id] === true;
+  }
+  return base;
+}
+
+function defaultSetupPrefs(): SetupPrefs {
+  return {
+    isPassPhoneMode: false,
+    boyInheritsAce: false,
+    isModsEnabled: false,
+    activeMods: defaultActiveMods(),
+    magicianPotionMode: "dual",
+    gameSpeed: "medium",
+    customSpeedsV1: defaultCustomSpeeds(),
+  };
+}
+
+/** Hydrate setup prefs from dedicated storage, migrating once from narrator snapshot. */
+function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): SetupPrefs {
+  const defaults = defaultSetupPrefs();
+  try {
+    const raw = localStorage.getItem(STORAGE_SETUP_PREFS);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SetupPrefs>;
+      return {
+        ...defaults,
+        isPassPhoneMode: parsed.isPassPhoneMode === true,
+        boyInheritsAce: parsed.boyInheritsAce === true,
+        isModsEnabled: parsed.isModsEnabled === true,
+        activeMods: sanitizeActiveMods(parsed.activeMods),
+        magicianPotionMode: parsed.magicianPotionMode === "single" ? "single" : "dual",
+        gameSpeed:
+          parsed.gameSpeed === "fast" ||
+          parsed.gameSpeed === "medium" ||
+          parsed.gameSpeed === "slow" ||
+          parsed.gameSpeed === "custom"
+            ? parsed.gameSpeed
+            : defaults.gameSpeed,
+        customSpeedsV1: sanitizeCustomSpeeds(parsed.customSpeedsV1),
+      };
+    }
+  } catch { /* ignore corrupt snapshot */ }
+
+  if (narratorFallback) {
+    return {
+      ...defaults,
+      isPassPhoneMode: narratorFallback.isPassPhoneMode === true,
+      boyInheritsAce: narratorFallback.boyInheritsAce === true,
+      isModsEnabled: narratorFallback.isModsEnabled === true,
+      activeMods: sanitizeActiveMods(narratorFallback.activeMods),
+      magicianPotionMode:
+        narratorFallback.magicianPotionMode === "single" ? "single" : "dual",
+      gameSpeed:
+        narratorFallback.gameSpeedV1 === "fast" ||
+        narratorFallback.gameSpeedV1 === "medium" ||
+        narratorFallback.gameSpeedV1 === "slow" ||
+        narratorFallback.gameSpeedV1 === "custom"
+          ? (narratorFallback.gameSpeedV1 as GameSpeed)
+          : defaults.gameSpeed,
+      customSpeedsV1: sanitizeCustomSpeeds(narratorFallback.customSpeedsV1),
+    };
+  }
+
+  return defaults;
+}
+
+function saveSetupPrefs(prefs: SetupPrefs): void {
+  try {
+    localStorage.setItem(STORAGE_SETUP_PREFS, JSON.stringify(prefs));
+  } catch { /* quota — ignore */ }
+}
+
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
@@ -791,6 +906,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const { openShop } = useShop();
   // ── Hydrate from localStorage on mount (read once) ──
   const SAVED = loadNarratorState();
+  const SETUP = loadSetupPrefs(SAVED);
   const pick = <T,>(key: string, fallback: T): T =>
     (SAVED && key in SAVED ? (SAVED[key] as T) : fallback);
 
@@ -838,7 +954,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // "single" (one shared potion). Persists so the user's preference carries
   // across new games until they change it.
   const [magicianPotionMode, setMagicianPotionMode] = useState<"dual" | "single">(
-    () => pick("magicianPotionMode", "dual" as const)
+    () => SETUP.magicianPotionMode,
   );
   // Transient per-night UI choices (reset at the start of every magician turn)
   const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
@@ -856,7 +972,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // a single combined screen on his turn. Default false. Persists as a user
   // preference for subsequent games.
   const [boyInheritsAce, setBoyInheritsAce] = useState<boolean>(
-    () => pick("boyInheritsAce", false)
+    () => SETUP.boyInheritsAce,
   );
 
   // ── Pass-the-Phone Mode (نظام تمرير الجوال) ──
@@ -866,12 +982,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // rules; the transient `isBlindScreen` flag below is intentionally NOT
   // persisted — it always resets to the mode's default on phase entry.
   const [isPassPhoneMode, setIsPassPhoneMode] = useState<boolean>(
-    () => pick("isPassPhoneMode", false)
+    () => SETUP.isPassPhoneMode,
   );
   const [isBlindScreen, setIsBlindScreen] = useState<boolean>(false);
   // Game speed preset (drives the 3 timers). Persists across sessions.
   const [gameSpeed, setGameSpeed] = useState<GameSpeed>(
-    () => pick("gameSpeedV1", "medium" as GameSpeed)
+    () => SETUP.gameSpeed,
   );
   // ── Custom speed timings (مخصص) ──
   // Host-defined values for the three timers, used only when gameSpeed
@@ -879,21 +995,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // custom feels neutral. Persisted independently so the host's custom
   // values survive even while a named preset is active, and re-appear
   // the next time they switch back to "مخصص".
-  const [customSpeeds, setCustomSpeeds] = useState<SpeedTimings>(() => {
-    // Defensive hydration: `pick` is an unchecked cast, so a stale snapshot
-    // from an older schema (or hand-edited localStorage) could be missing
-    // keys or contain non-numeric values. Fall back per-field to medium
-    // defaults so `speedPreset` is always a fully-populated SpeedTimings.
-    const DEFAULTS = { turn: 30, discuss: 90, lastWords: 45 };
-    const raw = pick<Partial<SpeedTimings>>("customSpeedsV1", DEFAULTS);
-    const sane = (v: unknown, fallback: number): number =>
-      typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
-    return {
-      turn:      sane(raw?.turn,      DEFAULTS.turn),
-      discuss:   sane(raw?.discuss,   DEFAULTS.discuss),
-      lastWords: sane(raw?.lastWords, DEFAULTS.lastWords),
-    };
-  });
+  const [customSpeeds, setCustomSpeeds] = useState<SpeedTimings>(
+    () => SETUP.customSpeedsV1,
+  );
   // Resolved active timings: custom→customSpeeds, otherwise the named preset.
   // Single source of truth for every timer site in the app.
   const speedPreset = gameSpeed === "custom"
@@ -948,12 +1052,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
   // Persisted so the user's add-on selection (Twins / Madman / Avenger /
   // Magician) survives reloads AND the "Play Again with same players" flow.
-  const [isModsEnabled, setIsModsEnabled]     = useState<boolean>(() => pick("isModsEnabled", false));
-  const [activeMods, setActiveMods]           = useState<Record<string, boolean>>(
-    () => pick(
-      "activeMods",
-      EXPANSION_MODS.reduce((acc, m) => ({ ...acc, [m.id]: false }), {} as Record<string, boolean>),
-    ),
+  const [isModsEnabled, setIsModsEnabled] = useState<boolean>(() => SETUP.isModsEnabled);
+  const [activeMods, setActiveMods] = useState<Record<string, boolean>>(
+    () => SETUP.activeMods,
   );
   const toggleMod = (id: string) => {
     setActiveMods(prev => {
@@ -1026,7 +1127,28 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players.length]);
 
-  // ── Sync persistable state to localStorage on every change ──
+  // ── Persist setup preferences independently (survives reload + empty roster) ──
+  useEffect(() => {
+    saveSetupPrefs({
+      isPassPhoneMode,
+      boyInheritsAce,
+      isModsEnabled,
+      activeMods,
+      magicianPotionMode,
+      gameSpeed,
+      customSpeedsV1: customSpeeds,
+    });
+  }, [
+    isPassPhoneMode,
+    boyInheritsAce,
+    isModsEnabled,
+    activeMods,
+    magicianPotionMode,
+    gameSpeed,
+    customSpeeds,
+  ]);
+
+  // ── Sync in-game narrator snapshot to localStorage on every change ──
   useEffect(() => {
     if (phase === "setup" && players.length === 0) {
       clearNarratorState();
@@ -1739,11 +1861,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Reset boy inheritance transients
     setBoyKillTarget(null);
     setBoySilenceTarget(null);
-    // Reset House Rules to documented defaults so the next game starts from
-    // a known baseline that matches the "(افتراضي)" labels in the UI.
-    setGameSpeed("medium");
-    setBoyInheritsAce(false);
-    setIsPassPhoneMode(false);
+    // House rules / setup prefs persist via STORAGE_SETUP_PREFS — not reset here.
     setIsBlindScreen(false);
     // Reset avenger interrupt flow
     setAvengerFlow(null);
