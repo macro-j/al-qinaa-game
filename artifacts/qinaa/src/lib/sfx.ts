@@ -10,8 +10,9 @@
  * so a module-level helper is the clean way to reach all call sites.
  *
  * This uses plain HTMLAudioElement — the same primitive the narrator uses — and
- * does NOT create a Web Audio context. Mute state is mirrored in from App via
- * setSfxMuted so every cue honors the same toggle as the narrator.
+ * does NOT create a Web Audio context. This layer is independent of the
+ * narrator voice-over mute toggle in App.tsx — card / heartbeat cues always
+ * play unless individually gated elsewhere.
  */
 
 const cache = new Map<string, HTMLAudioElement>();

@@ -44,7 +44,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
-import { preloadSfx, unlockSfx, setSfxMuted, playSfx, startHeartbeat, stopHeartbeat } from "./lib/sfx";
+import { preloadSfx, unlockSfx, playSfx, startHeartbeat, stopHeartbeat } from "./lib/sfx";
 import { AuthModal } from "./components/AuthModal";
 import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
@@ -796,6 +796,8 @@ interface SetupPrefs {
   magicianPotionMode: "dual" | "single";
   gameSpeed: GameSpeed;
   customSpeedsV1: SpeedTimings;
+  /** When true, night-phase narrator VO is silenced; SFX/victory still play. */
+  isNarratorMuted: boolean;
 }
 
 function defaultActiveMods(): Record<string, boolean> {
@@ -841,7 +843,23 @@ function defaultSetupPrefs(): SetupPrefs {
     magicianPotionMode: "dual",
     gameSpeed: "medium",
     customSpeedsV1: defaultCustomSpeeds(),
+    isNarratorMuted: false,
   };
+}
+
+/** Night-phase narrator voice-over clips (wake / prompt / sleep / city transitions). */
+const NARRATOR_VOICE_FILES = new Set([
+  "start.m4a",
+  "morning.m4a",
+  "w1.m4a", "w2.m4a", "w3.m4a",
+  "e1.m4a", "e2.m4a", "e3.m4a",
+  "s1.m4a", "s2.m4a", "s3.m4a",
+  "b1.m4a", "b2.m4a", "b3.m4a",
+  "wh1.m4a", "wh2.m4a", "wh3.m4a",
+]);
+
+function isNarratorVoiceTrack(fileName: string): boolean {
+  return NARRATOR_VOICE_FILES.has(fileName);
 }
 
 /** Hydrate setup prefs from dedicated storage, migrating once from narrator snapshot. */
@@ -866,6 +884,9 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
             ? parsed.gameSpeed
             : defaults.gameSpeed,
         customSpeedsV1: sanitizeCustomSpeeds(parsed.customSpeedsV1),
+        isNarratorMuted:
+          parsed.isNarratorMuted === true ||
+          (parsed as { isMuted?: boolean }).isMuted === true,
       };
     }
   } catch { /* ignore corrupt snapshot */ }
@@ -887,6 +908,9 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
           ? (narratorFallback.gameSpeedV1 as GameSpeed)
           : defaults.gameSpeed,
       customSpeedsV1: sanitizeCustomSpeeds(narratorFallback.customSpeedsV1),
+      isNarratorMuted:
+        narratorFallback.isNarratorMuted === true ||
+        narratorFallback.isMuted === true,
     };
   }
 
@@ -1046,8 +1070,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // ── Night 15-second action timer ──
   const [nightTimerExpired, setNightTimerExpired] = useState(false);
-  // ── Global audio mute ──
-  const [isMuted, setIsMuted] = useState(() => pick("isMuted", false));
+  // ── Narrator voice-over mute (SFX / victory clips stay audible) ──
+  const [isNarratorMuted, setIsNarratorMuted] = useState(
+    () => SETUP.isNarratorMuted,
+  );
 
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
   // Persisted so the user's add-on selection (Twins / Madman / Avenger /
@@ -1137,6 +1163,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       magicianPotionMode,
       gameSpeed,
       customSpeedsV1: customSpeeds,
+      isNarratorMuted,
     });
   }, [
     isPassPhoneMode,
@@ -1146,6 +1173,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     magicianPotionMode,
     gameSpeed,
     customSpeeds,
+    isNarratorMuted,
   ]);
 
   // ── Sync in-game narrator snapshot to localStorage on every change ──
@@ -1159,7 +1187,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       livePlayers, nightStep, nightActions, investigatedTarget,
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
-      finalVoteAgainst, gameOver, executionReveal, isMuted,
+      finalVoteAgainst, gameOver, executionReveal,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       isModsEnabled, activeMods,
       customSpeedsV1: customSpeeds,
@@ -1169,7 +1197,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     livePlayers, nightStep, nightActions, investigatedTarget,
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
-    finalVoteAgainst, gameOver, executionReveal, isMuted,
+    finalVoteAgainst, gameOver, executionReveal,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
     isModsEnabled, activeMods, customSpeeds,
   ]);
@@ -1225,12 +1253,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return () => document.removeEventListener("pointerdown", unlock);
   }, []);
 
-  // Mirror mute state into the shared SFX layer so flip/reveal/heartbeat
-  // cues honor the same mute toggle as the narrator.
-  useEffect(() => { setSfxMuted(isMuted); }, [isMuted]);
-
   const playGameAudio = (fileName: string) => {
-    if (isMuted) return;
+    if (isNarratorVoiceTrack(fileName) && isNarratorMuted) return;
     if (currentPlaying.current) {
       currentPlaying.current.pause();
       currentPlaying.current.currentTime = 0;
@@ -1968,20 +1992,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         <navAction.Icon size={18} strokeWidth={2} />
       </button>
 
-      {/* LEFT — mute toggle (always rendered) */}
+      {/* LEFT — narrator VO mute (SFX / victory stay audible) */}
       <button
-        onClick={() => setIsMuted(m => !m)}
-        title={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
-        aria-label={isMuted ? "تشغيل الصوت" : "كتم الصوت"}
+        onClick={() => setIsNarratorMuted(m => !m)}
+        title={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
+        aria-label={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
         className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full transition-colors active:scale-90 hover:text-white"
         style={{
           backgroundColor: "rgba(13,13,13,0.55)",
-          border: `1px solid ${isMuted ? "rgba(211,47,47,0.32)" : "rgba(255,255,255,0.06)"}`,
+          border: `1px solid ${isNarratorMuted ? "rgba(211,47,47,0.32)" : "rgba(255,255,255,0.06)"}`,
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
-          color: isMuted ? "#D32F2F" : "rgba(255,255,255,0.70)",
+          color: isNarratorMuted ? "#D32F2F" : "rgba(255,255,255,0.70)",
         }}>
-        {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        {isNarratorMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
     </div>
   );
@@ -4313,31 +4337,25 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* ── Row 1.5: الراوي الصوتي ──
-              Bound to the global `isMuted` state (same source the top-navbar
-              Volume icon reads). The switch represents the AUDIO-ON state,
-              so it's visually ON when `isMuted === false`. Toggling here
-              flips the same state the navbar uses, so both controls stay
-              in sync automatically. Persistence is already handled by the
-              existing NarratorMode save snapshot (isMuted is in the
-              persisted state list), so no extra localStorage write needed. */}
+              Mutes night-phase narrator VO only; card / victory / UI SFX stay on. */}
           <button
-            onClick={() => setIsMuted(m => !m)}
+            onClick={() => setIsNarratorMuted(m => !m)}
             className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
-            style={{ backgroundColor: !isMuted ? "#170000" : "transparent", borderBottom: "1px solid #1A1A1A" }}>
+            style={{ backgroundColor: !isNarratorMuted ? "#170000" : "transparent", borderBottom: "1px solid #1A1A1A" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
-              <span className="text-xs font-bold" style={{ color: !isMuted ? "#FFFFFF" : "#AAAAAA" }}>
+              <span className="text-xs font-bold" style={{ color: !isNarratorMuted ? "#FFFFFF" : "#AAAAAA" }}>
                 الراوي الصوتي
               </span>
               <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
-                تشغيل التعليق الصوتي والمؤثرات للعبة
+                تعليقات الليل (صحى/نام) · المؤثرات والفوز تبقى شغّالة
               </span>
             </div>
             <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
-              style={{ backgroundColor: !isMuted ? "#D32F2F" : "#262626" }}>
+              style={{ backgroundColor: !isNarratorMuted ? "#D32F2F" : "#262626" }}>
               <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
                 style={{
                   backgroundColor: "#FFFFFF",
-                  right: !isMuted ? "0.125rem" : "1.125rem",
+                  right: !isNarratorMuted ? "0.125rem" : "1.125rem",
                 }} />
             </div>
           </button>
