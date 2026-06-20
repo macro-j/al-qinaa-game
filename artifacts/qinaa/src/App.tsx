@@ -46,6 +46,7 @@ import { useAuth } from "./lib/auth";
 import { useShop } from "./lib/shop";
 import { preloadSfx, unlockSfx, playSfx, startHeartbeat, stopHeartbeat } from "./lib/sfx";
 import { AuthModal } from "./components/AuthModal";
+import { ProfileModal } from "./components/ProfileModal";
 import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
@@ -308,9 +309,10 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
     }
     return false;
   });
+  const [showProfile, setShowProfile] = useState(false);
 
   const { openShop } = useShop();
-  const { user, entitlements, signOut } = useAuth();
+  const { user, entitlements } = useAuth();
   const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
 
   // 🛑 التعديل الذكي الثاني: إضافة وحذف كلمة auth من الرابط تلقائياً 🛑
@@ -411,16 +413,15 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
       </div>
       </div>{/* end flex-1 centering region */}
 
-      {/* ── Signed-in user strip ──
-          Anchored above the footer so the player always knows which account
-          they're on and can sign out. Pure dir="rtl", same dark language. */}
+      {/* ── Signed-in user strip — opens profile modal ── */}
       {user && (
         <div dir="rtl" className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto px-6 pb-3">
-          <div
-            className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl"
+          <button
+            type="button"
+            onClick={() => setShowProfile(true)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl transition-all duration-200 active:scale-[0.99] hover:brightness-110"
             style={{ backgroundColor: "#0D0D0D", border: "1px solid #1F1F1F" }}>
-            {/* Identity + status */}
-            <div className="flex flex-col gap-1.5 min-w-0">
+            <div className="flex flex-col gap-1.5 min-w-0 text-right">
               <span className="text-[11px]" style={{ color: "#666666" }}>
                 المستخدم:{" "}
                 <span dir="ltr" className="text-xs font-bold align-middle" style={{ color: "#9E9E9E" }}>
@@ -451,13 +452,8 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 <span className="text-[11px]" style={{ color: "#555555" }}>جارٍ التحقق من الحساب…</span>
               )}
             </div>
-            {/* Logout */}
-            <button
-              onClick={() => { void signOut(); }}
-              className="shrink-0 text-red-400 hover:text-red-300 border border-red-500/20 bg-red-500/5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors active:scale-95">
-              تسجيل الخروج
-            </button>
-          </div>
+            <ChevronRight size={18} color="#666666" strokeWidth={2} className="rotate-180 shrink-0" />
+          </button>
         </div>
       )}
 
@@ -506,6 +502,11 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
       {/* ── Auth Modal — opened when a guest taps a gated action ── */}
       <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+
+      {/* ── Profile Modal — account details, logout, delete ── */}
+      {user && (
+        <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} user={user} />
+      )}
 
       {/* ── About Modal ── */}
       <AboutModal open={showAbout} onClose={() => setShowAbout(false)} />

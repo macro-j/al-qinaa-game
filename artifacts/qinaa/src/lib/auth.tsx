@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase, FREE_GAME_LIMIT, type Entitlements } from "./supabase";
+import { supabase, FREE_GAME_LIMIT, type Entitlements, getValidAccessToken } from "./supabase";
+import { apiPost } from "./api";
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
   games_played: 0,
@@ -37,6 +38,7 @@ type AuthContextValue = {
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signInWithEmail: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: string | null }>;
   incrementGamesPlayed: () => Promise<void>;
   refreshEntitlements: () => Promise<Entitlements | null>;
   /** Re-fetch entitlements + profile after a verified purchase. */
@@ -269,6 +271,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     provisionedFor.current = null;
   };
 
+  const deleteAccount = async (): Promise<{ error: string | null }> => {
+    const token = await getValidAccessToken();
+    if (!token) return { error: "not_authenticated" };
+
+    const { resp, data } = await apiPost<{ ok?: boolean; error?: string }>(
+      "/api/account/delete",
+      {},
+      { Authorization: `Bearer ${token}` },
+    );
+
+    if (!resp.ok) {
+      return { error: data.error ?? "delete_failed" };
+    }
+
+    try {
+      localStorage.removeItem("qinaa_narrator_state");
+      localStorage.removeItem("qinaa_setup_prefs");
+    } catch { /* ignore */ }
+
+    await signOut();
+    return { error: null };
+  };
+
   const incrementGamesPlayed = async () => {
     if (!user) return;
 
@@ -306,6 +331,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithGoogle,
     signInWithEmail,
     signOut,
+    deleteAccount,
     incrementGamesPlayed,
     refreshEntitlements,
     refreshAfterPurchase,
