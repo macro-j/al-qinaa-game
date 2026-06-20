@@ -58,6 +58,41 @@ import { ROLE_META, getRoleName } from "./lib/roles";
 const narratorAudioCacheRef  = { current: {} as Record<string, HTMLAudioElement> };
 const narratorActiveAudioRef = { current: null as HTMLAudioElement | null };
 
+/** Shared Web Audio context — created on first user gesture, reused for suspend detection. */
+const gameAudioContextRef = { current: null as AudioContext | null };
+const onAudioSuspendedChangeRef = {
+  current: null as ((suspended: boolean) => void) | null,
+};
+
+function getOrCreateGameAudioContext(): AudioContext | null {
+  try {
+    if (gameAudioContextRef.current) return gameAudioContextRef.current;
+
+    type ACtor = typeof AudioContext;
+    const Ctx: ACtor | undefined =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: ACtor }).webkitAudioContext;
+    if (!Ctx) return null;
+
+    const ctx = new Ctx();
+    ctx.onstatechange = () => {
+      if (document.visibilityState !== "visible") return;
+      onAudioSuspendedChangeRef.current?.(ctx.state === "suspended");
+    };
+    gameAudioContextRef.current = ctx;
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+
+function resumeGameAudioContext(): void {
+  const ctx = gameAudioContextRef.current;
+  if (ctx?.state === "suspended") {
+    void ctx.resume();
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Screen = "menu" | "create-name" | "join" | "lobby" | "player-screen" | "dashboard" | "rejoining";
@@ -1235,16 +1270,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // to warm the media pipeline, so subsequent .play() calls from async
     // effects/timers don't get silently rejected.
     const unlock = () => {
-      try {
-        type ACtor = typeof AudioContext;
-        const Ctx: ACtor | undefined =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: ACtor }).webkitAudioContext;
-        if (Ctx) {
-          const ctx = new Ctx();
-          if (ctx.state === "suspended") void ctx.resume();
-        }
-      } catch { /* ignored — best-effort unlock */ }
+      const ctx = getOrCreateGameAudioContext();
+      if (ctx?.state === "suspended") void ctx.resume();
       Object.values(audioCache.current).forEach(a => {
         try { a.load(); } catch { /* ignored */ }
       });
@@ -6392,10 +6419,18 @@ export default function App() {
   const [needsResume, setNeedsResume] = useState(false);
 
   useEffect(() => {
+    onAudioSuspendedChangeRef.current = (suspended) => setNeedsResume(suspended);
+    return () => {
+      onAudioSuspendedChangeRef.current = null;
+    };
+  }, []);
+
+  // Re-check only when the tab becomes visible AND a context exists in suspended state.
+  useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        setNeedsResume(true);
-      }
+      if (document.visibilityState !== "visible") return;
+      const ctx = gameAudioContextRef.current;
+      setNeedsResume(!!ctx && ctx.state === "suspended");
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -6434,7 +6469,6 @@ export default function App() {
   const isHostRef           = useRef(false);
   const currentAudioRef     = useRef<HTMLAudioElement | null>(null);
   const activeAudioRef      = useRef<HTMLAudioElement | null>(null);
-  const audioCtxRef         = useRef<AudioContext | null>(null);
   const wakeLockRef         = useRef<WakeLockSentinel | null>(null);
   const ambientRef          = useRef<HTMLAudioElement | null>(null); // night/day background tone
   const alertRef            = useRef<HTMLAudioElement | null>(null); // wake/sleep role alert
@@ -6478,16 +6512,10 @@ export default function App() {
 
   // ── Audio + WakeLock initializer — must be called from a user-gesture ───
   const initAudioSystem = useCallback(() => {
-    // Create / resume Web Audio Context (required before any tone can play)
-    try {
-      if (!audioCtxRef.current) {
-        audioCtxRef.current = new (window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      if (audioCtxRef.current.state === "suspended") {
-        audioCtxRef.current.resume().catch(() => {});
-      }
-    } catch {}
+    const ctx = getOrCreateGameAudioContext();
+    if (ctx?.state === "suspended") {
+      void ctx.resume();
+    }
     // Request screen wake lock so the device stays awake during the game
     if ("wakeLock" in navigator && !wakeLockRef.current) {
       (navigator as unknown as { wakeLock: { request(t: string): Promise<WakeLockSentinel> } })
@@ -6949,11 +6977,12 @@ export default function App() {
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer"
       style={{
-        backgroundColor: "rgba(0,0,0,0.75)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
+        backgroundColor: "rgba(0,0,0,0.55)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
       }}
       onClick={() => {
+        resumeGameAudioContext();
         const unlockCache = (cache: Record<string, HTMLAudioElement>) => {
           Object.values(cache).forEach((audio) => {
             if (audio instanceof HTMLAudioElement) {
@@ -6971,10 +7000,11 @@ export default function App() {
         if (narratorActiveAudioRef.current) {
           narratorActiveAudioRef.current.play().catch(() => {});
         }
-        setNeedsResume(false);
+        const ctx = gameAudioContextRef.current;
+        setNeedsResume(!!ctx && ctx.state === "suspended");
       }}
       role="button"
-      aria-label="استئناف اللعب وتشغيل الصوت"
+      aria-label="استئناف اللعب والصوت"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -6994,9 +7024,9 @@ export default function App() {
         >
           <Volume2 size={40} color="#D32F2F" strokeWidth={1.6} />
         </div>
-        <h2 className="text-2xl font-black text-white">تم إيقاف اللعبة مؤقتاً</h2>
+        <h2 className="text-2xl font-black text-white">اللعبة متوقفة مؤقتًا</h2>
         <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.65)" }}>
-          اضغط هنا لاستئناف اللعب وتشغيل الصوت
+          اضغط هنا لاستئناف اللعب والصوت
         </p>
       </motion.div>
     </div>
