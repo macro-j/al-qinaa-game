@@ -1019,12 +1019,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // Transient per-night UI choices (reset at the start of every magician turn)
   const [magicianHealUsedThisNight, setMagicianHealUsedThisNight] = useState(false);
   const [magicianPoisonTarget, setMagicianPoisonTarget]           = useState<string | null>(null);
-  const [magicianPickerOpen, setMagicianPickerOpen]               = useState(false);
-  // Anti-cheat heal flow: gate the mafia victim's name behind an explicit
-  // "use potion?" prompt so the magician can't peek at the kill target
-  // without committing. "prompt" = decision pending, "reveal" = victim
-  // shown awaiting confirmation, "done" = decision finalised (used or skipped).
-  const [magicianHealStep, setMagicianHealStep] = useState<"prompt" | "reveal" | "done">("prompt");
+  // Magician blind-commit UI: actions → optional poison_pick / heal_success (auto-advances).
+  const [magicianUiPhase, setMagicianUiPhase] = useState<"actions" | "poison_pick" | "heal_success">("actions");
+  const magicianHealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMagicianPoisonRef = useRef<string | null>(null);
 
   // ── House Rules (إعدادات المجلس) ──
   // boyInheritsAce: when true, if the Ace (الإكة) is dead, the Boy (الولد)
@@ -1538,7 +1536,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
-      setMagicianPickerOpen(false);
+      setMagicianUiPhase("actions");
       startNightWithTransition(order);
       setPhase("night");
     } else {
@@ -1653,7 +1651,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setNightCount(n => n + 1);
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
-    setMagicianPickerOpen(false);
+    setMagicianUiPhase("actions");
     startNightWithTransition(order);
     setPhase("night");
   };
@@ -1791,15 +1789,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       //                permanently locks BOTH flags for the rest of the game.
       // Either way, a passive skip / timeout / "ينام الساحر" with no
       // explicit selection leaves both flags untouched.
-      const healCommitted   = magicianHealUsedThisNight && !!nightActions.killTarget;
-      const poisonCommitted = !!magicianPoisonTarget;
+      const healCommitted   = magicianHealUsedThisNight;
+      const poisonTarget    = magicianPoisonTarget ?? pendingMagicianPoisonRef.current;
+      const poisonCommitted = !!poisonTarget;
 
-      if (healCommitted) {
+      if (healCommitted && nightActions.killTarget) {
         newActions.magicianHealTarget = nightActions.killTarget;
       }
       if (poisonCommitted) {
-        newActions.magicianPoisonTarget = magicianPoisonTarget;
+        newActions.magicianPoisonTarget = poisonTarget;
       }
+      pendingMagicianPoisonRef.current = null;
 
       if (healCommitted || poisonCommitted) {
         if (magicianPotionMode === "single") {
@@ -1830,8 +1830,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         if (nextRole === "magician") {
           setMagicianHealUsedThisNight(false);
           setMagicianPoisonTarget(null);
-          setMagicianPickerOpen(false);
-          setMagicianHealStep("prompt");
+          setMagicianUiPhase("actions");
         }
         setNightTransitionLabel(`${getRoleName(nextRole)} ${roleWakes(nextRole)}`);
         nightTransitionNextRef.current = null;
@@ -1909,7 +1908,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setMagicianState({ hasHeal: true, hasPoison: true });
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
-    setMagicianPickerOpen(false);
+    setMagicianUiPhase("actions");
     // Reset boy inheritance transients
     setBoyKillTarget(null);
     setBoySilenceTarget(null);
@@ -1941,7 +1940,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Reset magician transients only — magicianState (potions) carries over
     setMagicianHealUsedThisNight(false);
     setMagicianPoisonTarget(null);
-    setMagicianPickerOpen(false);
+    setMagicianUiPhase("actions");
     resetVotingState();
     startNightWithTransition(order);
     setPhase("night");
@@ -2455,162 +2454,54 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               );
             }
 
-            // ── Magician (الساحر) — bespoke 3-action panel (Heal / Poison / Skip) ──
-            // In "single" mode the two actions mutually lock (one shared potion);
-            // in "dual" mode both actions can fire in the same night.
-            // The panel renders as long as the magician still owns AT LEAST one
-            // flag; getNightOrder filters out the phase once both are spent.
+            // ── Magician (الساحر) — blind commitment: 3 actions, no victim peek ──
             if (nightStep === "magician") {
-              const magMeta     = ROLE_META["magician"];
-              const mafiaTarget = nightActions.killTarget;
-              const poisonChosen = !!magicianPoisonTarget;
-              const healChosen   = magicianHealUsedThisNight;
-              const isSingle    = magicianPotionMode === "single";
-              const canPoison   = magicianState.hasPoison && !(isSingle && healChosen);
+              const magMeta   = ROLE_META["magician"];
+              const isSingle  = magicianPotionMode === "single";
+              const canHeal   = magicianState.hasHeal && !(isSingle && !!magicianPoisonTarget);
+              const canPoison = magicianState.hasPoison && !(isSingle && magicianHealUsedThisNight);
 
-              // ── Heal sub-flow gating ──
-              // Anti-cheat: never expose the mafia victim until the magician
-              // explicitly commits to using the potion. Sub-states:
-              //   prompt  → "Do you want to use the Life Potion?" (Yes/Skip)
-              //   reveal  → victim name shown + Confirm/Back buttons
-              //   done    → status pill + Poison action become available
-              // If heal isn't possible at all (no potion or no victim and not
-              // locked out by single-mode poison), skip the prompt entirely
-              // and present the Poison/Skip UI right away.
-              const healPossible   = magicianState.hasHeal && !!mafiaTarget && !(isSingle && poisonChosen);
-              const showHealPrompt = magicianHealStep === "prompt" && healPossible;
-              const showHealReveal = magicianHealStep === "reveal" && healPossible;
+              const commitHealAndAdvance = () => {
+                triggerHaptic([30, 50, 30]);
+                setMagicianHealUsedThisNight(true);
+                setMagicianUiPhase("heal_success");
+                if (magicianHealTimerRef.current) clearTimeout(magicianHealTimerRef.current);
+                magicianHealTimerRef.current = setTimeout(() => {
+                  handleNightStep();
+                }, 1200);
+              };
 
-              if (showHealPrompt) {
+              const commitPoisonAndAdvance = (targetName: string) => {
+                triggerHaptic([30, 50, 30]);
+                pendingMagicianPoisonRef.current = targetName;
+                setMagicianPoisonTarget(targetName);
+                handleNightStep();
+              };
+
+              if (magicianUiPhase === "heal_success") {
                 return (
-                  <div className="flex flex-col gap-3">
-                    <div className="px-4 py-5 rounded-2xl text-center"
-                      style={{ backgroundColor: "#0D0D0D", border: `1px solid ${magMeta.color}44` }}>
-                      <span className="text-base font-black text-white">هل تريد استخدام جرعة الحياة؟</span>
-                    </div>
-                    <button
-                      onClick={() => { triggerHaptic([30, 50, 30]); setMagicianHealStep("reveal"); }}
-                      className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
-                      style={{
-                        backgroundColor: "#1B2A0E",
-                        color:           "#A3E635",
-                        border:          `1px solid ${magMeta.color}`,
-                        boxShadow:       `0 0 16px ${magMeta.color}33`,
-                      }}>
-                      نعم، استخدم الجرعة
-                    </button>
-                    <button
-                      onClick={() => { triggerHaptic(20); setMagicianHealStep("done"); }}
-                      className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
-                      style={{ backgroundColor: "#141414", color: "#CCCCCC", border: "1px solid #222" }}>
-                      تخطي
-                    </button>
+                  <div className="px-4 py-6 rounded-2xl text-center"
+                    style={{ backgroundColor: "#1B2A0E", border: `1px solid ${magMeta.color}`, boxShadow: `0 0 20px ${magMeta.color}33` }}>
+                    <span className="text-base font-black" style={{ color: "#A3E635" }}>
+                      تم إنقاذ الضحية بنجاح
+                    </span>
                   </div>
                 );
               }
 
-              if (showHealReveal) {
+              if (magicianUiPhase === "poison_pick") {
                 return (
                   <div className="flex flex-col gap-3">
-                    <div className="px-4 py-4 rounded-xl flex flex-col gap-1"
-                      style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F88", boxShadow: "0 0 16px #D32F2F33" }}>
-                      <span className="text-xs font-bold" style={{ color: "#FF8888" }}>المافيا يخططون لقتل:</span>
-                      <span className="text-lg font-black text-white">{mafiaTarget}</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        triggerHaptic([30, 50, 30]);
-                        setMagicianHealUsedThisNight(true);
-                        setMagicianHealStep("done");
-                      }}
-                      className="w-full px-4 py-3 rounded-xl font-black text-sm transition-all duration-150 active:scale-95"
-                      style={{
-                        backgroundColor: "#1B2A0E",
-                        color:           "#A3E635",
-                        border:          `1px solid ${magMeta.color}`,
-                        boxShadow:       `0 0 16px ${magMeta.color}55`,
-                      }}>
-                      تأكيد الإنقاذ
-                    </button>
-                    <button
-                      onClick={() => { triggerHaptic(20); setMagicianHealStep("prompt"); }}
-                      className="w-full px-4 py-3 rounded-xl font-bold text-xs transition-all duration-150 active:scale-95"
-                      style={{ backgroundColor: "#0A0A0A", color: "#666666", border: "1px solid #1A1A1A" }}>
-                      تراجع
-                    </button>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="flex flex-col gap-3">
-                  {/* Heal status pill — read-only summary of the heal decision.
-                      Only rendered when the magician actually had a heal opportunity
-                      this night (potion in hand + mafia chose a victim). */}
-                  {magicianState.hasHeal && mafiaTarget && (
-                    <div className="px-4 py-3 rounded-xl flex items-center gap-2"
-                      style={{
-                        backgroundColor: magicianHealUsedThisNight ? "#1B2A0E" : "#0D0D0D",
-                        border:          `1px solid ${magicianHealUsedThisNight ? magMeta.color : "#222"}`,
-                        boxShadow:       magicianHealUsedThisNight ? `0 0 16px ${magMeta.color}33` : "none",
-                      }}>
-                      <span className="text-xs font-bold"
-                        style={{ color: magicianHealUsedThisNight ? "#A3E635" : "#888888" }}>
-                        {magicianHealUsedThisNight ? "تم الإنقاذ:" : "تم تخطي جرعة الحياة"}
-                      </span>
-                      {magicianHealUsedThisNight && (
-                        <span className="text-sm font-black text-white">{mafiaTarget}</span>
-                      )}
-                    </div>
-                  )}
-                  {!magicianState.hasHeal && (
                     <div className="px-4 py-3 rounded-xl text-center"
-                      style={{ backgroundColor: "#0A0A0A", border: "1px solid #1A1A1A" }}>
-                      <span className="text-xs" style={{ color: "#666" }}>(جرعة الحياة مُستهلكة)</span>
+                      style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F55" }}>
+                      <span className="text-sm font-bold text-white">اختر هدف الاغتيال</span>
                     </div>
-                  )}
-
-                  {/* ── Action 2: Poison ── */}
-                  <button
-                    disabled={!canPoison}
-                    onClick={() => {
-                      if (magicianPoisonTarget) {
-                        // Tap again clears the choice
-                        setMagicianPoisonTarget(null);
-                        setMagicianPickerOpen(false);
-                      } else {
-                        setMagicianPickerOpen(v => !v);
-                      }
-                    }}
-                    className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed text-right"
-                    style={{
-                      backgroundColor: magicianPoisonTarget ? "#2A0F0F" : "#141414",
-                      color:           magicianPoisonTarget ? "#FF8888" : "#CCCCCC",
-                      border: `1px solid ${magicianPoisonTarget ? "#D32F2F" : "#222"}`,
-                      boxShadow: magicianPoisonTarget ? "0 0 16px #D32F2F33" : "none",
-                    }}>
-                    <div className="flex flex-col gap-0.5">
-                      <span>
-                        {magicianPoisonTarget
-                          ? `تم — جرعة السم لـ ${magicianPoisonTarget}`
-                          : "استخدام جرعة السم"}
-                      </span>
-                      {!magicianState.hasPoison && (
-                        <span className="text-xs" style={{ color: "#666" }}>(جرعة السم مُستهلكة)</span>
-                      )}
-                    </div>
-                  </button>
-
-                  {/* ── Poison player picker — numbered vertical list to match the
-                          standard target-selection layout used by other roles ── */}
-                  {magicianPickerOpen && canPoison && !magicianPoisonTarget && (
                     <div className="flex flex-col gap-2 p-2 rounded-xl"
                       style={{ backgroundColor: "#0A0A0A", border: "1px solid #222" }}>
                       {livePlayers.filter(p => p.isAlive).map((p, idx) => (
                         <div key={p.name}
-                          className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-200"
+                          className="flex items-center justify-between px-3 py-2.5 rounded-xl"
                           style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
-                          {/* RIGHT (first in DOM = rightmost in RTL): number + name */}
                           <div className="flex items-center gap-3">
                             <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
                               style={{
@@ -2624,29 +2515,57 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                               {p.name}
                             </span>
                           </div>
-                          {/* LEFT: select action */}
                           <button
-                            onClick={() => {
-                              setMagicianPoisonTarget(p.name);
-                              setMagicianPickerOpen(false);
-                            }}
+                            onClick={() => commitPoisonAndAdvance(p.name)}
                             className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
-                            style={{
-                              backgroundColor: "#1A1A1A",
-                              color:           "#888888",
-                              border:          "1px solid #333333",
-                            }}>
+                            style={{ backgroundColor: "#2A0F0F", color: "#FF8888", border: "1px solid #D32F2F55" }}>
                             اختر
                           </button>
                         </div>
                       ))}
                     </div>
-                  )}
+                    <button
+                      onClick={() => { triggerHaptic(20); setMagicianUiPhase("actions"); }}
+                      className="w-full px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 active:scale-95"
+                      style={{ backgroundColor: "#0A0A0A", color: "#666666", border: "1px solid #1A1A1A" }}>
+                      تراجع
+                    </button>
+                  </div>
+                );
+              }
 
-                  {/* ── Action 3: Skip note ── */}
-                  <p className="text-xs text-center" style={{ color: "#555" }}>
-                    اضغط زر "ينام الساحر" بالأسفل لتخطي الدور أو لتأكيد إجراءاتك
-                  </p>
+              return (
+                <div className="flex flex-col gap-3">
+                  <button
+                    disabled={!canHeal}
+                    onClick={commitHealAndAdvance}
+                    className="w-full px-4 py-3.5 rounded-xl font-black text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: "#1B2A0E",
+                      color:           canHeal ? "#A3E635" : "#666666",
+                      border:          `1px solid ${canHeal ? magMeta.color : "#222"}`,
+                      boxShadow:       canHeal ? `0 0 16px ${magMeta.color}33` : "none",
+                    }}>
+                    إنقاذ الضحية (جرعة حياة)
+                  </button>
+                  <button
+                    disabled={!canPoison}
+                    onClick={() => { triggerHaptic(20); setMagicianUiPhase("poison_pick"); }}
+                    className="w-full px-4 py-3.5 rounded-xl font-black text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: "#141414",
+                      color:           canPoison ? "#FF8888" : "#666666",
+                      border:          `1px solid ${canPoison ? "#D32F2F55" : "#222"}`,
+                      boxShadow:       canPoison ? "0 0 16px #D32F2F22" : "none",
+                    }}>
+                    اغتيال شخص (جرعة موت)
+                  </button>
+                  <button
+                    onClick={() => { triggerHaptic(20); handleNightStep(); }}
+                    className="w-full px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
+                    style={{ backgroundColor: "#0A0A0A", color: "#AAAAAA", border: "1px solid #1A1A1A" }}>
+                    تخطي والنوم
+                  </button>
                 </div>
               );
             }
@@ -2882,42 +2801,30 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
-          {/* ── Sleep button — dead player: always enabled as phantom skip ── */}
-          {(() => {
+          {/* Magician uses inline action buttons — no bottom sleep control */}
+          {nightStep !== "magician" && (() => {
             const currentPlayer       = livePlayers.find(p => p.role === nightStep) ?? null;
             const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
-            // Magician: button is always live (it doubles as "تخطي" when no action taken)
-            const isMagician          = nightStep === "magician";
-            const magicianHasAction   = isMagician && (magicianHealUsedThisNight || !!magicianPoisonTarget);
-            // Boy inheritance: confirm requires BOTH targets selected.
-            const hasTarget = boyInheritActiveTop ? boyInheritReady : !!selectedTarget;
+            const boyInheritActiveBtn = nightStep === "الولد" && boyInheritsAce && !livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+            const boyInheritReadyBtn  = boyInheritActiveBtn && !!boyKillTarget && !!boySilenceTarget;
+            const hasTarget = boyInheritActiveBtn ? boyInheritReadyBtn : !!selectedTarget;
             return (
               <motion.button
                 onClick={handleNightStep}
-                disabled={!isMagician && !isCurrentPlayerDead && !hasTarget && !nightTimerExpired}
+                disabled={!isCurrentPlayerDead && !hasTarget && !nightTimerExpired}
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
                 style={{
-                  backgroundColor: isMagician
-                    ? (magicianHasAction ? meta.color : "#1A1A1A")
-                    : isCurrentPlayerDead ? "#1A1A1A" : hasTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
-                  color: isMagician
-                    ? (magicianHasAction ? "#0A0A0A" : "#CCCCCC")
-                    : isCurrentPlayerDead ? "#555555" : hasTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
-                  border: isMagician
-                    ? (magicianHasAction ? "none" : "1px solid #333")
-                    : isCurrentPlayerDead ? "1px solid #333" : hasTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
-                  boxShadow: isMagician
-                    ? (magicianHasAction ? `0 0 28px ${meta.glow}` : "none")
-                    : (!isCurrentPlayerDead && hasTarget) ? `0 0 28px ${meta.glow}` : "none",
+                  backgroundColor: isCurrentPlayerDead ? "#1A1A1A" : hasTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
+                  color: isCurrentPlayerDead ? "#555555" : hasTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
+                  border: isCurrentPlayerDead ? "1px solid #333" : hasTarget ? "none" : nightTimerExpired ? "1px solid #444" : "1px solid #222",
+                  boxShadow: (!isCurrentPlayerDead && hasTarget) ? `0 0 28px ${meta.glow}` : "none",
                 }}>
                 <Moon size={20} strokeWidth={2} />
                 <span>
-                  {isMagician
-                    ? (magicianHasAction ? `${roleSleeps(nightStep)} ${getRoleName(nightStep)}` : `تخطي دور ${getRoleName(nightStep)}`)
-                    : isCurrentPlayerDead
+                  {isCurrentPlayerDead
                     ? `تخطي الدور (ميت)`
                     : selectedTarget
                     ? `${roleSleeps(nightStep)} ${getRoleName(nightStep)}`
@@ -3173,7 +3080,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
-      setMagicianPickerOpen(false);
+      setMagicianUiPhase("actions");
       setAvengerFlow(null);
       setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
@@ -3358,7 +3265,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setMagicianState({ hasHeal: true, hasPoison: true });
       setMagicianHealUsedThisNight(false);
       setMagicianPoisonTarget(null);
-      setMagicianPickerOpen(false);
+      setMagicianUiPhase("actions");
       setAvengerFlow(null);
       setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
@@ -3745,27 +3652,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 5: final_vote — 👍 vs 👎 verdict (shared cap: agree + disagree ≤ alive players)
+    // SUB-PHASE 5: final_vote — 👍 vs 👎 relative majority (أوافق > أعارض)
     // ════════════════════════════════════════════
-    // ── Absolute-majority execution rule (النصف + 1) ──────────────────────
-    // The accused is executed ONLY if approving votes meet the majority
-    // threshold of ALL live players (e.g. 5 of 8). One opposing vote that
-    // drops approvals below the threshold = the accused survives.
     const finalTotalVoters = alivePlayers.length;
     const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
-    const requiredVotes    = Math.floor(finalTotalVoters / 2) + 1;
-    const canExecute       = finalVoteFor >= requiredVotes;
-    // Pardon = execution is mathematically impossible even if every remaining
-    // unused vote were to flip to "approve". This locks the button green and
-    // lets the narrator end the trial early without padding the tally.
-    const remainingVotes   = Math.max(0, finalTotalVoters - finalVotesUsed);
-    const canPardon        = !canExecute && (finalVoteFor + remainingVotes) < requiredVotes;
+    const canExecute       = finalVoteFor > finalVoteAgainst;
 
     const handleFinalVerdict = () => {
       if (canExecute) {
         handleExecute(accusedPlayer!);
       } else {
-        // Below the majority threshold → accused survives, straight to night.
         handleStartNextNight();
       }
     };
@@ -3784,7 +3680,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-2xl">👍</span>
               <span className="text-3xl font-black" style={{ color: "#8BC34A" }}>{finalVoteFor}</span>
               <span className="text-xs font-bold" style={{ color: "#4CAF50" }}>أوافق على الإعدام</span>
-              <span className="text-xs" style={{ color: "#4a5a40" }}>يحتاج {requiredVotes} أصوات للإعدام</span>
               <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => setFinalVoteFor(n => Math.max(0, n - 1))}
@@ -3828,34 +3723,25 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
           <div className="flex-1" />
           <motion.button
-            onClick={
-              canExecute ? () => handleExecute(accusedPlayer!)
-              : canPardon ? handleFinalVerdict
-              : undefined
-            }
-            disabled={!canExecute && !canPardon}
-            whileTap={canExecute || canPardon ? { scale: 0.95 } : {}}
-            whileHover={canExecute || canPardon ? { scale: 1.02 } : {}}
+            onClick={canExecute ? () => handleExecute(accusedPlayer!) : handleFinalVerdict}
+            disabled={finalVotesUsed === 0}
+            whileTap={finalVotesUsed > 0 ? { scale: 0.95 } : {}}
+            whileHover={finalVotesUsed > 0 ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
             style={{
-              backgroundColor: canExecute ? "#D32F2F" : canPardon ? "#1B5E20" : "#1A1A1A",
-              color: canExecute || canPardon ? "#fff" : "#555555",
-              boxShadow: canExecute ? "0 0 32px #D32F2F55" : canPardon ? "0 0 32px #2E7D3255" : "none",
-              cursor: canExecute || canPardon ? "pointer" : "not-allowed",
+              backgroundColor: canExecute ? "#D32F2F" : finalVotesUsed > 0 ? "#1B5E20" : "#1A1A1A",
+              color: finalVotesUsed > 0 ? "#fff" : "#555555",
+              boxShadow: canExecute ? "0 0 32px #D32F2F55" : finalVotesUsed > 0 ? "0 0 32px #2E7D3255" : "none",
+              cursor: finalVotesUsed > 0 ? "pointer" : "not-allowed",
             }}>
             <Users size={20} strokeWidth={2} />
             <span>
               {canExecute
                 ? `إعدام ${accusedPlayer} ⚖️`
-                : canPardon
+                : finalVotesUsed > 0
                 ? `العفو عن ${accusedPlayer} 🕊️`
-                : (() => {
-                    const missing = requiredVotes - finalVoteFor;
-                    if (missing === 1) return "ناقص صوت واحد للإعدام ⚖️";
-                    if (missing === 2) return "ناقص صوتان للإعدام ⚖️";
-                    return `ناقص ${missing} أصوات للإعدام ⚖️`;
-                  })()}
+                : "سجّل الأصوات أولاً"}
             </span>
           </motion.button>
           {skipNightBtn}
