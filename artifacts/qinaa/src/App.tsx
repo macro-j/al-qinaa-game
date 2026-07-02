@@ -1495,14 +1495,27 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   };
 
   // Night order: wolf → shadow → magician → seer → guard
-  // Magician is inserted between shadow and seer per the expansion spec.
-  // Skip the magician phase once all potion charges are spent for this game.
+  const CANONICAL_NIGHT_ORDER = ["الولد", "الإكة", "magician", "الشايب", "البنت"] as const;
+
+  const roleActiveInNight = (role: string, lp: LivePlayer[]): boolean => {
+    if (!lp.some(p => p.role === role && p.deathReason !== "vote")) return false;
+    if (role === "magician" && !magicianState.lifeCharge && !magicianState.deathCharge) return false;
+    return true;
+  };
+
   const getNightOrder = (lp: LivePlayer[]): string[] =>
-    (["الولد", "الإكة", "magician", "الشايب", "البنت"] as const).filter(r => {
-      if (!lp.some(p => p.role === r && p.deathReason !== "vote")) return false;
-      if (r === "magician" && !magicianState.lifeCharge && !magicianState.deathCharge) return false;
-      return true;
-    });
+    CANONICAL_NIGHT_ORDER.filter(r => roleActiveInNight(r, lp));
+
+  /** Next role after `current` in canonical order (ignores whether `current` is still in the filtered order). */
+  const getNextNightStep = (current: string, lp: LivePlayer[]): string | null => {
+    const ci = CANONICAL_NIGHT_ORDER.indexOf(current as typeof CANONICAL_NIGHT_ORDER[number]);
+    if (ci < 0) return null;
+    for (let i = ci + 1; i < CANONICAL_NIGHT_ORDER.length; i++) {
+      const r = CANONICAL_NIGHT_ORDER[i];
+      if (roleActiveInNight(r, lp)) return r;
+    }
+    return null;
+  };
 
   // ── Win condition checker — called after every death ──
   const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
@@ -1805,12 +1818,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       pendingMagicianPoisonRef.current = null;
     }
 
-    const order = getNightOrder(livePlayers);
-    const idx   = order.indexOf(nightStep);
+    const nextRole = getNextNightStep(nightStep, livePlayers);
 
-    if (idx < order.length - 1) {
+    if (nextRole) {
       // ── role_sleeps → role_wakes → next action ──
-      const nextRole = order[idx + 1];
       nightTransitionNextRef.current = () => {
         setNightActions(newActions);
         setNightStep(nextRole);
@@ -1818,7 +1829,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setBoyKillTarget(null);
       setBoySilenceTarget(null);
         setInvestigatedTarget(null);
-        // Reset magician transients on entry to magician turn
         if (nextRole === "magician") {
           resetMagicianNightUi();
         }
@@ -2488,69 +2498,86 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </motion.button>
               );
 
+              const renderMagicianTargetGrid = (
+                players: typeof livePlayers,
+                accent: string,
+                getCard: (p: typeof livePlayers[number]) => {
+                  bg: string;
+                  border: string;
+                  label: string;
+                  labelColor: string;
+                  disabled: boolean;
+                  onPick?: () => void;
+                },
+              ) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+                  {players.map((p, idx) => {
+                    const card = getCard(p);
+                    const isResult = card.label !== "اختر";
+                    return (
+                      <button
+                        key={p.name}
+                        type="button"
+                        disabled={card.disabled}
+                        onClick={card.onPick}
+                        className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 disabled:cursor-default"
+                        style={{ backgroundColor: card.bg, border: `1px solid ${card.border}` }}>
+                        <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                          style={{
+                            backgroundColor: isResult ? `${accent}22` : "rgba(255,255,255,0.06)",
+                            color: isResult ? "#ffffff" : "#888888",
+                            border: `1px solid ${isResult ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
+                          }}>
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-center leading-tight"
+                          style={{ color: isResult ? "#ffffff" : "#AAAAAA" }}>
+                          {p.name}
+                        </span>
+                        <span className="text-[10px] font-bold tracking-wide text-center leading-snug px-1"
+                          style={{ color: card.labelColor }}>
+                          {card.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+
               if (magicianUiPhase === "heal_pick") {
                 const picked = magicianHealOutcome;
+                const healPlayers = livePlayers.filter(p => p.isAlive);
                 return (
                   <div className="flex flex-col gap-3">
                     <div className="px-4 py-3 rounded-xl text-center"
                       style={{ backgroundColor: "#0D0D0D", border: `1px solid ${magMeta.color}55` }}>
                       <span className="text-sm font-bold text-white">من تنقذ بجرعة الحياة؟</span>
                     </div>
-                    <div className="flex flex-col gap-2 p-2 rounded-xl"
-                      style={{ backgroundColor: "#0A0A0A", border: "1px solid #222" }}>
-                      {livePlayers.filter(p => p.isAlive).map((p, idx) => {
-                        const isPicked  = picked?.target === p.name;
-                        const isSuccess = isPicked && picked.success;
-                        const isFail    = isPicked && !picked.success;
-                        const rowBg     = isSuccess ? "#1B2A0E" : isFail ? "#1A0A0A" : "#141414";
-                        const rowBorder = isSuccess ? magMeta.color : isFail ? "#D32F2F" : "#222222";
-                        return (
-                          <div key={p.name}
-                            className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-300"
-                            style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}`,
-                              boxShadow: isSuccess ? `0 0 16px ${magMeta.color}33` : isFail ? "0 0 12px #D32F2F22" : "none" }}>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
-                                style={{
-                                  backgroundColor: isSuccess ? `${magMeta.color}22` : isFail ? "#D32F2F22" : "rgba(255,255,255,0.06)",
-                                  color: isSuccess ? magMeta.color : isFail ? "#FF8888" : "#888888",
-                                  border: `1px solid ${isSuccess ? `${magMeta.color}66` : isFail ? "#D32F2F55" : "rgba(255,255,255,0.08)"}`,
-                                }}>
-                                {idx + 1}
-                              </span>
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className="text-sm font-semibold truncate" style={{ color: isPicked ? "#FFFFFF" : "#AAAAAA" }}>
-                                  {p.name}
-                                </span>
-                                {isSuccess && (
-                                  <span className="text-xs font-bold" style={{ color: "#A3E635" }}>
-                                    ✅ نجحت! تم إنقاذ الضحية
-                                  </span>
-                                )}
-                                {isFail && (
-                                  <span className="text-xs font-bold" style={{ color: "#FF8888" }}>
-                                    ❌ خطأ! ضاعت الجرعة
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {!picked && (
-                              <button
-                                onClick={() => {
-                                  const success = !!mafiaTarget && p.name === mafiaTarget;
-                                  setMagicianHealOutcome({ target: p.name, success });
-                                  if (success) pendingMagicianHealRef.current = p.name;
-                                  triggerHaptic(success ? [30, 50, 30] : [80, 40, 80]);
-                                }}
-                                className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
-                                style={{ backgroundColor: "#1B2A0E", color: magMeta.color, border: `1px solid ${magMeta.color}55` }}>
-                                اختر
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {renderMagicianTargetGrid(healPlayers, magMeta.color, (p) => {
+                      const isPicked  = picked?.target === p.name;
+                      const isSuccess = isPicked && !!picked?.success;
+                      const isFail    = isPicked && !picked?.success;
+                      const locked    = !!picked;
+                      return {
+                        bg: isSuccess ? "#1B2A0E" : isFail ? "#1A0A0A" : "#141414",
+                        border: isSuccess ? magMeta.color : isFail ? "#D32F2F" : "#222222",
+                        label: isSuccess
+                          ? "✅ نجحت! تم إنقاذ الضحية"
+                          : isFail
+                          ? "❌ خطأ! ضاعت الجرعة"
+                          : "اختر",
+                        labelColor: isSuccess ? "#A3E635" : isFail ? "#FF8888" : "#444444",
+                        disabled: locked && !isPicked,
+                        onPick: locked
+                          ? undefined
+                          : () => {
+                              const success = !!mafiaTarget && p.name === mafiaTarget;
+                              setMagicianHealOutcome({ target: p.name, success });
+                              if (success) pendingMagicianHealRef.current = p.name;
+                              triggerHaptic(success ? [30, 50, 30] : [80, 40, 80]);
+                            },
+                      };
+                    })}
                     {picked && magicianSleepBtn}
                   </div>
                 );
@@ -2558,60 +2585,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
               if (magicianUiPhase === "poison_pick") {
                 const picked = magicianPoisonOutcome;
+                const poisonAccent = "#C4B5FD";
+                const poisonPlayers = livePlayers.filter(p => p.isAlive && p.role !== "magician");
                 return (
                   <div className="flex flex-col gap-3">
                     <div className="px-4 py-3 rounded-xl text-center"
                       style={{ backgroundColor: "#1A001A", border: "1px solid #7C3AED55" }}>
                       <span className="text-sm font-bold text-white">من تسمّ بجرعة السم؟</span>
                     </div>
-                    <div className="flex flex-col gap-2 p-2 rounded-xl"
-                      style={{ backgroundColor: "#0A0A0A", border: "1px solid #222" }}>
-                      {livePlayers.filter(p => p.isAlive && p.role !== "magician").map((p, idx) => {
-                        const isPicked = picked === p.name;
-                        return (
-                          <div key={p.name}
-                            className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors duration-300"
-                            style={{
-                              backgroundColor: isPicked ? "#2A0F2A" : "#141414",
-                              border: `1px solid ${isPicked ? "#7C3AED" : "#222222"}`,
-                              boxShadow: isPicked ? "0 0 16px #7C3AED33" : "none",
-                            }}>
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm flex-shrink-0"
-                                style={{
-                                  backgroundColor: isPicked ? "#7C3AED22" : "rgba(255,255,255,0.06)",
-                                  color: isPicked ? "#C4B5FD" : "#888888",
-                                  border: `1px solid ${isPicked ? "#7C3AED66" : "rgba(255,255,255,0.08)"}`,
-                                }}>
-                                {idx + 1}
-                              </span>
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className="text-sm font-semibold truncate" style={{ color: isPicked ? "#FFFFFF" : "#AAAAAA" }}>
-                                  {p.name}
-                                </span>
-                                {isPicked && (
-                                  <span className="text-xs font-bold" style={{ color: "#C4B5FD" }}>
-                                    ☠️ تم تسميم اللاعب
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {!picked && (
-                              <button
-                                onClick={() => {
-                                  setMagicianPoisonOutcome(p.name);
-                                  pendingMagicianPoisonRef.current = p.name;
-                                  triggerHaptic([30, 50, 30]);
-                                }}
-                                className="px-3 py-1 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 flex-shrink-0"
-                                style={{ backgroundColor: "#2A0F2A", color: "#C4B5FD", border: "1px solid #7C3AED55" }}>
-                                اختر
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {renderMagicianTargetGrid(poisonPlayers, poisonAccent, (p) => {
+                      const isPicked = picked === p.name;
+                      const locked   = !!picked;
+                      return {
+                        bg: isPicked ? "#2A0F2A" : "#141414",
+                        border: isPicked ? "#7C3AED" : "#222222",
+                        label: isPicked ? "☠️ تم تسميم اللاعب" : "اختر",
+                        labelColor: isPicked ? poisonAccent : "#444444",
+                        disabled: locked && !isPicked,
+                        onPick: locked
+                          ? undefined
+                          : () => {
+                              setMagicianPoisonOutcome(p.name);
+                              pendingMagicianPoisonRef.current = p.name;
+                              triggerHaptic([30, 50, 30]);
+                            },
+                      };
+                    })}
                     {picked && magicianSleepBtn}
                   </div>
                 );
@@ -4140,8 +4139,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                 </span>
                                 <div className="flex flex-col gap-1.5">
                                   {([
-                                    { id: "dual",   label: "جرعتين",      sub: "جرعة حياة ليلة وجرعة سم ليلة أخرى" },
                                     { id: "single", label: "جرعة واحدة", sub: "حياة أو سم — مرة واحدة طوال اللعبة" },
+                                    { id: "dual",   label: "جرعتين",      sub: "جرعة حياة ليلة وجرعة سم ليلة أخرى" },
                                   ] as const).map(opt => {
                                     const selected = magicianPotionMode === opt.id;
                                     return (
