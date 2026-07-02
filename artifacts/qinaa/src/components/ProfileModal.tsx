@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { useAuth } from "../lib/auth";
 import type { Entitlements } from "../lib/supabase";
 import { FREE_GAME_LIMIT } from "../lib/supabase";
+import { RtlEmoji } from "./RtlEmoji";
 
 function formatJoinDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -31,15 +32,16 @@ function PackageBadge({
 
   if (entitlements.has_all_access) {
     return (
-      <span
-        className="inline-flex w-fit items-center gap-1 text-xs font-black px-2.5 py-1 rounded-md"
+      <RtlEmoji
+        text="الباقة الشاملة"
+        emoji="👑"
+        className="inline-flex w-fit text-xs font-black px-2.5 py-1 rounded-md"
         style={{
           backgroundColor: "#1A1206",
           color: "#FBBF24",
           border: "1px solid rgba(245,158,11,0.4)",
-        }}>
-        الباقة الشاملة 👑
-      </span>
+        }}
+      />
     );
   }
 

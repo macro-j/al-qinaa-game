@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
+import { RtlEmoji } from "./RtlEmoji";
 import { apiPost } from "../lib/api";
 
 /**
@@ -209,9 +210,13 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
               الأكثر قيمة
             </span>
             <div className="flex flex-col gap-1">
-              <span className="flex items-center gap-1.5 text-base font-black" style={{ color: "#FBBF24" }}>
-                الباقة الشاملة <span>👑</span>
-              </span>
+              <RtlEmoji
+                text="الباقة الشاملة"
+                emoji="👑"
+                className="text-base font-black"
+                textStyle={{ color: "#FBBF24" }}
+                justify="start"
+              />
               <span className="text-2xl font-black" style={{ color: "#FBBF24" }}>
                 29.99 <span className="text-base font-bold">ر.س</span>
               </span>

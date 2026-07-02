@@ -52,6 +52,7 @@ import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
+import { RtlEmoji } from "./components/RtlEmoji";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -398,8 +399,12 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               {/* title row: title rightmost, badge immediately to its LEFT */}
               <div className="flex items-center gap-2">
                 <span className="text-lg font-black text-white">طور المجلس</span>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-md"
-                  style={{ backgroundColor: "#10B98110", color: "#34D399", border: "1px solid #10B98120" }}>جديد ✨</span>
+                <RtlEmoji
+                  text="جديد"
+                  emoji="✨"
+                  className="text-xs font-medium px-2 py-0.5 rounded-md"
+                  style={{ backgroundColor: "#10B98110", color: "#34D399", border: "1px solid #10B98120" }}
+                />
               </div>
               <span className="text-xs" style={{ color: "#6EE7B7" }}>شاشة واحدة تجمعكم، والراوي يدير أحداث اللعبة</span>
             </div>
@@ -465,11 +470,12 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
               </span>
               {entitlements ? (
                 entitlements.has_all_access ? (
-                  <span
-                    className="inline-flex w-fit items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: "#1A1206", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.4)" }}>
-                    الباقة الشاملة 👑
-                  </span>
+                  <RtlEmoji
+                    text="الباقة الشاملة"
+                    emoji="👑"
+                    className="inline-flex w-fit text-[11px] font-black px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: "#1A1206", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.4)" }}
+                  />
                 ) : entitlements.has_base_game ? (
                   <span
                     className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
@@ -2504,8 +2510,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 getCard: (p: typeof livePlayers[number]) => {
                   bg: string;
                   border: string;
-                  label: string;
+                  label: ReactNode;
                   labelColor: string;
+                  isResult: boolean;
                   disabled: boolean;
                   onPick?: () => void;
                 },
@@ -2513,7 +2520,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
                   {players.map((p, idx) => {
                     const card = getCard(p);
-                    const isResult = card.label !== "اختر";
+                    const isResult = card.isResult;
                     return (
                       <button
                         key={p.name}
@@ -2562,11 +2569,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         bg: isSuccess ? "#1B2A0E" : isFail ? "#1A0A0A" : "#141414",
                         border: isSuccess ? magMeta.color : isFail ? "#D32F2F" : "#222222",
                         label: isSuccess
-                          ? "✅ نجحت! تم إنقاذ الضحية"
+                          ? <RtlEmoji text="نجحت! تم إنقاذ الضحية" emoji="✅" />
                           : isFail
-                          ? "❌ خطأ! ضاعت الجرعة"
+                          ? <RtlEmoji text="خطأ! ضاعت الجرعة" emoji="❌" />
                           : "اختر",
                         labelColor: isSuccess ? "#A3E635" : isFail ? "#FF8888" : "#444444",
+                        isResult: isSuccess || isFail,
                         disabled: locked && !isPicked,
                         onPick: locked
                           ? undefined
@@ -2599,8 +2607,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       return {
                         bg: isPicked ? "#2A0F2A" : "#141414",
                         border: isPicked ? "#7C3AED" : "#222222",
-                        label: isPicked ? "☠️ تم تسميم اللاعب" : "اختر",
+                        label: isPicked
+                          ? <RtlEmoji text="تم تسميم اللاعب" emoji="☠️" />
+                          : "اختر",
                         labelColor: isPicked ? poisonAccent : "#444444",
+                        isResult: isPicked,
                         disabled: locked && !isPicked,
                         onPick: locked
                           ? undefined
@@ -2848,14 +2859,28 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       </span>
 
                       {/* Name — wolf glyph appended when this is the Boy's disabled Ace ally */}
-                      <span className="text-sm font-semibold text-center leading-tight"
-                        style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
-                        {p.name}{isAllyLocked ? " 🐺" : ""}
-                      </span>
+                      {isAllyLocked ? (
+                        <RtlEmoji
+                          text={p.name}
+                          emoji="🐺"
+                          className="text-sm font-semibold text-center leading-tight"
+                          textStyle={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-center leading-tight"
+                          style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
+                          {p.name}
+                        </span>
+                      )}
 
                       {/* Badge stack — at most one wins; kept compact for grid cell */}
                       {showAllyBadge && !isAllyLocked && (
-                        <span className="text-[10px] font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                        <RtlEmoji
+                          text="(حليف)"
+                          emoji="🐺"
+                          className="text-[10px] font-bold"
+                          textStyle={{ color: "#D32F2F" }}
+                        />
                       )}
                       {isAllyLocked && (
                         <span className="text-[10px] font-bold" style={{ color: "#D32F2F" }}>حليفك</span>
@@ -2870,7 +2895,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             color:           "#FFFFFF",
                             border:          "1px solid rgba(255,255,255,0.35)",
                           }}>
-                          {isMafiaRole ? "مافيا 🐺" : "بريء ✓"}
+                          {isMafiaRole ? (
+                            <RtlEmoji text="مافيا" emoji="🐺" />
+                          ) : (
+                            "بريء ✓"
+                          )}
                         </span>
                       )}
 
@@ -3506,7 +3535,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     <span className="text-sm font-semibold text-center leading-tight"
                       style={{ color: "#AAAAAA" }}>{p.name}</span>
                     {p.isSilenced && (
-                      <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
+                      <RtlEmoji
+                        text="ساكت"
+                        emoji="🤐"
+                        className="text-xs font-bold"
+                        textStyle={{ color: "#FF8F00" }}
+                      />
                     )}
                   </div>
                 ))}
@@ -3593,7 +3627,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       <span className="text-sm font-semibold text-center leading-tight"
                         style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
                       {p.isSilenced && (
-                        <span className="text-xs font-bold" style={{ color: "#FF8F00" }}>🤐 ساكت</span>
+                        <RtlEmoji
+                          text="ساكت"
+                          emoji="🤐"
+                          className="text-xs font-bold"
+                          textStyle={{ color: "#FF8F00" }}
+                        />
                       )}
                     </div>
                     {/* Vote count */}
@@ -3824,9 +3863,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <Users size={20} strokeWidth={2} />
             <span>
               {canExecute
-                ? `إعدام ${accusedPlayer} ⚖️`
+                ? <RtlEmoji text={`إعدام ${accusedPlayer}`} emoji="⚖️" />
                 : finalVotesUsed > 0
-                ? `العفو عن ${accusedPlayer} 🕊️`
+                ? <RtlEmoji text={`العفو عن ${accusedPlayer}`} emoji="🕊️" />
                 : "سجّل الأصوات أولاً"}
             </span>
           </motion.button>
@@ -5249,13 +5288,28 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                           <div className="flex flex-col items-end gap-0.5">
                             <span className="text-sm font-semibold" style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>{name}</span>
                             {isAlly && (
-                              <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                              <RtlEmoji
+                                text="(حليف)"
+                                emoji="🐺"
+                                className="text-xs font-bold"
+                                textStyle={{ color: "#D32F2F" }}
+                              />
                             )}
                             {isKillTarget && (
-                              <span className="text-xs font-bold" style={{ color: "#FF4040" }}>🔪 هدف الولد</span>
+                              <RtlEmoji
+                                text="هدف الولد"
+                                emoji="🔪"
+                                className="text-xs font-bold"
+                                textStyle={{ color: "#FF4040" }}
+                              />
                             )}
                             {isSilTarget && (
-                              <span className="text-xs font-bold" style={{ color: "#FF8C42" }}>🤐 هدف الإكة</span>
+                              <RtlEmoji
+                                text="هدف الإكة"
+                                emoji="🤐"
+                                className="text-xs font-bold"
+                                textStyle={{ color: "#FF8C42" }}
+                              />
                             )}
                           </div>
                         </div>
@@ -5317,13 +5371,25 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 {mafiaSync.killTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الولد يخطط لقتل: {mafiaSync.killTarget}</span>
+                    <RtlEmoji
+                      text={`الولد يخطط لقتل: ${mafiaSync.killTarget}`}
+                      emoji="🔪"
+                      className="text-sm font-bold"
+                      textStyle={{ color: "#FF4040" }}
+                      justify="start"
+                    />
                   </div>
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الإكة ستُسكت: {mafiaSync.silenceTarget}</span>
+                    <RtlEmoji
+                      text={`الإكة ستُسكت: ${mafiaSync.silenceTarget}`}
+                      emoji="🤐"
+                      className="text-sm font-bold"
+                      textStyle={{ color: "#FF8C42" }}
+                      justify="start"
+                    />
                   </div>
                 )}
               </div>
@@ -5374,7 +5440,12 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                           <div className="flex flex-col items-end gap-0.5">
                             <span>{name}</span>
                             {isAlly && (
-                              <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>(حليف 🐺)</span>
+                              <RtlEmoji
+                                text="(حليف)"
+                                emoji="🐺"
+                                className="text-xs font-bold"
+                                textStyle={{ color: "#D32F2F" }}
+                              />
                             )}
                           </div>
                           <span className="text-xs px-2 py-0.5 rounded-lg"
@@ -5613,9 +5684,13 @@ function Countdown({ endsAt, heartbeat = false }: { endsAt: number | null; heart
 // ── DeadScreen (shown to eliminated players) ───────────────────────────────
 function DeadScreen({ myName, deathReason }: { myName: string; deathReason: "assassinated" | "executed" | null }) {
   const reasonText =
-    deathReason === "assassinated" ? "تم اغتيالك من قبل الولد 🔪" :
-    deathReason === "executed"     ? "تم إعدامك بناءً على تصويت القرية ⚖️" :
-                                     "لقد خرجت من اللعبة";
+    deathReason === "assassinated" ? (
+      <RtlEmoji text="تم اغتيالك من قبل الولد" emoji="🔪" />
+    ) : deathReason === "executed" ? (
+      <RtlEmoji text="تم إعدامك بناءً على تصويت القرية" emoji="⚖️" />
+    ) : (
+      "لقد خرجت من اللعبة"
+    );
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 py-8">
@@ -6054,13 +6129,25 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 {mafiaSync.killTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF4040" }}>🔪 الولد يخطط لقتل: {mafiaSync.killTarget}</span>
+                    <RtlEmoji
+                      text={`الولد يخطط لقتل: ${mafiaSync.killTarget}`}
+                      emoji="🔪"
+                      className="text-sm font-bold"
+                      textStyle={{ color: "#FF4040" }}
+                      justify="start"
+                    />
                   </div>
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
                     style={{ backgroundColor: "#1A0A00", border: "1px solid #5C2A00" }}>
-                    <span className="text-sm font-bold" style={{ color: "#FF8C42" }}>🤐 الإكة ستُسكت: {mafiaSync.silenceTarget}</span>
+                    <RtlEmoji
+                      text={`الإكة ستُسكت: ${mafiaSync.silenceTarget}`}
+                      emoji="🤐"
+                      className="text-sm font-bold"
+                      textStyle={{ color: "#FF8C42" }}
+                      justify="start"
+                    />
                   </div>
                 )}
               </div>
