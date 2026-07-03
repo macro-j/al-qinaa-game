@@ -49,7 +49,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
           </p>
           <span className="text-xs font-semibold px-3 py-1 rounded-full"
             style={{ backgroundColor: "#0A2A1A", color: "#34D399", border: "1px solid #10B98133" }}>
-            الإصدار الأول — v1.0.0
+            الإصدار الثاني — v2.0.2
           </span>
         </div>
 
