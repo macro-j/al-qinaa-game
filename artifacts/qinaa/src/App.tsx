@@ -719,11 +719,21 @@ const formatCorpsesCount = (count: number): string => {
   }
 };
 
-const ARABIC_ORDINALS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
+const ARABIC_ORDINALS_FEMININE = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
+const ARABIC_ORDINALS_MASCULINE = ["الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر"];
 
 function formatMatchPhaseName(phaseType: "night" | "day", n: number): string {
-  const ord = ARABIC_ORDINALS[n - 1] ?? String(n);
-  return phaseType === "night" ? `الليلة ${ord}` : `اليوم ${ord}`;
+  if (phaseType === "night") {
+    const ord = ARABIC_ORDINALS_FEMININE[n - 1] ?? String(n);
+    return `الليلة ${ord}`;
+  }
+  const ord = ARABIC_ORDINALS_MASCULINE[n - 1] ?? String(n);
+  return `اليوم ${ord}`;
+}
+
+function formatHistoryActor(players: LivePlayer[], roleId: string, roleLabel: string): string {
+  const name = players.find(p => p.role === roleId)?.name;
+  return name ? `${name} (${roleLabel})` : roleLabel;
 }
 
 function seerInvestigationLabel(role: string): string {
@@ -1898,7 +1908,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const { deaths: cascaded, avengers: newAvengers } = resolveDeaths(initial, livePlayers);
     const updated = applyDeaths(livePlayers, cascaded, reason, null, false);
     setLivePlayers(updated);
-    logHistoryEvent("day", nightCount, "⚔️", `قرر المنتقم أخذ ${targetName} معه إلى القبر`);
+    const avengerName = avengerFlow.queue[0];
+    const avengerActor = avengerName ? `${avengerName} (المنتقم)` : formatHistoryActor(livePlayers, "avenger", "المنتقم");
+    logHistoryEvent("day", nightCount, "⚔️", `${avengerActor} أخذ ${targetName} معه إلى القبر`);
     // Merge into the accumulated death list (dedup by name; first cause wins)
     const merged: DeathEntry[] = [...avengerFlow.deaths];
     for (const d of cascaded) {
@@ -1950,41 +1962,40 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     // ── Match history: log this role's night action ──
     if (nightStep === "الولد") {
+      const boyActor = formatHistoryActor(livePlayers, "الولد", "الولد");
       if (boyInheritActive) {
-        if (boyKillTarget)    logHistoryEvent("night", nightCount, "🔪", `خطط لاغتيال ${boyKillTarget}`);
-        if (boySilenceTarget) logHistoryEvent("night", nightCount, "🤫", `أسكت ${boySilenceTarget}`);
+        if (boyKillTarget)    logHistoryEvent("night", nightCount, "🔪", `${boyActor} خطط لاغتيال ${boyKillTarget}`);
+        if (boySilenceTarget) logHistoryEvent("night", nightCount, "🤫", `${boyActor} أسكت ${boySilenceTarget}`);
       } else if (selectedTarget) {
-        logHistoryEvent("night", nightCount, "🔪", `خطط لاغتيال ${selectedTarget}`);
+        logHistoryEvent("night", nightCount, "🔪", `${boyActor} خطط لاغتيال ${selectedTarget}`);
       }
     }
     if (nightStep === "الإكة") {
       const aceIsAliveLog = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
       if (aceIsAliveLog && selectedTarget) {
-        logHistoryEvent("night", nightCount, "🤫", `أسكت ${selectedTarget}`);
+        const aceActor = formatHistoryActor(livePlayers, "الإكة", "الإكة");
+        logHistoryEvent("night", nightCount, "🤫", `${aceActor} أسكت ${selectedTarget}`);
       }
     }
     if (nightStep === "الشايب" && selectedTarget) {
+      const seerActor = formatHistoryActor(livePlayers, "الشايب", "الشايب");
       const investigated = livePlayers.find(p => p.name === selectedTarget);
       const result = seerInvestigationLabel(investigated?.role ?? "المواطن");
-      logHistoryEvent("night", nightCount, "🔍", `فحص ${selectedTarget} واكتشف أنه ${result}`);
+      logHistoryEvent("night", nightCount, "🔍", `${seerActor} فحص ${selectedTarget} واكتشف أنه ${result}`);
     }
     if (nightStep === "البنت" && selectedTarget) {
-      logHistoryEvent("night", nightCount, "🛡️", `حمت ${selectedTarget}`);
+      const guardActor = formatHistoryActor(livePlayers, "البنت", "البنت");
+      logHistoryEvent("night", nightCount, "🛡️", `${guardActor} حمت ${selectedTarget}`);
     }
     if (nightStep === "magician") {
+      const magActor = formatHistoryActor(livePlayers, "magician", "الساحر");
       const healLog   = newActions.magicianHealTarget;
       const poisonLog = newActions.magicianPoisonTarget;
       if (healLog) {
-        const healSuccess = !!(newActions.killTarget && healLog === newActions.killTarget);
-        logHistoryEvent(
-          "night",
-          nightCount,
-          "🧪",
-          `استخدم جرعة حياة لإنقاذ ${healLog} (${healSuccess ? "نجحت" : "فشلت"})`,
-        );
+        logHistoryEvent("night", nightCount, "🧪", `${magActor} استخدم جرعة حياة على ${healLog}`);
       }
       if (poisonLog) {
-        logHistoryEvent("night", nightCount, "☠️", `استخدم جرعة سم لقتل ${poisonLog}`);
+        logHistoryEvent("night", nightCount, "☠️", `${magActor} استخدم جرعة سم على ${poisonLog}`);
       }
     }
 

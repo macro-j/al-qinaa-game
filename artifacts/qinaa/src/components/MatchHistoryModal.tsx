@@ -1,5 +1,4 @@
 import { X, ScrollText } from "lucide-react";
-import { RtlEmoji } from "./RtlEmoji";
 
 export type MatchHistoryEvent = { icon: string; text: string };
 
@@ -94,15 +93,22 @@ export function MatchHistoryModal({
                   {phase.events.map((event, i) => (
                     <li
                       key={`${phase.phaseName}-${i}`}
-                      className="flex items-center px-3 py-2 rounded-lg"
+                      className="flex flex-row items-center gap-3 px-3 py-2.5 rounded-lg"
                       style={{ backgroundColor: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                      <RtlEmoji
-                        text={event.text}
-                        emoji={event.icon}
-                        className="text-sm font-semibold w-full"
-                        textStyle={{ color: "#DDDDDD" }}
-                        justify="start"
-                      />
+                      <span
+                        className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-base leading-none"
+                        style={{
+                          backgroundColor: "rgba(255,255,255,0.06)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                        }}
+                        aria-hidden>
+                        {event.icon}
+                      </span>
+                      <span
+                        className="text-sm font-semibold leading-snug flex-1 text-right"
+                        style={{ color: "#DDDDDD" }}>
+                        {event.text}
+                      </span>
                     </li>
                   ))}
                 </ul>
