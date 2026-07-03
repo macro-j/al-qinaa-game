@@ -57,7 +57,7 @@ export function MatchHistoryModal({
           </div>
           <div className="flex flex-col gap-0.5">
             <h2 className="font-black text-lg text-white">سجل أحداث اللعبة</h2>
-            <p className="text-xs" style={{ color: "#666666" }}>ملخص الأسرار والأحداث — للراوي فقط</p>
+            <p className="text-xs" style={{ color: "#666666" }}>ملخص الأسرار والأحداث</p>
           </div>
         </div>
 
