@@ -38,6 +38,8 @@ import {
   ExternalLink,
   Volume2,
   VolumeX,
+  Maximize2,
+  Minimize2,
   ChevronDown,
   Layers,
 } from "lucide-react";
@@ -258,6 +260,44 @@ const triggerHaptic = (pattern: number | number[]) => {
     try { navigator.vibrate(pattern); } catch (_) {}
   }
 };
+
+// ── Fullscreen API — cross-browser (Chrome, Safari, Firefox, legacy Edge) ─────
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  msFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void>;
+  msExitFullscreen?: () => Promise<void>;
+};
+
+type FullscreenHTMLElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void>;
+  msRequestFullscreen?: () => Promise<void>;
+};
+
+function getFullscreenElement(): Element | null {
+  const doc = document as FullscreenDocument;
+  return document.fullscreenElement ?? doc.webkitFullscreenElement ?? doc.msFullscreenElement ?? null;
+}
+
+function requestAppFullscreen(): Promise<void> | undefined {
+  const el = document.documentElement as FullscreenHTMLElement;
+  const req = el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.msRequestFullscreen;
+  return req?.call(el);
+}
+
+function exitAppFullscreen(): Promise<void> | undefined {
+  const doc = document as FullscreenDocument;
+  const exit = document.exitFullscreen ?? doc.webkitExitFullscreen ?? doc.msExitFullscreen;
+  return exit?.call(document);
+}
+
+function toggleAppFullscreen(): void {
+  if (getFullscreenElement()) {
+    void exitAppFullscreen()?.catch(() => {});
+  } else {
+    void requestAppFullscreen()?.catch(() => {});
+  }
+}
 
 function TopBar({ onBack, label }: { onBack?: () => void; label?: string }) {
   return (
@@ -1181,6 +1221,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isNarratorMuted, setIsNarratorMuted] = useState(
     () => SETUP.isNarratorMuted,
   );
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(!!getFullscreenElement());
+    syncFullscreen();
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    document.addEventListener("MSFullscreenChange", syncFullscreen);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreen);
+      document.removeEventListener("MSFullscreenChange", syncFullscreen);
+    };
+  }, []);
 
   // ── Expansion Pack state (UI only — logic wired in future sprint) ──
   // Persisted so the user's add-on selection (Twins / Madman / Avenger /
@@ -2117,33 +2171,50 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   //    extend to the top of the viewport). Each button re-enables pointer
   //    events for itself, so the navbar never blocks underlying UI.
   //
-  //    Layout (RTL): first DOM child = visually RIGHT → primary nav action
-  //    (Back arrow on setup, X for an active game). Last DOM child =
-  //    visually LEFT → Mute toggle.
+  //    Layout (RTL): right cluster = exit/back + fullscreen; left = mute.
   //
   //    Rendered fixed so it floats above motion.div phase transitions
   //    without inheriting their transforms.
   const navAction = phase === "setup"
     ? { onClick: onBack,        Icon: ArrowRight, title: "العودة للقائمة الرئيسية" }
     : { onClick: handleEndGame, Icon: X,          title: "إنهاء اللعبة"           };
+  const navBtnClass =
+    "pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90";
+  const navBtnStyle = {
+    backgroundColor: "rgba(13,13,13,0.55)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    backdropFilter: "blur(12px)",
+    WebkitBackdropFilter: "blur(12px)",
+  } as const;
+
   const floatingButtons = (
     <div
       dir="rtl"
       className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
-      {/* RIGHT — primary nav action (Back when on setup, Close otherwise) */}
-      <button
-        onClick={navAction.onClick}
-        title={navAction.title}
-        aria-label={navAction.title}
-        className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
-        style={{
-          backgroundColor: "rgba(13,13,13,0.55)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-        }}>
-        <navAction.Icon size={18} strokeWidth={2} />
-      </button>
+      {/* RIGHT — exit/back + fullscreen (grouped for TV casting) */}
+      <div className="pointer-events-auto flex items-center gap-2">
+        <button
+          onClick={navAction.onClick}
+          title={navAction.title}
+          aria-label={navAction.title}
+          className={navBtnClass}
+          style={navBtnStyle}>
+          <navAction.Icon size={18} strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={toggleAppFullscreen}
+          title={isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
+          aria-label={isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
+          className={navBtnClass}
+          style={{
+            ...navBtnStyle,
+            color: isFullscreen ? "#ffffff" : "rgba(255,255,255,0.70)",
+            border: isFullscreen ? "1px solid rgba(255,255,255,0.22)" : navBtnStyle.border,
+          }}>
+          {isFullscreen ? <Minimize2 size={18} strokeWidth={2} /> : <Maximize2 size={18} strokeWidth={2} />}
+        </button>
+      </div>
 
       {/* LEFT — narrator VO mute (SFX / victory stay audible) */}
       <button
@@ -3340,7 +3411,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     return (
       <>
-      <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8 gap-6"
+      <div className="min-h-full w-full flex flex-col items-center px-5 py-8 gap-6 overflow-y-auto"
         style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
         {globalControls}
 
@@ -3380,22 +3451,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             )}
           </div>
         </div>
-
-        {/* ── Match history — host-only secret log ── */}
-        <motion.button
-          onClick={() => setShowMatchHistory(true)}
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.02 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-          className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-          style={{
-            backgroundColor: "#1A0000",
-            color: "#FF6B6B",
-            border: "1.5px solid rgba(211,47,47,0.55)",
-            boxShadow: "0 0 24px rgba(211,47,47,0.2)",
-          }}>
-          <RtlEmoji text="سجل أحداث اللعبة" emoji="📜" className="font-black" textStyle={{ color: "#FF6B6B" }} />
-        </motion.button>
 
         {/* ── Last night's victims (shown for Mafia win; lists each casualty + cause) ── */}
         {!isTownWin && !isMadmanWin && (dayResult.deaths.length > 0 || dayResult.silenced) && (
@@ -3457,8 +3512,28 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           })}
         </div>
 
-        {/* ── Action buttons ── */}
-        <div className="flex flex-col gap-3 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+        {/* ── Action buttons (shared across all win types) ── */}
+        <div className="flex flex-col gap-3 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl shrink-0">
+          <motion.button
+            type="button"
+            onClick={() => setShowMatchHistory(true)}
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            style={{
+              backgroundColor: isTownWin ? "#001428" : isMadmanWin ? "#140020" : "#1A0000",
+              border: `1.5px solid ${borderCol}`,
+              boxShadow: `0 0 24px ${glowCol}`,
+            }}>
+            <RtlEmoji
+              text="سجل أحداث اللعبة"
+              emoji="📜"
+              className="font-black"
+              textStyle={{ color: accent }}
+            />
+          </motion.button>
+
           <motion.button
             onClick={handlePlayAgainSamePlayers}
             whileTap={{ scale: 0.95 }}
