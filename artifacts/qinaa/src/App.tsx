@@ -52,7 +52,7 @@ import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
-import { RtlEmoji } from "./components/RtlEmoji";
+import { RtlEmoji, AssassinationPlanBanner } from "./components/RtlEmoji";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -1534,6 +1534,23 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return null;
   };
 
+  /** After night deaths are applied, end the game immediately if a side has won. */
+  const routeToGameOverIfWon = (
+    players: LivePlayer[],
+    deaths: DeathEntry[],
+    silenced: string | null,
+  ): boolean => {
+    const winner = checkWinCondition(players);
+    if (!winner) return false;
+    setDayResult({ deaths, silenced });
+    const killerName = players.find(p => p.role === "الولد")?.name ?? null;
+    setGameOver({ winner, killerName });
+    nightTransitionNextRef.current = null;
+    setNightTransition("none");
+    setPhase("game_over");
+    return true;
+  };
+
   // ── Gender helper — returns the correct verb form for a role ──
   const FEMININE_ROLES = new Set(["البنت", "الإكة"]);
   const roleWakes = (role: string) => FEMININE_ROLES.has(role) ? "تصحى" : "يصحى";
@@ -1655,6 +1672,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (winner) {
       const killerName = players.find(p => p.role === "الولد")?.name ?? null;
       setGameOver({ winner, killerName });
+      nightTransitionNextRef.current = null;
+      setNightTransition("none");
       setPhase("game_over");
       return;
     }
@@ -1754,6 +1773,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (viable.length === 0) {
       setAvengerFlow(null);
       if (resumeTo === "morning") {
+        if (routeToGameOverIfWon(players, deaths, silenced)) return;
         finalizeMorning(deaths, silenced, players);
       } else {
         finalizeAfterExecution(deaths, players, primaryName ?? deaths[0]?.name ?? "");
@@ -1879,6 +1899,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           enterAvengerFlow(avengers, deaths, silenceTarget, "morning", null, updated);
           return;
         }
+        if (routeToGameOverIfWon(updated, deaths, silenceTarget)) return;
         finalizeMorning(deaths, silenceTarget, updated);
       };
       // role_sleeps fires first, its callback chains into city_wakes
@@ -2432,17 +2453,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const boyTarget = nightActions.killTarget;
             if (!boy || !boyTarget) return null;
             return (
-              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full"
-                style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
-                <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-base"
-                  style={{ backgroundColor: "rgba(153,27,27,0.3)", border: "1px solid rgba(211,47,47,0.35)" }}>
-                  🔪
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs" style={{ color: "#666666" }}>الولد يخطط لاغتيال:</span>
-                  <span className="text-sm font-bold text-white">{boyTarget}</span>
-                </div>
-              </div>
+              <AssassinationPlanBanner targetName={boyTarget} />
             );
           })()}
 
@@ -5369,16 +5380,7 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
                 {mafiaSync.killTarget && (
-                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
-                    style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <RtlEmoji
-                      text={`الولد يخطط لقتل: ${mafiaSync.killTarget}`}
-                      emoji="🔪"
-                      className="text-sm font-bold"
-                      textStyle={{ color: "#FF4040" }}
-                      justify="start"
-                    />
-                  </div>
+                  <AssassinationPlanBanner targetName={mafiaSync.killTarget} />
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
@@ -6127,16 +6129,7 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
                 {mafiaSync.killTarget && (
-                  <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
-                    style={{ backgroundColor: "#1A0000", border: "1px solid #5C1010" }}>
-                    <RtlEmoji
-                      text={`الولد يخطط لقتل: ${mafiaSync.killTarget}`}
-                      emoji="🔪"
-                      className="text-sm font-bold"
-                      textStyle={{ color: "#FF4040" }}
-                      justify="start"
-                    />
-                  </div>
+                  <AssassinationPlanBanner targetName={mafiaSync.killTarget} />
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
