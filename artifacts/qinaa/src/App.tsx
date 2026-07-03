@@ -55,7 +55,7 @@ import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
-import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD } from "./components/PlayerSelectionGrid";
+import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD, PLAYER_SELECTION_INDEX } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
@@ -2572,15 +2572,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     return (
       <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
         {globalControls}
-        <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
+        <div className="flex flex-col gap-5 md:gap-3 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
           {/* ── Cinematic header ── */}
-          <div className="flex flex-col items-center gap-1 text-center pt-1">
+          <div className="flex flex-col items-center gap-1 md:gap-0.5 text-center pt-1 md:pt-0">
             <Moon size={18} color="#444" strokeWidth={1.5} />
-            <h1 className="text-xl font-black text-white mt-1">الليل يخيم على القرية</h1>
+            <h1 className="text-xl font-black text-white mt-1 md:mt-0">الليل يخيم على القرية</h1>
             <p className="text-xs" style={{ color: "#333" }}>الليلة {nightLabel} · الجميع ينام..</p>
             {timerEndsAt && (
-              <div className="mt-2 w-full px-4 py-3 rounded-xl"
+              <div className="mt-2 md:mt-1 w-full px-4 py-3 md:py-1.5 rounded-xl"
                 style={{
                   backgroundColor: nightTimerExpired ? "#1A0000" : "#0D0D0D",
                   border: `1px solid ${nightTimerExpired ? "#D32F2F55" : "#1A1A1A"}`,
@@ -2591,16 +2591,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* ── Who's awake — mirrors night action panel header ── */}
-          <div className="flex flex-col items-center gap-3 py-5 md:py-3 md:px-4 rounded-2xl"
+          <div className="flex flex-col items-center gap-3 md:gap-2 py-5 md:py-2 md:px-3 rounded-2xl"
             style={{ backgroundColor: "#0D0000", border: `1px solid ${meta.color}`, boxShadow: `0 0 20px ${meta.glow}` }}>
-            <div className="flex items-center justify-center w-12 h-12 rounded-xl"
+            <div className="flex items-center justify-center w-12 h-12 md:w-8 md:h-8 rounded-xl"
               style={{ backgroundColor: meta.color + "18", border: `1px solid ${meta.color}44` }}>
-              <VenetianMask size={22} color={meta.color} strokeWidth={1.5} />
+              <VenetianMask size={22} color={meta.color} strokeWidth={1.5} className="md:hidden" />
+              <VenetianMask size={16} color={meta.color} strokeWidth={1.5} className="hidden md:block" />
             </div>
-            <div className="flex flex-col items-center gap-1 text-center">
+            <div className="flex flex-col items-center gap-1 md:gap-0.5 text-center">
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: meta.color }}>دورك الآن</span>
-              <span className="text-2xl font-black" style={{ color: meta.color }}>{roleHeaderLabel}</span>
-              <span className="text-sm font-semibold mt-1" style={{ color: "#CCCCCC" }}>{stepHint}</span>
+              <span className="text-2xl md:text-xl font-black" style={{ color: meta.color }}>{roleHeaderLabel}</span>
+              <span className="text-sm md:text-xs font-semibold mt-1 md:mt-0" style={{ color: "#CCCCCC" }}>{stepHint}</span>
             </div>
           </div>
 
@@ -2714,7 +2715,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         onClick={card.onPick}
                         className={`${PLAYER_SELECTION_CARD} disabled:cursor-default`}
                         style={{ backgroundColor: card.bg, border: `1px solid ${card.border}` }}>
-                        <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                        <span className={PLAYER_SELECTION_INDEX}
                           style={{
                             backgroundColor: isResult ? `${accent}22` : "rgba(255,255,255,0.06)",
                             color: isResult ? "#ffffff" : "#888888",
@@ -2884,7 +2885,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         onClick={() => onPick(p.name)}
                         className={PLAYER_SELECTION_CARD}
                         style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
-                        <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                        <span className={PLAYER_SELECTION_INDEX}
                           style={{
                             backgroundColor: isSelected ? `${accent}22` : "rgba(255,255,255,0.06)",
                             color:           isSelected ? "#ffffff"     : "#888888",
@@ -3034,7 +3035,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       style={{ backgroundColor: rowBg, border: `2px solid ${rowBorder}`, boxShadow: rowGlow }}>
 
                       {/* Index badge */}
-                      <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                      <span className={PLAYER_SELECTION_INDEX}
                         style={{
                           backgroundColor: isSelected ? "rgba(211,47,47,0.18)" : "rgba(255,255,255,0.06)",
                           color:           isSelected ? "#FF6B6B" : "#888888",
@@ -3744,7 +3745,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <div key={p.name}
                     className={PLAYER_SELECTION_CARD}
                     style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
-                    <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                    <span className={PLAYER_SELECTION_INDEX}
                       style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
                       {idx + 1}
                     </span>
@@ -3835,7 +3836,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     className={PLAYER_SELECTION_CARD}
                     style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
                     {/* Number badge */}
-                    <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
+                    <span className={PLAYER_SELECTION_INDEX}
                       style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
                       {idx + 1}
                     </span>

@@ -55,18 +55,18 @@ export function UnifiedNightBanner({
   return (
     <div
       dir="rtl"
-      className="flex items-center justify-center gap-3 p-4 md:py-3 md:px-4 rounded-lg border w-full"
+      className="flex items-center justify-center gap-3 md:gap-2 p-4 md:py-2 md:px-3 rounded-lg border w-full"
       style={{
         backgroundColor: "#2A0000",
         border: "2px solid rgba(211,47,47,0.8)",
         boxShadow: "0 0 28px rgba(211,47,47,0.28)",
       }}>
-      <span className="text-sm font-semibold whitespace-nowrap" style={{ color: "#B0B0B0" }}>
+      <span className="text-sm md:text-xs font-semibold whitespace-nowrap" style={{ color: "#B0B0B0" }}>
         {label}
       </span>
-      <span className="text-lg font-black text-white whitespace-nowrap">{playerName}</span>
+      <span className="text-lg md:text-base font-black text-white whitespace-nowrap">{playerName}</span>
       <span
-        className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-full text-lg"
+        className="w-10 h-10 md:w-8 md:h-8 flex-shrink-0 flex items-center justify-center rounded-full text-lg md:text-base"
         style={{ backgroundColor: "rgba(211,47,47,0.45)", border: "2px solid #D32F2F" }}
         aria-hidden>
         {icon}
