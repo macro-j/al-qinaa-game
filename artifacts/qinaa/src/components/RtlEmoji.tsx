@@ -55,7 +55,7 @@ export function UnifiedNightBanner({
   return (
     <div
       dir="rtl"
-      className="flex items-center justify-center gap-3 p-4 rounded-lg border w-full"
+      className="flex items-center justify-center gap-3 p-4 md:py-3 md:px-4 rounded-lg border w-full"
       style={{
         backgroundColor: "#2A0000",
         border: "2px solid rgba(211,47,47,0.8)",

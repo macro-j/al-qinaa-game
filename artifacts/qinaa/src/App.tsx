@@ -55,6 +55,7 @@ import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
+import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
@@ -2590,7 +2591,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* ── Who's awake — mirrors night action panel header ── */}
-          <div className="flex flex-col items-center gap-3 py-5 rounded-2xl"
+          <div className="flex flex-col items-center gap-3 py-5 md:py-3 md:px-4 rounded-2xl"
             style={{ backgroundColor: "#0D0000", border: `1px solid ${meta.color}`, boxShadow: `0 0 20px ${meta.glow}` }}>
             <div className="flex items-center justify-center w-12 h-12 rounded-xl"
               style={{ backgroundColor: meta.color + "18", border: `1px solid ${meta.color}44` }}>
@@ -2701,7 +2702,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   onPick?: () => void;
                 },
               ) => (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+                <div className={PLAYER_SELECTION_WRAP}>
                   {players.map((p, idx) => {
                     const card = getCard(p);
                     const isResult = card.isResult;
@@ -2711,7 +2712,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         type="button"
                         disabled={card.disabled}
                         onClick={card.onPick}
-                        className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 disabled:cursor-default"
+                        className={`${PLAYER_SELECTION_CARD} disabled:cursor-default`}
                         style={{ backgroundColor: card.bg, border: `1px solid ${card.border}` }}>
                         <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                           style={{
@@ -2872,7 +2873,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 onPick: (name: string) => void,
                 accent: string,
               ) => (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+                <div className={PLAYER_SELECTION_WRAP}>
                   {list.map((p, idx) => {
                     const isSelected = selected === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
@@ -2881,7 +2882,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       <button
                         key={p.name}
                         onClick={() => onPick(p.name)}
-                        className="flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95"
+                        className={PLAYER_SELECTION_CARD}
                         style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
                         <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                           style={{
@@ -2978,7 +2979,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             }
 
             return (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+              <div className={PLAYER_SELECTION_WRAP}>
                 {targetList.map((p, idx) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
@@ -3029,7 +3030,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         setSelectedTarget(p.name);
                         if (isSeerStep) setInvestigatedTarget(p.name);
                       }}
-                      className={`flex flex-col items-center justify-center gap-2 px-3 py-3.5 rounded-xl transition-colors duration-200 active:scale-95 ${showSeerBadge ? "cursor-default" : "disabled:opacity-30 disabled:cursor-not-allowed"}`}
+                      className={`${PLAYER_SELECTION_CARD} ${showSeerBadge ? "cursor-default" : "disabled:opacity-30 disabled:cursor-not-allowed"}`}
                       style={{ backgroundColor: rowBg, border: `2px solid ${rowBorder}`, boxShadow: rowGlow }}>
 
                       {/* Index badge */}
@@ -3173,9 +3174,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <span className="text-xs font-semibold" style={{ color: "#AAA" }}>اختر لاعباً واحداً ليلحق به الموت فوراً.</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto">
+        <div className={`${PLAYER_SELECTION_WRAP} max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto`}>
           {targets.length === 0 ? (
-            <p className="col-span-full text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
+            <p className="w-full text-xs text-center py-4" style={{ color: "#666" }}>لا يوجد هدف متاح للانتقام.</p>
           ) : (
             targets.map(p => (
               <button
@@ -3184,7 +3185,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   triggerHaptic([100, 50, 100]);
                   handleAvengerPick(p.name);
                 }}
-                className="flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-xl transition-all active:scale-95"
+                className={PLAYER_SELECTION_CARD}
                 style={{
                   backgroundColor: "#0D0500",
                   border: `1px solid ${accent}55`,
@@ -3738,10 +3739,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
               {morningBanner}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+              <div className={PLAYER_SELECTION_WRAP}>
                 {alivePlayers.map((p, idx) => (
                   <div key={p.name}
-                    className="flex flex-col items-center gap-2 px-3 py-3.5 rounded-xl"
+                    className={PLAYER_SELECTION_CARD}
                     style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
                     <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
                       style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
@@ -3825,13 +3826,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
               <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+            <div className={PLAYER_SELECTION_WRAP}>
               {alivePlayers.map((p, idx) => {
                 const count  = voteCounts[p.name] ?? 0;
                 const canAdd = count < perPlayerCap;
                 return (
                   <div key={p.name}
-                    className="flex flex-col items-center gap-2 px-2 py-3 rounded-xl"
+                    className={PLAYER_SELECTION_CARD}
                     style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
                     {/* Number badge */}
                     <span className="w-7 h-7 flex items-center justify-center rounded-full font-bold text-xs flex-shrink-0"
