@@ -52,7 +52,7 @@ import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
-import { RtlEmoji, AssassinationPlanBanner } from "./components/RtlEmoji";
+import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -2431,19 +2431,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const ally = livePlayers.find(p => p.isAlive && p.role === "الإكة");
             if (!ally) return null;
             return (
-              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl w-full"
-                style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
-                {/* Wolf badge — first in DOM = far right in RTL, exact same w-8 h-8 as index numbers */}
-                <span className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-base"
-                  style={{ backgroundColor: "rgba(153,27,27,0.3)", border: "1px solid rgba(211,47,47,0.35)" }}>
-                  🐺
-                </span>
-                {/* Label + name — second in DOM = left of badge in RTL */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs" style={{ color: "#666666" }}>حليفك (الإكة):</span>
-                  <span className="text-sm font-bold text-white">{ally.name}</span>
-                </div>
-              </div>
+              <UnifiedNightBanner
+                label="حليفك (الإكة):"
+                playerName={ally.name}
+                icon="🐺"
+              />
             );
           })()}
 
@@ -2453,7 +2445,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             const boyTarget = nightActions.killTarget;
             if (!boy || !boyTarget) return null;
             return (
-              <AssassinationPlanBanner targetName={boyTarget} />
+              <UnifiedNightBanner
+                label="الولد يخطط لاغتيال:"
+                playerName={boyTarget}
+                icon="🔪"
+              />
             );
           })()}
 
@@ -5380,7 +5376,11 @@ function PlayerScreen({ role, gamePhase, morningResults, voteUpdate, alivePlayer
                 <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
                 {mafiaSync.killTarget && (
-                  <AssassinationPlanBanner targetName={mafiaSync.killTarget} />
+                  <UnifiedNightBanner
+                    label="الولد يخطط لاغتيال:"
+                    playerName={mafiaSync.killTarget}
+                    icon="🔪"
+                  />
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
@@ -6129,7 +6129,11 @@ function HostDashboard({ game, activeGamePhase, morningResults, voteUpdate, aliv
                 <div className="h-px w-full" style={{ backgroundColor: "#2A0000" }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#8B0000" }}>تنسيق الفريق</span>
                 {mafiaSync.killTarget && (
-                  <AssassinationPlanBanner targetName={mafiaSync.killTarget} />
+                  <UnifiedNightBanner
+                    label="الولد يخطط لاغتيال:"
+                    playerName={mafiaSync.killTarget}
+                    icon="🔪"
+                  />
                 )}
                 {mafiaSync.silenceTarget && (
                   <div className="flex flex-row-reverse items-center gap-2 px-3 py-2 rounded-xl"
