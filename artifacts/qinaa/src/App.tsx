@@ -4072,21 +4072,29 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             whileTap={finalVotesUsed > 0 ? { scale: 0.95 } : {}}
             whileHover={finalVotesUsed > 0 ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
+            dir="rtl"
+            className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
             style={{
               backgroundColor: canExecute ? "#D32F2F" : finalVotesUsed > 0 ? "#1B5E20" : "#1A1A1A",
               color: finalVotesUsed > 0 ? "#fff" : "#555555",
               boxShadow: canExecute ? "0 0 32px #D32F2F55" : finalVotesUsed > 0 ? "0 0 32px #2E7D3255" : "none",
               cursor: finalVotesUsed > 0 ? "pointer" : "not-allowed",
             }}>
-            <Users size={20} strokeWidth={2} />
-            <span>
-              {canExecute
-                ? <RtlEmoji text={`إعدام ${accusedPlayer}`} emoji="⚖️" />
-                : finalVotesUsed > 0
-                ? <RtlEmoji text={`العفو عن ${accusedPlayer}`} emoji="🕊️" />
-                : "سجّل الأصوات أولاً"}
-            </span>
+            {canExecute ? (
+              <>
+                <span>إعدام {accusedPlayer}</span>
+                <RtlEmoji emoji="⚖️" />
+                <Users size={20} strokeWidth={2} />
+              </>
+            ) : finalVotesUsed > 0 ? (
+              <>
+                <span>العفو عن {accusedPlayer}</span>
+                <RtlEmoji emoji="🕊️" />
+                <Users size={20} strokeWidth={2} />
+              </>
+            ) : (
+              <span>سجّل الأصوات أولاً</span>
+            )}
           </motion.button>
           {skipNightBtn}
           {restartBtn}

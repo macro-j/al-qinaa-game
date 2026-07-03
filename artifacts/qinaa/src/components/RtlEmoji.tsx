@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
 type RtlEmojiProps = {
-  text: ReactNode;
+  text?: ReactNode;
   emoji: string;
   className?: string;
   textClassName?: string;
@@ -34,7 +34,9 @@ export function RtlEmoji({
       dir="rtl"
       className={`inline-flex items-center gap-1 ${justifyClass} ${className}`.trim()}
       style={style}>
-      <span className={textClassName} style={textStyle}>{text}</span>
+      {text != null && text !== "" && (
+        <span className={textClassName} style={textStyle}>{text}</span>
+      )}
       <span className={emojiClassName} style={emojiStyle} aria-hidden>{emoji}</span>
     </span>
   );
