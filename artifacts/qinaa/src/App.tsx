@@ -53,6 +53,7 @@ import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
+import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -678,6 +679,36 @@ const formatCorpsesCount = (count: number): string => {
   }
 };
 
+const ARABIC_ORDINALS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
+
+function formatMatchPhaseName(phaseType: "night" | "day", n: number): string {
+  const ord = ARABIC_ORDINALS[n - 1] ?? String(n);
+  return phaseType === "night" ? `الليلة ${ord}` : `اليوم ${ord}`;
+}
+
+function seerInvestigationLabel(role: string): string {
+  if (role === "الولد" || role === "الإكة") return "مافيا";
+  if (role === "madman") return "مجنون";
+  return "مواطن";
+}
+
+function appendMatchHistoryEvent(
+  prev: MatchHistoryPhase[],
+  phaseType: "night" | "day",
+  phaseNum: number,
+  icon: string,
+  text: string,
+): MatchHistoryPhase[] {
+  const phaseName = formatMatchPhaseName(phaseType, phaseNum);
+  const idx = prev.findIndex(p => p.phaseName === phaseName && p.phaseType === phaseType);
+  if (idx >= 0) {
+    return prev.map((p, i) =>
+      i === idx ? { ...p, events: [...p.events, { icon, text }] } : p,
+    );
+  }
+  return [...prev, { phaseName, phaseType, events: [{ icon, text }] }];
+}
+
 // ── سرعة المجلس (Game Speed presets) ──────────────────────────────────────
 // Four pacing profiles for the table. Each preset drives THREE timers:
 //   • turn      — per-role night action window (seconds)
@@ -1111,6 +1142,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
   // ── Win condition + post-execution screens ──
   const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia" | "madman"; killerName: string | null } | null>(() => pick("gameOver", null as { winner: "town" | "mafia" | "madman"; killerName: string | null } | null));
+  const [matchHistory, setMatchHistory]       = useState<MatchHistoryPhase[]>([]);
+  const [showMatchHistory, setShowMatchHistory] = useState(false);
+
+  const logHistoryEvent = (phaseType: "night" | "day", phaseNum: number, icon: string, text: string) => {
+    setMatchHistory(prev => appendMatchHistoryEvent(prev, phaseType, phaseNum, icon, text));
+  };
+
+  const logMorningResults = (deaths: DeathEntry[], phaseNum: number) => {
+    if (deaths.length === 0) {
+      logHistoryEvent("day", phaseNum, "🕊️", "لم يمت أحد في هذه الليلة");
+      return;
+    }
+    for (const d of deaths) {
+      logHistoryEvent("day", phaseNum, "💀", `وُجد ${d.name} مقتولاً`);
+    }
+  };
 
   // ── Phase 3: Avenger interrupt flow ──
   // When an avenger dies, the normal flow pauses and we collect their revenge pick(s)
@@ -1588,6 +1635,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       // Reset magician potions for a fresh game
       setMagicianState({ lifeCharge: true, deathCharge: true });
       resetMagicianNightUi();
+      setMatchHistory([]);
+      setShowMatchHistory(false);
       startNightWithTransition(order);
       setPhase("night");
     } else {
@@ -1795,6 +1844,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const { deaths: cascaded, avengers: newAvengers } = resolveDeaths(initial, livePlayers);
     const updated = applyDeaths(livePlayers, cascaded, reason, null, false);
     setLivePlayers(updated);
+    logHistoryEvent("day", nightCount, "⚔️", `قرر المنتقم أخذ ${targetName} معه إلى القبر`);
     // Merge into the accumulated death list (dedup by name; first cause wins)
     const merged: DeathEntry[] = [...avengerFlow.deaths];
     for (const d of cascaded) {
@@ -1844,6 +1894,46 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       pendingMagicianPoisonRef.current = null;
     }
 
+    // ── Match history: log this role's night action ──
+    if (nightStep === "الولد") {
+      if (boyInheritActive) {
+        if (boyKillTarget)    logHistoryEvent("night", nightCount, "🔪", `خطط لاغتيال ${boyKillTarget}`);
+        if (boySilenceTarget) logHistoryEvent("night", nightCount, "🤫", `أسكت ${boySilenceTarget}`);
+      } else if (selectedTarget) {
+        logHistoryEvent("night", nightCount, "🔪", `خطط لاغتيال ${selectedTarget}`);
+      }
+    }
+    if (nightStep === "الإكة") {
+      const aceIsAliveLog = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
+      if (aceIsAliveLog && selectedTarget) {
+        logHistoryEvent("night", nightCount, "🤫", `أسكت ${selectedTarget}`);
+      }
+    }
+    if (nightStep === "الشايب" && selectedTarget) {
+      const investigated = livePlayers.find(p => p.name === selectedTarget);
+      const result = seerInvestigationLabel(investigated?.role ?? "المواطن");
+      logHistoryEvent("night", nightCount, "🔍", `فحص ${selectedTarget} واكتشف أنه ${result}`);
+    }
+    if (nightStep === "البنت" && selectedTarget) {
+      logHistoryEvent("night", nightCount, "🛡️", `حمت ${selectedTarget}`);
+    }
+    if (nightStep === "magician") {
+      const healLog   = newActions.magicianHealTarget;
+      const poisonLog = newActions.magicianPoisonTarget;
+      if (healLog) {
+        const healSuccess = !!(newActions.killTarget && healLog === newActions.killTarget);
+        logHistoryEvent(
+          "night",
+          nightCount,
+          "🧪",
+          `استخدم جرعة حياة لإنقاذ ${healLog} (${healSuccess ? "نجحت" : "فشلت"})`,
+        );
+      }
+      if (poisonLog) {
+        logHistoryEvent("night", nightCount, "☠️", `استخدم جرعة سم لقتل ${poisonLog}`);
+      }
+    }
+
     const nextRole = getNextNightStep(nightStep, livePlayers);
 
     if (nextRole) {
@@ -1889,6 +1979,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         const { deaths, avengers } = resolveDeaths(seed, livePlayers);
         const updated = applyDeaths(livePlayers, deaths, "night", silenceTarget, true);
         setLivePlayers(updated);
+        logMorningResults(deaths, nightCount);
         setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
         setSelectedTarget(null);
       setBoyKillTarget(null);
@@ -1949,6 +2040,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setIsBlindScreen(false);
     // Reset avenger interrupt flow
     setAvengerFlow(null);
+    setMatchHistory([]);
+    setShowMatchHistory(false);
     setPhase("setup");
   };
 
@@ -1984,6 +2077,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // ── Madman Win — INSTANT bypass of all standard win/cascade logic ──
     // Per spec: if the executed player is the madman, the game ends immediately.
     if (executedPlayer.role === "madman") {
+      logHistoryEvent("day", nightCount, "🎭", "نجح المجنون في خطته وتم إعدامه!");
       const updated = livePlayers.map(p =>
         p.name === name
           ? { ...p, isAlive: false, deathReason: "vote" as const, isSilenced: false }
@@ -1997,6 +2091,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ── Standard execution: cascade twin link, queue avenger revenge, then resolve ──
+    logHistoryEvent("day", nightCount, "⚖️", `تم إعدام ${name}`);
     const seed: DeathEntry[] = [{ name, cause: "vote" }];
     const { deaths, avengers } = resolveDeaths(seed, livePlayers);
     const updated = applyDeaths(livePlayers, deaths, "vote", null, true);
@@ -3216,6 +3311,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setExecutionResult(null);
       setNightTimerExpired(false);
       resetVotingState();
+      setMatchHistory([]);
+      setShowMatchHistory(false);
     };
 
     const fullReset = () => {
@@ -3242,6 +3339,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     };
 
     return (
+      <>
       <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8 gap-6"
         style={{ ...ROOT_STYLE, backgroundColor: bgColor }}>
         {globalControls}
@@ -3282,6 +3380,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             )}
           </div>
         </div>
+
+        {/* ── Match history — host-only secret log ── */}
+        <motion.button
+          onClick={() => setShowMatchHistory(true)}
+          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+          style={{
+            backgroundColor: "#1A0000",
+            color: "#FF6B6B",
+            border: "1.5px solid rgba(211,47,47,0.55)",
+            boxShadow: "0 0 24px rgba(211,47,47,0.2)",
+          }}>
+          <RtlEmoji text="سجل أحداث اللعبة" emoji="📜" className="font-black" textStyle={{ color: "#FF6B6B" }} />
+        </motion.button>
 
         {/* ── Last night's victims (shown for Mafia win; lists each casualty + cause) ── */}
         {!isTownWin && !isMadmanWin && (dayResult.deaths.length > 0 || dayResult.silenced) && (
@@ -3366,6 +3480,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               resets the run and returns to setup. */}
         </div>
       </div>
+      <MatchHistoryModal
+        open={showMatchHistory}
+        onClose={() => setShowMatchHistory(false)}
+        history={matchHistory}
+      />
+    </>
     );
   }
 
@@ -3399,6 +3519,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setExecutionResult(null);
       setNightTimerExpired(false);
       resetVotingState();
+      setMatchHistory([]);
+      setShowMatchHistory(false);
     };
 
     const restartBtn = (
@@ -3601,6 +3723,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           setDaySubPhase("justification");
         } else if (maxVotes >= majorityThreshold && leaders.length > 1) {
           // Condition B: threshold met but multiple players share the top count
+          logHistoryEvent("day", nightCount, "⚖️", "تعادل في التصويت، لم يتم إعدام أحد");
           setDaySubPhase("vote_tie");
         } else {
           // Condition A: nobody reached majority (includes zero-vote rounds)
@@ -3794,6 +3917,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       if (canExecute) {
         handleExecute(accusedPlayer!);
       } else {
+        if (accusedPlayer) {
+          logHistoryEvent("day", nightCount, "🕊️", `تم العفو عن ${accusedPlayer}`);
+        }
         handleStartNextNight();
       }
     };
