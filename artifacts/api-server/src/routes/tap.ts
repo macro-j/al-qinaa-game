@@ -27,6 +27,10 @@ function sendJsonError(
 }
 
 function publicAppUrl(req: { get(name: string): string | undefined }): string {
+  const configured =
+    process.env.PUBLIC_APP_URL ?? process.env.APP_URL ?? process.env.FRONTEND_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+
   const origin = req.get("origin");
   if (origin) return origin.replace(/\/+$/, "");
 
@@ -39,12 +43,12 @@ function publicAppUrl(req: { get(name: string): string | undefined }): string {
     }
   }
 
-  const configured =
-    process.env.PUBLIC_APP_URL ?? process.env.APP_URL ?? process.env.FRONTEND_URL;
-  if (configured) return configured.replace(/\/+$/, "");
-
   const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
   if (replitDomain) return `https://${replitDomain}`;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("PUBLIC_APP_URL is not configured");
+  }
 
   return "http://localhost:5173";
 }
@@ -60,6 +64,10 @@ function publicServerUrl(req: { get(name: string): string | undefined }): string
   if (host) {
     const proto = req.get("x-forwarded-proto") ?? "http";
     return `${proto}://${host}`;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("PUBLIC_SERVER_URL is not configured");
   }
 
   const port = process.env.PORT ?? "3000";

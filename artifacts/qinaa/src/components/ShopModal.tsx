@@ -6,7 +6,7 @@ import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
 import { RtlEmoji } from "./RtlEmoji";
-import { apiPost } from "../lib/api";
+import { readResponseJson } from "../lib/api";
 
 /**
  * Pricing / packages modal. Each "buy" button starts a Tap hosted checkout for
@@ -45,10 +45,20 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     }
     setLoadingItemId(itemId);
     try {
-      const { resp, data } = await apiPost<{ checkoutUrl?: string; error?: string }>(
-        "/api/payment/tap-charge",
-        { email: user.email },
-      );
+      const apiUrl = import.meta.env.VITE_PUBLIC_SERVER_URL
+        ? `${import.meta.env.VITE_PUBLIC_SERVER_URL}/api/payment/tap-charge`
+        : "/api/payment/tap-charge";
+
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ email: user.email }),
+      });
+
+      const data = await readResponseJson<{ checkoutUrl?: string; error?: string }>(resp);
 
       if (!resp.ok) {
         console.error("Tap checkout failed:", resp.status, data);

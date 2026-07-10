@@ -1,17 +1,23 @@
-/** Default api-server origin for local development. */
-const DEFAULT_API_BASE = "http://localhost:3000";
-
 /**
  * Builds an absolute API URL for fetch calls.
- * Uses `VITE_API_URL` when set; otherwise hits the api-server directly at
- * `http://localhost:3000` (no Vite proxy required).
+ * Production: `VITE_PUBLIC_SERVER_URL` (or `VITE_API_URL`) points at the api-server.
+ * Local dev: relative paths use the Vite `/api` proxy when no public URL is set.
  */
 export function apiUrl(path: string): string {
-  const base =
-    (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ??
-    DEFAULT_API_BASE;
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${normalized}`;
+  const publicServer = (
+    import.meta.env.VITE_PUBLIC_SERVER_URL as string | undefined
+  )?.replace(/\/+$/, "");
+  if (publicServer) return `${publicServer}${normalized}`;
+
+  const viteApi = (import.meta.env.VITE_API_URL as string | undefined)?.replace(
+    /\/+$/,
+    "",
+  );
+  if (viteApi) return `${viteApi}${normalized}`;
+
+  // Dev fallback: same-origin relative path → Vite proxy → api-server
+  return normalized;
 }
 
 /**
