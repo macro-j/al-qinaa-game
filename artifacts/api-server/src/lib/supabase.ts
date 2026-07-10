@@ -1,9 +1,8 @@
 /**
- * Server-side Supabase helpers used by the Stripe payment flow.
+ * Server-side Supabase helpers used by the Tap payment flow.
  *
  * Auth verification uses the anon key + the caller's JWT.
- * Fulfillment (payments, profiles, entitlements) uses a service-role client
- * that bypasses RLS.
+ * Fulfillment (profiles premium flag) uses a service-role client that bypasses RLS.
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -83,7 +82,51 @@ export async function getUserFromToken(
 }
 
 /**
- * Marks a payment row as completed for the given Stripe Checkout session id.
+ * Resolves a Supabase auth user id from an email address.
+ */
+export async function findUserIdByEmail(email: string): Promise<string | null> {
+  const admin = getSupabaseAdmin();
+  const normalized = email.trim().toLowerCase();
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+
+    if (error) {
+      throw new Error(`auth.admin.listUsers failed: ${error.message}`);
+    }
+
+    const match = data.users.find(
+      (user) => user.email?.trim().toLowerCase() === normalized,
+    );
+    if (match) return match.id;
+
+    if (data.users.length < 200) break;
+    page += 1;
+  }
+
+  return null;
+}
+
+/**
+ * Activates premium for the buyer identified by email (profiles.is_premium).
+ * Used by the Tap webhook after a CAPTURED charge.
+ */
+export async function activatePremiumByEmail(email: string): Promise<void> {
+  const userId = await findUserIdByEmail(email);
+  if (!userId) {
+    throw new Error(`No auth user found for email=${email}`);
+  }
+
+  await activatePremiumProfile(userId);
+  await grantSpecificEntitlement(userId, "all_access");
+}
+
+/**
+ * Marks a payment row as completed for the given gateway order id.
  */
 export async function completePaymentByGatewayOrderId(
   gatewayOrderId: string,

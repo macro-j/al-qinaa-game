@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { getValidAccessToken } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
@@ -10,10 +9,10 @@ import { RtlEmoji } from "./RtlEmoji";
 import { apiPost } from "../lib/api";
 
 /**
- * Pricing / packages modal. Each "buy" button starts a Stripe Checkout for its
- * specific item (the actual entitlement unlock happens server-side via the
- * verified Stripe webhook / verify-on-return). The card footers react to the
- * live entitlement state so the user's current tier is always reflected.
+ * Pricing / packages modal. Each "buy" button starts a Tap hosted checkout for
+ * the premium subscription (entitlement unlock happens server-side via the
+ * Tap webhook). The card footers react to the live entitlement state so the
+ * user's current tier is always reflected.
  * Rendered globally via ShopProvider so it can be opened from anywhere
  * (footer button, entitlement gatekeeper, etc.).
  */
@@ -40,23 +39,19 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     if (busy) return;
     // Guests can browse the catalog but must authenticate before any checkout.
     if (!user) { setShowAuth(true); return; }
+    if (!user.email) {
+      toast.error("يرجى تسجيل الدخول بحساب يحتوي على بريد إلكتروني.");
+      return;
+    }
     setLoadingItemId(itemId);
     try {
-      const token = await getValidAccessToken();
-      if (!token) {
-        toast.error("يرجى تسجيل الدخول أولاً.");
-        setLoadingItemId(null);
-        return;
-      }
-
-      const { resp, data } = await apiPost<{ url?: string; error?: string }>(
-        "/api/checkout",
-        { itemId },
-        { Authorization: `Bearer ${token}` },
+      const { resp, data } = await apiPost<{ checkoutUrl?: string; error?: string }>(
+        "/api/payment/tap-charge",
+        { email: user.email },
       );
 
       if (!resp.ok) {
-        console.error("Checkout failed:", resp.status, data);
+        console.error("Tap checkout failed:", resp.status, data);
         throw new Error(
           typeof data.error === "string"
             ? data.error
@@ -64,14 +59,13 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
         );
       }
 
-      const url = data.url;
-      if (typeof url !== "string" || !url) {
-        console.error("Checkout response missing url:", data);
+      const checkoutUrl = data.checkoutUrl;
+      if (typeof checkoutUrl !== "string" || !checkoutUrl) {
+        console.error("Tap checkout response missing checkoutUrl:", data);
         throw new Error("missing checkout url");
       }
 
-      // Navigate to Stripe-hosted Checkout (no reset — we leave the page).
-      window.location.href = url;
+      window.location.href = checkoutUrl;
     } catch (err) {
       console.error("Checkout error:", err);
       toast.error("تعذّر بدء عملية الدفع. حاول مرة أخرى.");

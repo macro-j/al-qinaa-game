@@ -4,7 +4,6 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { corsOptions } from "./lib/corsOptions";
-import { handleStripeWebhook } from "./routes/stripeWebhook";
 
 const app: Express = express();
 
@@ -30,16 +29,6 @@ app.use(
       },
     },
   }),
-);
-
-// ── Stripe webhook ──────────────────────────────────────────────────────────
-// MUST be registered BEFORE express.json(): signature verification needs the
-// raw request body, not a parsed object. Fulfillment is server-side and
-// signature-verified, so it cannot be faked by a client.
-app.post(
-  "/api/stripe/webhook",
-  express.raw({ type: "application/json" }),
-  handleStripeWebhook,
 );
 
 app.use(express.json());
