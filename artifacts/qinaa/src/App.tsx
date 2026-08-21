@@ -1068,8 +1068,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [phase, setPhase]                   = useState<"setup" | "pre_distribution" | "distribution" | "night" | "day" | "reveal" | "avenger_revenge" | "execution_results" | "game_over">(() => pick("phase", "setup" as const));
 
   // ── Entitlement counter — observe (never drive) the phase machine ──
-  // Init true when a finished game is restored from storage so a refresh on
-  // the game-over screen never double-counts. Resets when a new round begins.
+  // A free game is consumed only after the first night has fully completed.
+  // Old snapshots predate this flag and were already charged at distribution,
+  // so any restored non-setup snapshot is treated as counted to avoid a
+  // migration-time double charge.
+  const [hasCountedFirstNight, setHasCountedFirstNight] = useState<boolean>(() =>
+    pick("hasCountedFirstNightV1", !!SAVED && SAVED.phase !== "setup"),
+  );
+  const hasCountedFirstNightRef = useRef(hasCountedFirstNight);
 
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
@@ -1118,13 +1124,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [magicianPotionMode, setMagicianPotionMode] = useState<"dual" | "single">(
     () => SETUP.magicianPotionMode,
   );
-  const [magicianUiPhase, setMagicianUiPhase] = useState<"actions" | "heal_pick" | "poison_pick">("actions");
-  const [magicianHealOutcome, setMagicianHealOutcome] = useState<{ target: string; success: boolean } | null>(null);
-  const [magicianPoisonOutcome, setMagicianPoisonOutcome] = useState<string | null>(null);
+  const [magicianUiPhase, setMagicianUiPhase] = useState<"actions" | "heal_result" | "poison_pick" | "poison_result">("actions");
+  const [magicianHealOutcome, setMagicianHealOutcome] = useState<{ target: string } | null>(null);
+  const [magicianPoisonOutcome, setMagicianPoisonOutcome] = useState<{ target: string; role: string } | null>(null);
   const pendingMagicianHealRef = useRef<string | null>(null);
   const pendingMagicianPoisonRef = useRef<string | null>(null);
+  const magicianAutoAdvanceRef = useRef<number | null>(null);
 
   const resetMagicianNightUi = () => {
+    if (magicianAutoAdvanceRef.current !== null) {
+      window.clearTimeout(magicianAutoAdvanceRef.current);
+      magicianAutoAdvanceRef.current = null;
+    }
     setMagicianUiPhase("actions");
     setMagicianHealOutcome(null);
     setMagicianPoisonOutcome(null);
@@ -1361,6 +1372,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
       finalVoteAgainst, gameOver, executionReveal,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
+      hasCountedFirstNightV1: hasCountedFirstNight,
       isModsEnabled, activeMods,
       customSpeedsV1: customSpeeds,
     });
@@ -1371,7 +1383,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
     finalVoteAgainst, gameOver, executionReveal,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
-    isModsEnabled, activeMods, customSpeeds,
+    hasCountedFirstNight, isModsEnabled, activeMods, customSpeeds,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1521,9 +1533,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (!nightTimerExpired) return;
     if (phase !== "night" || nightTransition !== "none") return;
+    if (nightStep === "magician" && (magicianUiPhase === "heal_result" || magicianUiPhase === "poison_result")) return;
     handleNightStep();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nightTimerExpired]);
+  }, [nightTimerExpired, magicianUiPhase]);
 
   // ── Tie / No-quorum cinematic — 4 s display then auto-advance to night ──
   useEffect(() => {
@@ -1602,14 +1615,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
+    hasCountedFirstNightRef.current = false;
+    setHasCountedFirstNight(false);
     // Blind-screen gate seeds from the mode toggle: ON → every card is
     // locked until the named player taps to unlock; OFF → legacy behavior
     // (card visible immediately, flip-to-reveal).
     setIsBlindScreen(isPassPhoneMode);
     setPhase("pre_distribution");
-
-    // 🛑 الضربة القاضية: الخصم المباشر فوراً عند ضغط الزر 🛑
-    void incrementGamesPlayed();
   };
 
   // Night order: wolf → shadow → magician → seer → guard
@@ -1633,6 +1645,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       if (roleActiveInNight(r, lp)) return r;
     }
     return null;
+  };
+
+  const countFirstNightOnce = () => {
+    if (nightCount !== 1 || hasCountedFirstNightRef.current) return;
+    hasCountedFirstNightRef.current = true;
+    setHasCountedFirstNight(true);
+    void incrementGamesPlayed();
   };
 
   // ── Win condition checker — called after every death ──
@@ -2025,6 +2044,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     } else {
       // ── role_sleeps → city_wakes → compute results → win check ──
       const goToMorning = () => {
+        // The round becomes chargeable only after every role has completed the
+        // first night. A refresh or duplicate transition cannot charge twice.
+        countFirstNightOnce();
         const {
           killTarget, protectTarget, silenceTarget,
           magicianHealTarget, magicianPoisonTarget: poisonT,
@@ -2070,6 +2092,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setNightTransition("role_sleeps");
       playRoleAudio("sleep", nightStep);
     }
+  };
+
+  const scheduleMagicianSleep = () => {
+    if (magicianAutoAdvanceRef.current !== null) {
+      window.clearTimeout(magicianAutoAdvanceRef.current);
+    }
+    // Keep the secret result readable for a brief moment, then run the normal
+    // sleep narration and advance to the next role without another tap.
+    magicianAutoAdvanceRef.current = window.setTimeout(() => {
+      magicianAutoAdvanceRef.current = null;
+      handleNightStep();
+    }, 3000);
   };
 
   const handleEndGame = () => {
@@ -2650,7 +2684,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               );
             }
 
-            // ── Magician (الساحر) — blind life guess + direct poison ──
+            // ── Magician (الساحر) — automatic life save + revealing poison ──
             if (nightStep === "magician") {
               const magMeta     = ROLE_META["magician"];
               const canHeal     = magicianState.lifeCharge;
@@ -2672,23 +2706,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   setMagicianState(prev => ({ ...prev, deathCharge: false }));
                 }
               };
-
-              const magicianSleepBtn = (
-                <motion.button
-                  onClick={() => { triggerHaptic(20); handleNightStep(); }}
-                  whileTap={{ scale: 0.95 }}
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-                  style={{
-                    backgroundColor: magMeta.color,
-                    color: "#0A0A0A",
-                    boxShadow: `0 0 28px ${magMeta.glow}`,
-                  }}>
-                  <Moon size={20} strokeWidth={2} />
-                  <span>ينام الساحر</span>
-                </motion.button>
-              );
 
               const renderMagicianTargetGrid = (
                 players: typeof livePlayers,
@@ -2737,48 +2754,22 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </div>
               );
 
-              if (magicianUiPhase === "heal_pick") {
-                const picked = magicianHealOutcome;
-                const healPlayers = livePlayers.filter(p => p.isAlive);
+              if (magicianUiPhase === "heal_result" && magicianHealOutcome) {
                 return (
-                  <div className="flex flex-col gap-3">
-                    <div className="px-4 py-3 rounded-xl text-center"
-                      style={{ backgroundColor: "#0D0D0D", border: `1px solid ${magMeta.color}55` }}>
-                      <span className="text-sm font-bold text-white">من تنقذ بجرعة الحياة؟</span>
+                  <div className="flex flex-col items-center gap-4 px-5 py-6 rounded-2xl text-center"
+                    style={{ backgroundColor: "#101A08", border: `1px solid ${magMeta.color}`, boxShadow: `0 0 24px ${magMeta.glow}` }}>
+                    <span className="text-3xl">🧪</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs font-black tracking-widest" style={{ color: magMeta.color }}>رجعة الحياة</span>
+                      <span className="text-lg font-black text-white">تم إنقاذ {magicianHealOutcome.target}</span>
+                      <span className="text-xs font-semibold" style={{ color: "#8FB85A" }}>كانت ضحية الولد هذه الليلة</span>
                     </div>
-                    {renderMagicianTargetGrid(healPlayers, magMeta.color, (p) => {
-                      const isPicked  = picked?.target === p.name;
-                      const isSuccess = isPicked && !!picked?.success;
-                      const isFail    = isPicked && !picked?.success;
-                      const locked    = !!picked;
-                      return {
-                        bg: isSuccess ? "#1B2A0E" : isFail ? "#1A0A0A" : "#141414",
-                        border: isSuccess ? magMeta.color : isFail ? "#D32F2F" : "#222222",
-                        label: isSuccess
-                          ? <RtlEmoji text="نجحت! تم إنقاذ الضحية" emoji="✅" />
-                          : isFail
-                          ? <RtlEmoji text="خطأ! ضاعت الجرعة" emoji="❌" />
-                          : "اختر",
-                        labelColor: isSuccess ? "#A3E635" : isFail ? "#FF8888" : "#444444",
-                        isResult: isSuccess || isFail,
-                        disabled: locked && !isPicked,
-                        onPick: locked
-                          ? undefined
-                          : () => {
-                              const success = !!mafiaTarget && p.name === mafiaTarget;
-                              setMagicianHealOutcome({ target: p.name, success });
-                              if (success) pendingMagicianHealRef.current = p.name;
-                              triggerHaptic(success ? [30, 50, 30] : [80, 40, 80]);
-                            },
-                      };
-                    })}
-                    {picked && magicianSleepBtn}
+                    <span className="text-[11px]" style={{ color: "#647044" }}>ينام الساحر تلقائياً...</span>
                   </div>
                 );
               }
 
               if (magicianUiPhase === "poison_pick") {
-                const picked = magicianPoisonOutcome;
                 const poisonAccent = "#C4B5FD";
                 const poisonPlayers = livePlayers.filter(p => p.isAlive && p.role !== "magician");
                 return (
@@ -2788,27 +2779,42 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       <span className="text-sm font-bold text-white">من تسمّ بجرعة السم؟</span>
                     </div>
                     {renderMagicianTargetGrid(poisonPlayers, poisonAccent, (p) => {
-                      const isPicked = picked === p.name;
-                      const locked   = !!picked;
                       return {
-                        bg: isPicked ? "#2A0F2A" : "#141414",
-                        border: isPicked ? "#7C3AED" : "#222222",
-                        label: isPicked
-                          ? <RtlEmoji text="تم تسميم اللاعب" emoji="☠️" />
-                          : "اختر",
-                        labelColor: isPicked ? poisonAccent : "#444444",
-                        isResult: isPicked,
-                        disabled: locked && !isPicked,
-                        onPick: locked
-                          ? undefined
-                          : () => {
-                              setMagicianPoisonOutcome(p.name);
-                              pendingMagicianPoisonRef.current = p.name;
-                              triggerHaptic([30, 50, 30]);
-                            },
+                        bg: "#141414",
+                        border: "#222222",
+                        label: "اختر",
+                        labelColor: "#444444",
+                        isResult: false,
+                        disabled: false,
+                        onPick: () => {
+                          setMagicianPoisonOutcome({ target: p.name, role: p.role });
+                          pendingMagicianPoisonRef.current = p.name;
+                          setMagicianUiPhase("poison_result");
+                          setTimerEndsAt(null);
+                          setNightTimerExpired(false);
+                          triggerHaptic([30, 50, 30]);
+                          scheduleMagicianSleep();
+                        },
                       };
                     })}
-                    {picked && magicianSleepBtn}
+                  </div>
+                );
+              }
+
+              if (magicianUiPhase === "poison_result" && magicianPoisonOutcome) {
+                const poisonedMeta = ROLE_META[magicianPoisonOutcome.role] ?? ROLE_META["المواطن"];
+                return (
+                  <div className="flex flex-col items-center gap-4 px-5 py-6 rounded-2xl text-center"
+                    style={{ backgroundColor: "#1A071A", border: "1px solid #7C3AED", boxShadow: "0 0 24px #7C3AED33" }}>
+                    <span className="text-3xl">☠️</span>
+                    <div className="flex flex-col gap-2">
+                      <span className="text-lg font-black text-white">تم تسميم {magicianPoisonOutcome.target}</span>
+                      <span className="text-xs font-semibold" style={{ color: "#A78BFA" }}>دور الضحية</span>
+                      <span className="text-xl font-black" style={{ color: poisonedMeta.color }}>
+                        {getRoleName(magicianPoisonOutcome.role)}
+                      </span>
+                    </div>
+                    <span className="text-[11px]" style={{ color: "#725A85" }}>ينام الساحر تلقائياً...</span>
                   </div>
                 );
               }
@@ -2816,20 +2822,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               return (
                 <div className="flex flex-col gap-3">
                   <button
-                    disabled={!canHeal}
+                    disabled={!canHeal || !mafiaTarget}
                     onClick={() => {
+                      if (!mafiaTarget) return;
                       triggerHaptic([30, 50, 30]);
                       spendLifeCharge();
-                      setMagicianUiPhase("heal_pick");
+                      pendingMagicianHealRef.current = mafiaTarget;
+                      setMagicianHealOutcome({ target: mafiaTarget });
+                      setMagicianUiPhase("heal_result");
+                      setTimerEndsAt(null);
+                      setNightTimerExpired(false);
+                      scheduleMagicianSleep();
                     }}
                     className="w-full px-4 py-3.5 rounded-xl font-black text-sm transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                     style={{
                       backgroundColor: "#1B2A0E",
-                      color:           canHeal ? "#A3E635" : "#666666",
-                      border:          `1px solid ${canHeal ? magMeta.color : "#222"}`,
-                      boxShadow:       canHeal ? `0 0 16px ${magMeta.color}33` : "none",
+                      color:           canHeal && mafiaTarget ? "#A3E635" : "#666666",
+                      border:          `1px solid ${canHeal && mafiaTarget ? magMeta.color : "#222"}`,
+                      boxShadow:       canHeal && mafiaTarget ? `0 0 16px ${magMeta.color}33` : "none",
                     }}>
-                    جرعة حياة
+                    {mafiaTarget ? "جرعة حياة" : "لا توجد ضحية لإنقاذها"}
                   </button>
                   <button
                     disabled={!canPoison}
@@ -2867,7 +2879,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               const boyMeta   = ROLE_META["الولد"];
               const boyAlive  = livePlayers.filter(p => p.isAlive);
               const killList  = boyAlive.filter(p => p.role !== "الولد"); // no self
-              const silenceList = boyAlive.filter(p => p.role !== "الولد"); // no self
+              // Official council rule: after inheriting leadership, the Boy
+              // may silence himself. Kill still excludes self.
+              const silenceList = boyAlive;
               const renderTargetList = (
                 list: typeof boyAlive,
                 selected: string | null,
@@ -2985,6 +2999,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
                   const isMafiaRole     = p.role === "الولد" || p.role === "الإكة";
+                  const isMadmanRole    = p.role === "madman";
 
                   // ── Friendly-fire lock: Boy can never silence-click the Ace ──
                   const isAllyLocked = nightStep === "الولد" && p.role === "الإكة";
@@ -3012,15 +3027,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   // unmissable even in a dark room. The revealed card is exempt
                   // from disabled:opacity-30 — it should GLOW, not fade.
                   const rowBg = showSeerBadge
-                    ? (isMafiaRole ? "#C62828" : "#2E7D32")
+                    ? (isMafiaRole ? "#C62828" : isMadmanRole ? "#7A1F86" : "#2E7D32")
                     : (isSelected ? "#2A0000" : "#141414");
                   const rowBorder = showSeerBadge
-                    ? (isMafiaRole ? "#FF5252" : "#69F0AE")
+                    ? (isMafiaRole ? "#FF5252" : isMadmanRole ? "#E879F9" : "#69F0AE")
                     : (isSelected ? "#D32F2F" : "#222222");
                   const rowGlow = showSeerBadge
                     ? (isMafiaRole
                         ? "0 0 24px rgba(220,38,38,0.85)"
-                        : "0 0 24px rgba(22,163,74,0.85)")
+                        : isMadmanRole
+                          ? "0 0 24px rgba(232,121,249,0.85)"
+                          : "0 0 24px rgba(22,163,74,0.85)")
                     : "none";
 
                   return (
@@ -3083,6 +3100,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           }}>
                           {isMafiaRole ? (
                             <RtlEmoji text="مافيا" emoji="🐺" />
+                          ) : isMadmanRole ? (
+                            <RtlEmoji text="مجنون" emoji="🎭" />
                           ) : (
                             "بريء ✓"
                           )}
@@ -3782,10 +3801,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 3: voting_tally — host counts raised hands (individual cap per player)
+    // SUB-PHASE 3: voting_tally — host counts one vote per living player
     // ════════════════════════════════════════════
     if (daySubPhase === "voting_tally") {
-      const perPlayerCap = alivePlayers.length;
+      const totalVotesCast = Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
+      const totalVoters = alivePlayers.length;
 
       const handleCountVotes = () => {
         // ── Absolute-majority rule (النصف + 1) ─────────────────────────────
@@ -3825,12 +3845,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
               <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
-              <span className="text-xs mt-1" style={{ color: "#444" }}>كل لاعب يمكن أن يحصل على {perPlayerCap} أصوات كحد أقصى</span>
+              <span className="text-xs mt-1" style={{ color: "#666" }}>
+                كل لاعب يصوّت مرة واحدة فقط · المسجّل {totalVotesCast}/{totalVoters}
+              </span>
             </div>
             <div className={PLAYER_SELECTION_WRAP}>
               {alivePlayers.map((p, idx) => {
                 const count  = voteCounts[p.name] ?? 0;
-                const canAdd = count < perPlayerCap;
+                const canAdd = totalVotesCast < totalVoters;
                 return (
                   <div key={p.name}
                     className={PLAYER_SELECTION_CARD}

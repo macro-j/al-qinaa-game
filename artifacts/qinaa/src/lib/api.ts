@@ -46,7 +46,7 @@ export async function readResponseJson<
       text.slice(0, 200),
       err,
     );
-    return { error: text.slice(0, 500), _nonJson: true } as T;
+    return { error: text.slice(0, 500), _nonJson: true } as unknown as T;
   }
 }
 
