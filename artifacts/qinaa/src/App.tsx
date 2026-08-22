@@ -54,6 +54,12 @@ import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
 import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
+import {
+  generateSmartDistribution,
+  loadDistributionHistory,
+  rememberDistribution,
+  type RoleAssignment,
+} from "./lib/roleDistribution";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
 import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD, PLAYER_SELECTION_INDEX } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
@@ -686,7 +692,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
 const MIN_PLAYERS = 5;
 
-type AssignedRole = { name: string; role: string; color: string };
+type AssignedRole = RoleAssignment;
 type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean; deathReason: "vote" | "night" | null };
 
 // ── Phase 3: Death pipeline ──
@@ -791,18 +797,10 @@ const formatTimeOption = (sec: number): string => {
 // ROLE_DISPLAY_NAME, getRoleName) live in ./lib/roles — the single source of
 // truth shared by the in-game reveal, the Shop, and the Guide.
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function generateAndShuffleRoles(
   playerNames: string[],
-  activeMods: Record<string, boolean> = {}
+  activeMods: Record<string, boolean> = {},
+  distributionHistory = loadDistributionHistory(),
 ): AssignedRole[] {
   // ── 1. Base roles (priority order — mirrors server roleDefs) ──
   const baseDeck: { role: string; color: string }[] = [
@@ -832,14 +830,11 @@ function generateAndShuffleRoles(
     () => ({ role: "المواطن", color: "#555555" })
   );
 
-  // ── 4. Shuffle the deck of role-cards, then deal one to each (shuffled) player ──
-  const deck = shuffle([...baseDeck, ...modDeck, ...citizenDeck]);
-  const shuffledPlayers = shuffle(playerNames);
-  const assigned: AssignedRole[] = shuffledPlayers.map((name, i) => ({
-    name,
-    role: deck[i].role,
-    color: deck[i].color,
-  }));
+  // ── 4. Secure, history-aware deal ──
+  // It avoids giving anyone the same role as the immediately previous game
+  // whenever a valid assignment exists, then minimizes older repetitions.
+  const deck = [...baseDeck, ...modDeck, ...citizenDeck];
+  const assigned = generateSmartDistribution(playerNames, deck, distributionHistory);
 
   // Engine sanity log — confirms the deck math (e.g. 8 players + Twins+Madman = 4+2+1+1)
   console.log("[Qinaa Deck] composition:", {
@@ -850,8 +845,7 @@ function generateAndShuffleRoles(
     total: deck.length,
   });
 
-  // Shuffle deal order so intro night sequence is unpredictable
-  return shuffle(assigned);
+  return assigned;
 }
 
 // ─── Expansion Pack — static mod definitions (UI only, no logic yet) ─────────
@@ -1611,6 +1605,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Pass activeMods only when the master toggle is on; otherwise pure-vanilla deck
     const modsForDeck = isModsEnabled ? activeMods : {};
     const roles = generateAndShuffleRoles(players, modsForDeck);
+    // Keep this outside the resumable game snapshot: replay/reset must retain
+    // distribution memory so the same roster receives fresh roles next time.
+    rememberDistribution(roles);
     setAssignedRoles(roles);
     setCurrentIndex(0);
     setIsPressing(false);
