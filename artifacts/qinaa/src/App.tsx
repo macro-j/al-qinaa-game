@@ -1191,10 +1191,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [timerEndsAt, setTimerEndsAt]   = useState<number | null>(null);
 
   // ── Smart voting engine ──
-  const [voteCounts, setVoteCounts]         = useState<Record<string, number>>(() => pick("voteCounts", {} as Record<string, number>));
+  // V1 only kept aggregate counters, which could not prove who had already
+  // voted. V2 pairs every living voter with exactly one choice (or abstain)
+  // and advances through them in the same numbered order shown on screen.
+  const [voteCounts, setVoteCounts]         = useState<Record<string, number>>(() => pick("voteCountsV2", {} as Record<string, number>));
+  const [voteLedger, setVoteLedger]         = useState<Record<string, string | null>>(() => pick("voteLedgerV1", {} as Record<string, string | null>));
+  const [voteVoterIndex, setVoteVoterIndex] = useState(() => pick("voteVoterIndexV1", 0));
   const [accusedPlayer, setAccusedPlayer]   = useState<string | null>(() => pick("accusedPlayer", null as string | null));
-  const [finalVoteFor, setFinalVoteFor]     = useState(() => pick("finalVoteFor", 0));
-  const [finalVoteAgainst, setFinalVoteAgainst] = useState(() => pick("finalVoteAgainst", 0));
+  const [finalVoteFor, setFinalVoteFor]     = useState(() => pick("finalVoteForV2", 0));
+  const [finalVoteAgainst, setFinalVoteAgainst] = useState(() => pick("finalVoteAgainstV2", 0));
+  const [finalVoteLedger, setFinalVoteLedger] = useState<Record<string, "for" | "against" | "abstain">>(
+    () => pick("finalVoteLedgerV1", {} as Record<string, "for" | "against" | "abstain">),
+  );
+  const [finalVoteVoterIndex, setFinalVoteVoterIndex] = useState(() => pick("finalVoteVoterIndexV1", 0));
 
   // ── Win condition + post-execution screens ──
   const [gameOver, setGameOver]               = useState<{ winner: "town" | "mafia" | "madman"; killerName: string | null } | null>(() => pick("gameOver", null as { winner: "town" | "mafia" | "madman"; killerName: string | null } | null));
@@ -1363,8 +1372,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       phase, players, assignedRoles, currentIndex, hasRevealedOnce,
       livePlayers, nightStep, nightActions, investigatedTarget,
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
-      isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
-      finalVoteAgainst, gameOver, executionReveal,
+      isNightKillReveal, voteCountsV2: voteCounts, voteLedgerV1: voteLedger,
+      voteVoterIndexV1: voteVoterIndex, accusedPlayer,
+      finalVoteForV2: finalVoteFor, finalVoteAgainstV2: finalVoteAgainst,
+      finalVoteLedgerV1: finalVoteLedger, finalVoteVoterIndexV1: finalVoteVoterIndex,
+      gameOver, executionReveal,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       hasCountedFirstNightV1: hasCountedFirstNight,
       isModsEnabled, activeMods,
@@ -1374,8 +1386,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
     livePlayers, nightStep, nightActions, investigatedTarget,
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
-    isNightKillReveal, voteCounts, accusedPlayer, finalVoteFor,
-    finalVoteAgainst, gameOver, executionReveal,
+    isNightKillReveal, voteCounts, voteLedger, voteVoterIndex, accusedPlayer,
+    finalVoteFor, finalVoteAgainst, finalVoteLedger, finalVoteVoterIndex,
+    gameOver, executionReveal,
     magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
     hasCountedFirstNight, isModsEnabled, activeMods, customSpeeds,
   ]);
@@ -2124,9 +2137,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setNightTimerExpired(false);
     setTimerEndsAt(null);
     setVoteCounts({});
+    setVoteLedger({});
+    setVoteVoterIndex(0);
     setAccusedPlayer(null);
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
+    setFinalVoteLedger({});
+    setFinalVoteVoterIndex(0);
     // Reset magician potions
     setMagicianState({ lifeCharge: true, deathCharge: true });
     resetMagicianNightUi();
@@ -2145,9 +2162,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const resetVotingState = () => {
     setTimerEndsAt(null);
     setVoteCounts({});
+    setVoteLedger({});
+    setVoteVoterIndex(0);
     setAccusedPlayer(null);
     setFinalVoteFor(0);
     setFinalVoteAgainst(0);
+    setFinalVoteLedger({});
+    setFinalVoteVoterIndex(0);
     setConfirmExecute(null);
   };
 
@@ -3736,6 +3757,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         const init: Record<string, number> = {};
         alivePlayers.forEach(p => { init[p.name] = 0; });
         setVoteCounts(init);
+        setVoteLedger({});
+        setVoteVoterIndex(0);
         setTimerEndsAt(null);
         setDaySubPhase("voting_tally");
       };
@@ -3798,11 +3821,42 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 3: voting_tally — host counts one vote per living player
+    // SUB-PHASE 3: voting_tally — one recorded choice per numbered voter
     // ════════════════════════════════════════════
     if (daySubPhase === "voting_tally") {
       const totalVotesCast = Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
       const totalVoters = alivePlayers.length;
+      const currentVoter = alivePlayers[voteVoterIndex] ?? null;
+      const votingComplete = voteVoterIndex >= totalVoters;
+
+      const recordVote = (targetName: string | null) => {
+        if (!currentVoter) return;
+        triggerHaptic(20);
+        setVoteLedger(prev => ({ ...prev, [currentVoter.name]: targetName }));
+        if (targetName) {
+          setVoteCounts(prev => ({ ...prev, [targetName]: (prev[targetName] ?? 0) + 1 }));
+        }
+        setVoteVoterIndex(index => Math.min(totalVoters, index + 1));
+      };
+
+      const undoLastVote = () => {
+        if (voteVoterIndex <= 0) return;
+        const previousVoter = alivePlayers[voteVoterIndex - 1];
+        if (!previousVoter) return;
+        const previousTarget = voteLedger[previousVoter.name];
+        if (previousTarget) {
+          setVoteCounts(prev => ({
+            ...prev,
+            [previousTarget]: Math.max(0, (prev[previousTarget] ?? 0) - 1),
+          }));
+        }
+        setVoteLedger(prev => {
+          const next = { ...prev };
+          delete next[previousVoter.name];
+          return next;
+        });
+        setVoteVoterIndex(index => Math.max(0, index - 1));
+      };
 
       const handleCountVotes = () => {
         // ── Absolute-majority rule (النصف + 1) ─────────────────────────────
@@ -3840,74 +3894,98 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
-              <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>فرز الأصوات</span>
-              <h1 className="text-2xl font-black text-white">كم صوت لكل لاعب؟</h1>
+              <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت الأول</span>
+              <h1 className="text-2xl font-black text-white">
+                {currentVoter ? `اللاعب رقم ${voteVoterIndex + 1}: ${currentVoter.name}` : "اكتمل تسجيل الأصوات"}
+              </h1>
               <span className="text-xs mt-1" style={{ color: "#666" }}>
-                كل لاعب يصوّت مرة واحدة فقط · المسجّل {totalVotesCast}/{totalVoters}
+                المسجّل {voteVoterIndex}/{totalVoters} · الأصوات المحتسبة {totalVotesCast}
               </span>
             </div>
-            <div className={PLAYER_SELECTION_WRAP}>
-              {alivePlayers.map((p, idx) => {
-                const count  = voteCounts[p.name] ?? 0;
-                const canAdd = totalVotesCast < totalVoters;
-                return (
-                  <div key={p.name}
-                    className={PLAYER_SELECTION_CARD}
-                    style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F44" : "#222222"}` }}>
-                    {/* Number badge */}
-                    <span className={PLAYER_SELECTION_INDEX}
-                      style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
-                      {idx + 1}
-                    </span>
-                    {/* Name + silenced */}
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-sm font-semibold text-center leading-tight"
-                        style={{ color: count > 0 ? "#ffffff" : "#AAAAAA" }}>{p.name}</span>
-                      {p.isSilenced && (
-                        <RtlEmoji
-                          text="ساكت"
-                          emoji="🤐"
-                          className="text-xs font-bold"
-                          textStyle={{ color: "#FF8F00" }}
-                        />
-                      )}
-                    </div>
-                    {/* Vote count */}
-                    <span className="text-2xl font-black tabular-nums leading-none"
-                      style={{ color: count > 0 ? "#FF6B6B" : "#333" }}>
-                      {count}
-                    </span>
-                    {/* +/- controls */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: (prev[p.name] ?? 0) + 1 }))}
-                        disabled={!canAdd}
-                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                        style={{ backgroundColor: "#001A00", color: "#8BC34A", border: "1px solid #8BC34A44" }}>
-                        +
+            {currentVoter ? (
+              <>
+                <div className="px-4 py-3 rounded-xl text-center"
+                  style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
+                  <p className="text-sm font-black text-white">تصوّت على مين؟</p>
+                  {currentVoter.isSilenced && (
+                    <RtlEmoji text="ساكت لكنه يستطيع التصويت" emoji="🤐" className="text-xs font-bold mt-1"
+                      textStyle={{ color: "#FF8F00" }} />
+                  )}
+                </div>
+                <div className={PLAYER_SELECTION_WRAP}>
+                  {alivePlayers.map((candidate, idx) => {
+                    const count = voteCounts[candidate.name] ?? 0;
+                    return (
+                      <button key={candidate.name} type="button" onClick={() => recordVote(candidate.name)}
+                        className={`${PLAYER_SELECTION_CARD} transition-all active:scale-95`}
+                        style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F55" : "#222222"}` }}>
+                        <span className={PLAYER_SELECTION_INDEX}
+                          style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-center leading-tight text-white">{candidate.name}</span>
+                        <span className="text-xs font-black tabular-nums" style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
+                          {count} صوت
+                        </span>
                       </button>
-                      <button
-                        onClick={() => setVoteCounts(prev => ({ ...prev, [p.name]: Math.max(0, (prev[p.name] ?? 0) - 1) }))}
-                        disabled={count === 0}
-                        className="w-8 h-8 rounded-lg font-black text-base transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                        style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
-                        −
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => recordVote(null)}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+                  style={{ backgroundColor: "#141414", color: "#888", border: "1px solid #2A2A2A" }}>
+                  امتنع عن التصويت
+                </button>
+              </>
+            ) : (
+              <div className="px-5 py-4 rounded-2xl text-center"
+                style={{ backgroundColor: "#071A0A", border: "1px solid #33691E" }}>
+                <p className="text-sm font-black" style={{ color: "#8BC34A" }}>تم تسجيل قرار كل لاعب مرة واحدة</p>
+              </div>
+            )}
+
+            {voteVoterIndex > 0 && (
+              <div className="flex flex-col gap-2 p-4 rounded-2xl"
+                style={{ backgroundColor: "#0D0D0D", border: "1px solid #222" }}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black" style={{ color: "#888" }}>سجل الأصوات</span>
+                  <button type="button" onClick={undoLastVote}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95"
+                    style={{ backgroundColor: "#211400", color: "#FFB300", border: "1px solid #FFB30044" }}>
+                    تراجع عن آخر صوت
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {alivePlayers.slice(0, voteVoterIndex).map((voter, idx) => {
+                    const target = voteLedger[voter.name];
+                    return (
+                      <div key={voter.name} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"
+                        style={{ backgroundColor: "#141414" }}>
+                        <span className="text-xs font-semibold text-white">{idx + 1}. {voter.name}</span>
+                        <span className="text-xs font-bold" style={{ color: target ? "#FF6B6B" : "#666" }}>
+                          {target ? `← ${target}` : "امتنع"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex-1" />
             <motion.button
               onClick={handleCountVotes}
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.02 }}
+              disabled={!votingComplete}
+              whileTap={votingComplete ? { scale: 0.95 } : {}}
+              whileHover={votingComplete ? { scale: 1.02 } : {}}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
-              style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
+              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: votingComplete ? "#D32F2F" : "#1A1A1A",
+                color: votingComplete ? "#fff" : "#555",
+                boxShadow: votingComplete ? "0 0 32px #D32F2F55" : "none",
+              }}>
               <Users size={20} strokeWidth={2} />
-              <span>فرز الأصوات</span>
+              <span>{votingComplete ? "فرز الأصوات" : `باقي ${totalVoters - voteVoterIndex} لاعبين`}</span>
             </motion.button>
             {skipNightBtn}
             {restartBtn}
@@ -3997,7 +4075,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
             <div className="flex-1" />
             <motion.button
-              onClick={() => { triggerHaptic([50, 100, 50]); setTimerEndsAt(null); setDaySubPhase("final_vote"); }}
+              onClick={() => {
+                triggerHaptic([50, 100, 50]);
+                setTimerEndsAt(null);
+                setFinalVoteFor(0);
+                setFinalVoteAgainst(0);
+                setFinalVoteLedger({});
+                setFinalVoteVoterIndex(0);
+                setDaySubPhase("final_vote");
+              }}
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -4019,6 +4105,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const finalTotalVoters = alivePlayers.length;
     const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
     const canExecute       = finalVoteFor > finalVoteAgainst;
+    const currentFinalVoter = alivePlayers[finalVoteVoterIndex] ?? null;
+    const finalVotingComplete = finalVoteVoterIndex >= finalTotalVoters;
+
+    const recordFinalVote = (choice: "for" | "against" | "abstain") => {
+      if (!currentFinalVoter) return;
+      triggerHaptic(20);
+      setFinalVoteLedger(prev => ({ ...prev, [currentFinalVoter.name]: choice }));
+      if (choice === "for") setFinalVoteFor(value => value + 1);
+      if (choice === "against") setFinalVoteAgainst(value => value + 1);
+      setFinalVoteVoterIndex(index => Math.min(finalTotalVoters, index + 1));
+    };
+
+    const undoLastFinalVote = () => {
+      if (finalVoteVoterIndex <= 0) return;
+      const previousVoter = alivePlayers[finalVoteVoterIndex - 1];
+      if (!previousVoter) return;
+      const choice = finalVoteLedger[previousVoter.name];
+      if (choice === "for") setFinalVoteFor(value => Math.max(0, value - 1));
+      if (choice === "against") setFinalVoteAgainst(value => Math.max(0, value - 1));
+      setFinalVoteLedger(prev => {
+        const next = { ...prev };
+        delete next[previousVoter.name];
+        return next;
+      });
+      setFinalVoteVoterIndex(index => Math.max(0, index - 1));
+    };
 
     const handleFinalVerdict = () => {
       if (canExecute) {
@@ -4037,84 +4149,113 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <div className="flex flex-col items-center gap-1 text-center pt-1">
             <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت النهائي</span>
             <h1 className="text-2xl font-black text-white">هل يُعدَم {accusedPlayer}؟</h1>
+            <span className="text-xs mt-1" style={{ color: "#666" }}>
+              المسجّل {finalVoteVoterIndex}/{finalTotalVoters} · الأصوات المحتسبة {finalVotesUsed}
+            </span>
           </div>
           <div className="flex gap-3">
-            {/* Agree counter */}
             <div className="flex-1 flex flex-col items-center gap-3 py-5 rounded-2xl"
               style={{ backgroundColor: "#001A00", border: "1px solid #33691E" }}>
               <span className="text-2xl">👍</span>
               <span className="text-3xl font-black" style={{ color: "#8BC34A" }}>{finalVoteFor}</span>
               <span className="text-xs font-bold" style={{ color: "#4CAF50" }}>أوافق على الإعدام</span>
-              <div className="flex gap-2 mt-1">
-                <button
-                  onClick={() => setFinalVoteFor(n => Math.max(0, n - 1))}
-                  disabled={finalVoteFor === 0}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                  style={{ backgroundColor: "#0A2A0A", color: "#8BC34A", border: "1px solid #4CAF5044" }}>
-                  −
-                </button>
-                <button
-                  onClick={() => setFinalVoteFor(n => n + 1)}
-                  disabled={finalVotesUsed >= finalTotalVoters}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                  style={{ backgroundColor: "#1A3A1A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
-                  +
-                </button>
-              </div>
             </div>
-            {/* Disagree counter */}
             <div className="flex-1 flex flex-col items-center gap-3 py-5 rounded-2xl"
               style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F44" }}>
               <span className="text-2xl">👎</span>
               <span className="text-3xl font-black" style={{ color: "#FF6B6B" }}>{finalVoteAgainst}</span>
               <span className="text-xs font-bold" style={{ color: "#D32F2F" }}>أعارض الإعدام</span>
-              <div className="flex gap-2 mt-1">
-                <button
-                  onClick={() => setFinalVoteAgainst(n => Math.max(0, n - 1))}
-                  disabled={finalVoteAgainst === 0}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                  style={{ backgroundColor: "#2A0000", color: "#D32F2F", border: "1px solid #D32F2F44" }}>
-                  −
-                </button>
-                <button
-                  onClick={() => setFinalVoteAgainst(n => n + 1)}
-                  disabled={finalVotesUsed >= finalTotalVoters}
-                  className="w-9 h-9 rounded-lg font-black text-lg transition-all active:scale-90 flex items-center justify-center disabled:opacity-30"
-                  style={{ backgroundColor: "#3A0000", color: "#D32F2F", border: "1px solid #D32F2F66" }}>
-                  +
-                </button>
-              </div>
             </div>
           </div>
+
+          {currentFinalVoter ? (
+            <div className="flex flex-col gap-3 p-4 rounded-2xl"
+              style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
+              <div className="text-center">
+                <span className="text-xs font-bold" style={{ color: "#888" }}>اللاعب رقم {finalVoteVoterIndex + 1}</span>
+                <p className="text-xl font-black text-white mt-1">{currentFinalVoter.name}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => recordFinalVote("for")}
+                  className="px-3 py-4 rounded-xl font-black text-sm transition-all active:scale-95"
+                  style={{ backgroundColor: "#0A2A0A", color: "#8BC34A", border: "1px solid #4CAF5066" }}>
+                  👍 أوافق
+                </button>
+                <button type="button" onClick={() => recordFinalVote("against")}
+                  className="px-3 py-4 rounded-xl font-black text-sm transition-all active:scale-95"
+                  style={{ backgroundColor: "#2A0000", color: "#FF6B6B", border: "1px solid #D32F2F66" }}>
+                  👎 أعارض
+                </button>
+              </div>
+              <button type="button" onClick={() => recordFinalVote("abstain")}
+                className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+                style={{ backgroundColor: "#141414", color: "#888", border: "1px solid #2A2A2A" }}>
+                امتنع عن التصويت
+              </button>
+            </div>
+          ) : (
+            <div className="px-5 py-4 rounded-2xl text-center"
+              style={{ backgroundColor: "#071A0A", border: "1px solid #33691E" }}>
+              <p className="text-sm font-black" style={{ color: "#8BC34A" }}>تم تسجيل قرار كل لاعب مرة واحدة</p>
+            </div>
+          )}
+
+          {finalVoteVoterIndex > 0 && (
+            <div className="flex flex-col gap-2 p-4 rounded-2xl"
+              style={{ backgroundColor: "#0D0D0D", border: "1px solid #222" }}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-black" style={{ color: "#888" }}>سجل التصويت النهائي</span>
+                <button type="button" onClick={undoLastFinalVote}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95"
+                  style={{ backgroundColor: "#211400", color: "#FFB300", border: "1px solid #FFB30044" }}>
+                  تراجع عن آخر صوت
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {alivePlayers.slice(0, finalVoteVoterIndex).map((voter, idx) => {
+                  const choice = finalVoteLedger[voter.name];
+                  const label = choice === "for" ? "أوافق" : choice === "against" ? "أعارض" : "امتنع";
+                  const color = choice === "for" ? "#8BC34A" : choice === "against" ? "#FF6B6B" : "#666";
+                  return (
+                    <div key={voter.name} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"
+                      style={{ backgroundColor: "#141414" }}>
+                      <span className="text-xs font-semibold text-white">{idx + 1}. {voter.name}</span>
+                      <span className="text-xs font-bold" style={{ color }}>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex-1" />
           <motion.button
-            onClick={canExecute ? () => handleExecute(accusedPlayer!) : handleFinalVerdict}
-            disabled={finalVotesUsed === 0}
-            whileTap={finalVotesUsed > 0 ? { scale: 0.95 } : {}}
-            whileHover={finalVotesUsed > 0 ? { scale: 1.02 } : {}}
+            onClick={handleFinalVerdict}
+            disabled={!finalVotingComplete}
+            whileTap={finalVotingComplete ? { scale: 0.95 } : {}}
+            whileHover={finalVotingComplete ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             dir="rtl"
             className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
             style={{
-              backgroundColor: canExecute ? "#D32F2F" : finalVotesUsed > 0 ? "#1B5E20" : "#1A1A1A",
-              color: finalVotesUsed > 0 ? "#fff" : "#555555",
-              boxShadow: canExecute ? "0 0 32px #D32F2F55" : finalVotesUsed > 0 ? "0 0 32px #2E7D3255" : "none",
-              cursor: finalVotesUsed > 0 ? "pointer" : "not-allowed",
+              backgroundColor: finalVotingComplete ? (canExecute ? "#D32F2F" : "#1B5E20") : "#1A1A1A",
+              color: finalVotingComplete ? "#fff" : "#555555",
+              boxShadow: finalVotingComplete ? (canExecute ? "0 0 32px #D32F2F55" : "0 0 32px #2E7D3255") : "none",
+              cursor: finalVotingComplete ? "pointer" : "not-allowed",
             }}>
-            {canExecute ? (
+            {!finalVotingComplete ? (
+              <span>باقي {finalTotalVoters - finalVoteVoterIndex} لاعبين</span>
+            ) : canExecute ? (
               <>
                 <span>إعدام {accusedPlayer}</span>
                 <RtlEmoji emoji="⚖️" />
                 <Users size={20} strokeWidth={2} />
               </>
-            ) : finalVotesUsed > 0 ? (
+            ) : (
               <>
                 <span>العفو عن {accusedPlayer}</span>
                 <RtlEmoji emoji="🕊️" />
                 <Users size={20} strokeWidth={2} />
               </>
-            ) : (
-              <span>سجّل الأصوات أولاً</span>
             )}
           </motion.button>
           {skipNightBtn}
