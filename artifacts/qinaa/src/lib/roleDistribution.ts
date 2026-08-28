@@ -1,7 +1,7 @@
 export type RoleCard = { role: string; color: string };
 export type RoleAssignment = RoleCard & { name: string };
 
-type DistributionHistoryEntry = {
+export type DistributionHistoryEntry = {
   rosterKey: string;
   deckKey: string;
   assignments: Record<string, string>;
@@ -84,6 +84,35 @@ export function loadDistributionHistory(): DistributionHistoryEntry[] {
   }
 }
 
+function storeDistributionHistory(entries: DistributionHistoryEntry[]): void {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, entries: entries.slice(0, HISTORY_TOTAL_LIMIT) }),
+    );
+  } catch {
+    // Distribution must still work if storage is unavailable or full.
+  }
+}
+
+export function mergeDistributionHistory(
+  incoming: unknown[],
+): DistributionHistoryEntry[] {
+  const combined = [
+    ...loadDistributionHistory(),
+    ...incoming.filter(isHistoryEntry),
+  ].sort((a, b) => b.createdAt - a.createdAt);
+  const seen = new Set<string>();
+  const merged = combined.filter(entry => {
+    const key = `${entry.rosterKey}\u001e${entry.signature}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, HISTORY_TOTAL_LIMIT);
+  storeDistributionHistory(merged);
+  return merged;
+}
+
 export function rememberDistribution(assignments: RoleAssignment[]): void {
   if (assignments.length === 0) return;
   try {
@@ -100,7 +129,7 @@ export function rememberDistribution(assignments: RoleAssignment[]): void {
     const sameRoster = existing.filter(old => old.rosterKey === rosterKey).slice(0, HISTORY_PER_ROSTER - 1);
     const otherRosters = existing.filter(old => old.rosterKey !== rosterKey);
     const entries = [entry, ...sameRoster, ...otherRosters].slice(0, HISTORY_TOTAL_LIMIT);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, entries }));
+    storeDistributionHistory(entries);
   } catch {
     // Distribution must still work if storage is unavailable or full.
   }
@@ -147,15 +176,37 @@ function scoreCandidate(candidate: RoleAssignment[], recent: DistributionHistory
   const signature = getSignature(candidate);
   let score = recent.some(entry => entry.signature === signature) ? 10_000_000 : 0;
 
+  const roleRepeatWeight = (role: string): number => {
+    if (role === "المواطن") return 1;
+    if (role === "الولد" || role === "الإكة" || role === "sniper") return 12;
+    return 6;
+  };
+
   for (const { name, role } of candidate) {
     const key = normalizeName(name);
     recent.forEach((entry, index) => {
       if (entry.assignments[key] !== role) return;
       // The previous game is a hard priority; older repetitions fade gradually.
-      score += index === 0 ? 1_000_000 : Math.max(1, 256 >> Math.min(index - 1, 7));
+      const recency = index === 0 ? 1_000_000 : Math.max(1, 256 >> Math.min(index - 1, 7));
+      score += recency * roleRepeatWeight(role);
     });
   }
   return score;
+}
+
+function latestAssignmentsForRosterPlayers(
+  playerNames: string[],
+  history: DistributionHistoryEntry[],
+): Record<string, string> | null {
+  const wanted = new Set(playerNames.map(normalizeName));
+  const latest: Record<string, string> = {};
+  for (const entry of history) {
+    for (const [name, role] of Object.entries(entry.assignments)) {
+      if (wanted.has(name) && latest[name] === undefined) latest[name] = role;
+    }
+    if (Object.keys(latest).length === wanted.size) break;
+  }
+  return Object.keys(latest).length > 0 ? latest : null;
 }
 
 export function generateSmartDistribution(
@@ -168,11 +219,17 @@ export function generateSmartDistribution(
   }
 
   const rosterKey = getRosterKey(playerNames);
-  const recent = history
+  const orderedHistory = [...history].sort((a, b) => b.createdAt - a.createdAt);
+  // Exact-deal repetition is meaningful only for the same roster. Individual
+  // role repetition follows a player across roster changes, so adding or
+  // removing one friend does not erase everybody else's recent role memory.
+  const recentRoster = orderedHistory
     .filter(entry => entry.rosterKey === rosterKey)
-    .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, HISTORY_PER_ROSTER);
-  const previousAssignments = recent[0]?.assignments ?? null;
+  const recentPlayers = orderedHistory
+    .filter(entry => playerNames.some(name => entry.assignments[normalizeName(name)] !== undefined))
+    .slice(0, HISTORY_TOTAL_LIMIT);
+  const previousAssignments = latestAssignmentsForRosterPlayers(playerNames, orderedHistory);
   const candidates = new Map<string, RoleAssignment[]>();
 
   for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
@@ -193,7 +250,9 @@ export function generateSmartDistribution(
 
   const scored = [...candidates.values()].map(candidate => ({
     candidate,
-    score: scoreCandidate(candidate, recent),
+    score:
+      scoreCandidate(candidate, recentPlayers)
+      + (recentRoster.some(entry => entry.signature === getSignature(candidate)) ? 100_000_000 : 0),
   }));
   const bestScore = Math.min(...scored.map(({ score }) => score));
   const best = scored.filter(({ score }) => score === bestScore);

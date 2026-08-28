@@ -27,6 +27,17 @@ interface AssignedRole {
   color: string;
 }
 
+interface RejoiningPlayerResponse {
+  code: string;
+  started: true;
+  isHost: false;
+  myRole: AssignedRole;
+  activeGamePhase: string;
+  myVote: string | null;
+  isAlive: boolean;
+  deathReason: Player["deathReason"];
+}
+
 interface NightActions {
   killTarget:    string | null;
   protectTarget: string | null;
@@ -292,7 +303,7 @@ io.on("connection", (socket) => {
       callback: (res:
         | { code: string; players: { socketId: string; name: string }[]; started: boolean }
         | { code: string; started: true; isHost: true;  players: ReturnType<typeof allPlayers> }
-        | { code: string; started: true; isHost: false; myRole: AssignedRole }
+        | RejoiningPlayerResponse
         | { error: string }
       ) => void,
     ) => {
@@ -380,7 +391,7 @@ io.on("connection", (socket) => {
       callback: (res:
         | { code: string; players: { socketId: string; name: string }[]; started: false }
         | { code: string; started: true; isHost: true;  players: ReturnType<typeof allPlayers> }
-        | { code: string; started: true; isHost: false; myRole: AssignedRole }
+        | RejoiningPlayerResponse
         | { error: string }
       ) => void,
     ) => {

@@ -60,6 +60,7 @@ import {
   rememberDistribution,
   type RoleAssignment,
 } from "./lib/roleDistribution";
+import { syncDistributionHistory } from "./lib/distributionSync";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
 import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD, PLAYER_SELECTION_INDEX } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
@@ -693,7 +694,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 const MIN_PLAYERS = 5;
 
 type AssignedRole = RoleAssignment;
-type LivePlayer   = { name: string; role: string; color: string; isAlive: boolean; isSilenced: boolean; deathReason: "vote" | "night" | null };
+type LivePlayer   = { name: string; role: string; color: string; seatNumber: number; isAlive: boolean; isSilenced: boolean; deathReason: "vote" | "night" | null };
 
 // ── Phase 3: Death pipeline ──
 // "mafia"   = killed by الولد at night
@@ -701,11 +702,12 @@ type LivePlayer   = { name: string; role: string; color: string; isAlive: boolea
 // "vote"    = executed by day vote
 // "twin"    = died because their twin partner died (cascading link)
 // "avenger" = killed by an Avenger's revenge pick
-type DeathCause = "mafia" | "poison" | "vote" | "twin" | "avenger";
+type DeathCause = "mafia" | "sniper" | "poison" | "vote" | "twin" | "avenger";
 type DeathEntry = { name: string; cause: DeathCause };
 
 const DEATH_CAUSE_LABEL: Record<DeathCause, string> = {
   mafia:   "قتلته المافيا",
+  sniper:  "أصابته طلقة القناص",
   poison:  "مات مسموماً",
   vote:    "أعدمته القرية",
   twin:    "فقد توأمه فلحق به",
@@ -744,7 +746,7 @@ function formatHistoryActor(players: LivePlayer[], roleId: string, roleLabel: st
 }
 
 function seerInvestigationLabel(role: string): string {
-  if (role === "الولد" || role === "الإكة") return "مافيا";
+  if (role === "الولد" || role === "الإكة" || role === "sniper") return "مافيا";
   if (role === "madman") return "مجنون";
   return "مواطن";
 }
@@ -821,6 +823,7 @@ function generateAndShuffleRoles(
   }
   if (activeMods.avenger)  modDeck.push({ role: "avenger",  color: ROLE_META["avenger"].color });
   if (activeMods.magician) modDeck.push({ role: "magician", color: ROLE_META["magician"].color });
+  if (activeMods.sniper)   modDeck.push({ role: "sniper",   color: ROLE_META["sniper"].color });
 
   // ── 3. Fill remaining slots with citizens (vanilla reserve guarantees ≥1) ──
   const totalUsed = baseDeck.length + modDeck.length;
@@ -887,10 +890,19 @@ const EXPANSION_MODS: { id: string; name: string; description: string; accent: s
     glow: "rgba(163,230,53,0.06)",
     minPlayers: 7,
   },
+  {
+    id: "sniper",
+    name: "القناص",
+    description: "مافيا مستقل لا يعرف حلفاءه، يملك طلقة واحدة من الليلة الثانية",
+    accent: "#94A3B8",
+    border: "rgba(148,163,184,0.35)",
+    glow: "rgba(148,163,184,0.07)",
+    minPlayers: 9,
+  },
 ];
 
 // Slot cost per mod — used for player-count validation
-const MOD_COST: Record<string, number> = { madman: 1, twins: 2, avenger: 1, magician: 1 };
+const MOD_COST: Record<string, number> = { madman: 1, twins: 2, avenger: 1, magician: 1, sniper: 1 };
 // Maps an expansion mod's logic id → its store/owned_items catalog id, so the
 // setup UI can check whether the host actually owns each premium role.
 const MOD_TO_ITEM: Record<string, string> = {
@@ -898,6 +910,7 @@ const MOD_TO_ITEM: Record<string, string> = {
   twins: "role_twins",
   avenger: "role_avenger",
   magician: "role_wizard",
+  sniper: "role_sniper",
 };
 // Base roles that always consume slots (Boy, Akka, Old Man, Girl)
 const BASE_ROLES_COUNT = 4;
@@ -909,6 +922,7 @@ const STORAGE_SETUP_PREFS = "qinaa_setup_prefs";
 interface SetupPrefs {
   isPassPhoneMode: boolean;
   boyInheritsAce: boolean;
+  silencedCannotDefend: boolean;
   isModsEnabled: boolean;
   activeMods: Record<string, boolean>;
   magicianPotionMode: "dual" | "single";
@@ -956,6 +970,7 @@ function defaultSetupPrefs(): SetupPrefs {
   return {
     isPassPhoneMode: false,
     boyInheritsAce: false,
+    silencedCannotDefend: false,
     isModsEnabled: false,
     activeMods: defaultActiveMods(),
     magicianPotionMode: "dual",
@@ -971,6 +986,7 @@ const NARRATOR_VOICE_FILES = new Set([
   "morning.m4a",
   "w1.m4a", "w2.m4a", "w3.m4a",
   "e1.m4a", "e2.m4a", "e3.m4a",
+  "q1.m4a", "q2.m4a", "q3.m4a",
   "s1.m4a", "s2.m4a", "s3.m4a",
   "b1.m4a", "b2.m4a", "b3.m4a",
   "wh1.m4a", "wh2.m4a", "wh3.m4a",
@@ -991,6 +1007,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
         ...defaults,
         isPassPhoneMode: parsed.isPassPhoneMode === true,
         boyInheritsAce: parsed.boyInheritsAce === true,
+        silencedCannotDefend: parsed.silencedCannotDefend === true,
         isModsEnabled: parsed.isModsEnabled === true,
         activeMods: sanitizeActiveMods(parsed.activeMods),
         magicianPotionMode: parsed.magicianPotionMode === "single" ? "single" : "dual",
@@ -1014,6 +1031,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
       ...defaults,
       isPassPhoneMode: narratorFallback.isPassPhoneMode === true,
       boyInheritsAce: narratorFallback.boyInheritsAce === true,
+      silencedCannotDefend: narratorFallback.silencedCannotDefend === true,
       isModsEnabled: narratorFallback.isModsEnabled === true,
       activeMods: sanitizeActiveMods(narratorFallback.activeMods),
       magicianPotionMode:
@@ -1044,8 +1062,14 @@ function saveSetupPrefs(prefs: SetupPrefs): void {
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
-  const { canStartGame, incrementGamesPlayed, entitlements, refreshEntitlements } = useAuth();
+  const { user, canStartGame, incrementGamesPlayed, entitlements, refreshEntitlements } = useAuth();
   const { openShop } = useShop();
+  const distributionSyncedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.id || distributionSyncedForRef.current === user.id) return;
+    distributionSyncedForRef.current = user.id;
+    void syncDistributionHistory(user.id);
+  }, [user?.id]);
   // ── Hydrate from localStorage on mount (read once) ──
   const SAVED = loadNarratorState();
   const SETUP = loadSetupPrefs(SAVED);
@@ -1079,7 +1103,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isCardFlipped, setIsCardFlipped]       = useState(false);
 
   // ── Game loop state ──
-  const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => pick("livePlayers", [] as LivePlayer[]));
+  const [livePlayers, setLivePlayers]           = useState<LivePlayer[]>(() => {
+    const savedPlayers = pick("livePlayers", [] as LivePlayer[]);
+    return savedPlayers.map((p, index) => ({
+      ...p,
+      seatNumber: Number.isInteger(p.seatNumber) && p.seatNumber > 0
+        ? p.seatNumber
+        : Math.max(1, players.indexOf(p.name) + 1 || index + 1),
+    }));
+  });
   const [nightStep, setNightStep]               = useState<string>(() => pick("nightStep", "الولد"));
   const [nightActions, setNightActions]         = useState<{
     killTarget: string | null;
@@ -1088,15 +1120,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     protectTarget: string | null;
     magicianHealTarget: string | null;
     magicianPoisonTarget: string | null;
+    sniperTarget: string | null;
   }>(() => pick("nightActions", {
     killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null,
-    magicianHealTarget: null, magicianPoisonTarget: null,
+    magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null,
   }));
   const [selectedTarget, setSelectedTarget]     = useState<string | null>(null);
   const [investigatedTarget, setInvestigatedTarget] = useState<string | null>(() => pick("investigatedTarget", null as string | null));
   // dayResult shape changed for Phase 3 (multi-death). Storage key bumped to V2 so legacy sessions hydrate clean.
   const [dayResult, setDayResult]               = useState<{ deaths: DeathEntry[]; silenced: string | null }>(() => pick("dayResultV2", { deaths: [] as DeathEntry[], silenced: null as string | null }));
   const [nightCount, setNightCount]             = useState(() => pick("nightCount", 1));
+  const [lastSilenceTarget, setLastSilenceTarget] = useState<string | null>(() => pick("lastSilenceTargetV1", null as string | null));
+  const [lastProtectTarget, setLastProtectTarget] = useState<string | null>(() => pick("lastProtectTargetV1", null as string | null));
+  const [seerHistory, setSeerHistory] = useState<string[]>(() => pick("seerHistoryV1", [] as string[]));
+  const [sniperBulletAvailable, setSniperBulletAvailable] = useState<boolean>(() => pick("sniperBulletAvailableV1", true));
+  const [sniperSuccessionActive, setSniperSuccessionActive] = useState<boolean>(() => pick("sniperSuccessionActiveV1", false));
   const [confirmExecute, setConfirmExecute]     = useState<string | null>(null);
   const [daySubPhase, setDaySubPhase]           = useState<"results" | "discussion" | "voting_tally" | "vote_tie" | "no_quorum" | "justification" | "final_vote">(() => pick("daySubPhase", "results" as const));
 
@@ -1144,6 +1182,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // preference for subsequent games.
   const [boyInheritsAce, setBoyInheritsAce] = useState<boolean>(
     () => SETUP.boyInheritsAce,
+  );
+  const [silencedCannotDefend, setSilencedCannotDefend] = useState<boolean>(
+    () => SETUP.silencedCannotDefend,
   );
 
   // ── Pass-the-Phone Mode (نظام تمرير الجوال) ──
@@ -1344,6 +1385,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     saveSetupPrefs({
       isPassPhoneMode,
       boyInheritsAce,
+      silencedCannotDefend,
       isModsEnabled,
       activeMods,
       magicianPotionMode,
@@ -1354,6 +1396,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }, [
     isPassPhoneMode,
     boyInheritsAce,
+    silencedCannotDefend,
     isModsEnabled,
     activeMods,
     magicianPotionMode,
@@ -1371,13 +1414,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     saveNarratorState({
       phase, players, assignedRoles, currentIndex, hasRevealedOnce,
       livePlayers, nightStep, nightActions, investigatedTarget,
+      lastSilenceTargetV1: lastSilenceTarget, lastProtectTargetV1: lastProtectTarget,
+      seerHistoryV1: seerHistory, sniperBulletAvailableV1: sniperBulletAvailable,
+      sniperSuccessionActiveV1: sniperSuccessionActive,
       dayResultV2: dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
       isNightKillReveal, voteCountsV2: voteCounts, voteLedgerV1: voteLedger,
       voteVoterIndexV1: voteVoterIndex, accusedPlayer,
       finalVoteForV2: finalVoteFor, finalVoteAgainstV2: finalVoteAgainst,
       finalVoteLedgerV1: finalVoteLedger, finalVoteVoterIndexV1: finalVoteVoterIndex,
       gameOver, executionReveal,
-      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
+      magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, silencedCannotDefend, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       hasCountedFirstNightV1: hasCountedFirstNight,
       isModsEnabled, activeMods,
       customSpeedsV1: customSpeeds,
@@ -1385,11 +1431,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   }, [
     phase, players, assignedRoles, currentIndex, hasRevealedOnce,
     livePlayers, nightStep, nightActions, investigatedTarget,
+    lastSilenceTarget, lastProtectTarget, seerHistory, sniperBulletAvailable, sniperSuccessionActive,
     dayResult, nightCount, daySubPhase, nightTransition, nightTransitionLabel,
     isNightKillReveal, voteCounts, voteLedger, voteVoterIndex, accusedPlayer,
     finalVoteFor, finalVoteAgainst, finalVoteLedger, finalVoteVoterIndex,
     gameOver, executionReveal,
-    magicianState, magicianPotionMode, boyInheritsAce, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
+    magicianState, magicianPotionMode, boyInheritsAce, silencedCannotDefend, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
     hasCountedFirstNight, isModsEnabled, activeMods, customSpeeds,
   ]);
 
@@ -1403,6 +1450,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       "start.m4a",
       "w1.m4a", "w2.m4a", "w3.m4a",
       "e1.m4a", "e2.m4a", "e3.m4a",
+      "q1.m4a", "q2.m4a", "q3.m4a",
       "s1.m4a", "s2.m4a", "s3.m4a",
       "b1.m4a", "b2.m4a", "b3.m4a",
       "wh1.m4a", "wh2.m4a", "wh3.m4a",
@@ -1464,9 +1512,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ── Night-phase audio maps — used by inline triggers at every
   // setNightTransition() site so audio fires in the same callstack frame
   // as the state change (no decoupled effect, no race conditions).
-  const NIGHT_WAKE_AUDIO:   Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "magician": "wh1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
-  const NIGHT_PROMPT_AUDIO: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "magician": "wh2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
-  const NIGHT_SLEEP_AUDIO:  Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "magician": "wh3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
+  const NIGHT_WAKE_AUDIO:   Record<string, string> = { "الولد": "w1.m4a", "الإكة": "e1.m4a", "sniper": "q1.m4a", "magician": "wh1.m4a", "الشايب": "s1.m4a", "البنت": "b1.m4a" };
+  const NIGHT_PROMPT_AUDIO: Record<string, string> = { "الولد": "w2.m4a", "الإكة": "e2.m4a", "sniper": "q2.m4a", "magician": "wh2.m4a", "الشايب": "s2.m4a", "البنت": "b2.m4a" };
+  const NIGHT_SLEEP_AUDIO:  Record<string, string> = { "الولد": "w3.m4a", "الإكة": "e3.m4a", "sniper": "q3.m4a", "magician": "wh3.m4a", "الشايب": "s3.m4a", "البنت": "b3.m4a" };
   const playRoleAudio = (kind: "wake" | "prompt" | "sleep", role: string) => {
     const map = kind === "wake" ? NIGHT_WAKE_AUDIO : kind === "prompt" ? NIGHT_PROMPT_AUDIO : NIGHT_SLEEP_AUDIO;
     const file = map[role];
@@ -1621,6 +1669,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // Keep this outside the resumable game snapshot: replay/reset must retain
     // distribution memory so the same roster receives fresh roles next time.
     rememberDistribution(roles);
+    if (user?.id) void syncDistributionHistory(user.id);
     setAssignedRoles(roles);
     setCurrentIndex(0);
     setIsPressing(false);
@@ -1634,12 +1683,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setPhase("pre_distribution");
   };
 
-  // Night order: wolf → shadow → magician → seer → guard
-  const CANONICAL_NIGHT_ORDER = ["الولد", "الإكة", "magician", "الشايب", "البنت"] as const;
+  // Night order: wolf → shadow → sniper → magician → seer → guard
+  const CANONICAL_NIGHT_ORDER = ["الولد", "الإكة", "sniper", "magician", "الشايب", "البنت"] as const;
 
   const roleActiveInNight = (role: string, lp: LivePlayer[]): boolean => {
     if (!lp.some(p => p.role === role && p.deathReason !== "vote")) return false;
-    if (role === "magician" && !magicianState.lifeCharge && !magicianState.deathCharge) return false;
+    const sniperGame = lp.some(p => p.role === "sniper");
+    if (role === "sniper" && !sniperBulletAvailable) return false;
+    if (role === "magician") {
+      const poisonAvailable = !sniperGame && magicianState.deathCharge;
+      if (!magicianState.lifeCharge && !poisonAvailable) return false;
+    }
     return true;
   };
 
@@ -1665,12 +1719,21 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   };
 
   // ── Win condition checker — called after every death ──
-  const checkWinCondition = (players: LivePlayer[]): "town" | "mafia" | null => {
+  const checkWinCondition = (
+    players: LivePlayer[],
+    successionOverride: boolean = sniperSuccessionActive,
+  ): "town" | "mafia" | null => {
     const killerAlive = players.find(p => p.role === "الولد")?.isAlive ?? false;
-    if (!killerAlive) return "town";
+    const sniperAlive = players.find(p => p.role === "sniper")?.isAlive ?? false;
+    // The Boy remains the core win condition. The only exception is the
+    // explicitly activated Sniper succession after a daytime execution.
+    if (!killerAlive && (!successionOverride || !sniperAlive)) return "town";
     const alive      = players.filter(p => p.isAlive);
-    const aliveMafia = alive.filter(p => p.role === "الولد" || p.role === "الإكة").length;
-    const aliveTown  = alive.filter(p => p.role !== "الولد" && p.role !== "الإكة").length;
+    const isMafia = (p: LivePlayer) => p.role === "الولد" || p.role === "الإكة" || p.role === "sniper";
+    const aliveMafia = alive.filter(isMafia).length;
+    // The Madman is neutral for victory, but still counts as a living vote
+    // against Mafia parity until achieving the Madman's own execution win.
+    const aliveTown  = alive.filter(p => !isMafia(p)).length;
     if (aliveMafia >= aliveTown) return "mafia";
     return null;
   };
@@ -1714,11 +1777,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const handleNext = () => {
     const isLast = currentIndex === assignedRoles.length - 1;
     if (isLast) {
-      const lp: LivePlayer[] = assignedRoles.map(ar => ({ name: ar.name, role: ar.role, color: ar.color, isAlive: true, isSilenced: false, deathReason: null }));
+      const lp: LivePlayer[] = assignedRoles.map(ar => ({
+        name: ar.name,
+        role: ar.role,
+        color: ar.color,
+        seatNumber: Math.max(1, players.indexOf(ar.name) + 1),
+        isAlive: true,
+        isSilenced: false,
+        deathReason: null,
+      }));
       const order = getNightOrder(lp);
       setLivePlayers(lp);
       setNightStep(order[0] ?? "الولد");
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null });
       setSelectedTarget(null);
       setBoyKillTarget(null);
       setBoySilenceTarget(null);
@@ -1726,6 +1797,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setHasRevealedOnce(false);
       setIsCardFlipped(false);
       setNightCount(1);
+      setLastSilenceTarget(null);
+      setLastProtectTarget(null);
+      setSeerHistory([]);
+      setSniperBulletAvailable(true);
+      setSniperSuccessionActive(false);
       // Reset magician potions for a fresh game
       setMagicianState({ lifeCharge: true, deathCharge: true });
       resetMagicianNightUi();
@@ -1856,9 +1932,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // revenge), land on a multi-death summary screen so the narrator can
   // announce every casualty to the village BEFORE night begins. Otherwise
   // proceed directly to night after the reveal.
-  const finalizeAfterExecution = (deaths: DeathEntry[], players: LivePlayer[], primaryName: string) => {
+  const finalizeAfterExecution = (
+    deaths: DeathEntry[],
+    players: LivePlayer[],
+    primaryName: string,
+    successionOverride: boolean = sniperSuccessionActive,
+  ) => {
     const hasExtraDeaths = deaths.length > 1;
-    const winner = checkWinCondition(players);
+    const winner = checkWinCondition(players, successionOverride);
     // Win check is DEFERRED when a cascade produced extra deaths (twin link
     // or avenger revenge). Even if the cascade ends the game, the narrator
     // must first see the multi-death summary so the village hears every
@@ -1978,6 +2059,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
     if (nightStep === "الشايب") newActions.investigateTarget = selectedTarget;
     if (nightStep === "البنت")  newActions.protectTarget     = selectedTarget;
+    if (nightStep === "sniper") {
+      const sniperAlive = livePlayers.some(p => p.role === "sniper" && p.isAlive);
+      if (sniperAlive && sniperBulletAvailable && nightCount >= 2 && selectedTarget) {
+        newActions.sniperTarget = selectedTarget;
+        setSniperBulletAvailable(false);
+      }
+    }
 
     if (nightStep === "magician") {
       const healTarget   = pendingMagicianHealRef.current;
@@ -2012,6 +2100,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const investigated = livePlayers.find(p => p.name === selectedTarget);
       const result = seerInvestigationLabel(investigated?.role ?? "المواطن");
       logHistoryEvent("night", nightCount, "🔍", `${seerActor} فحص ${selectedTarget} واكتشف أنه ${result}`);
+      setSeerHistory(prev => prev.includes(selectedTarget) ? prev : [...prev, selectedTarget]);
     }
     if (nightStep === "البنت" && selectedTarget) {
       const guardActor = formatHistoryActor(livePlayers, "البنت", "البنت");
@@ -2027,6 +2116,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       if (poisonLog) {
         logHistoryEvent("night", nightCount, "☠️", `${magActor} استخدم جرعة سم على ${poisonLog}`);
       }
+    }
+    if (nightStep === "sniper" && newActions.sniperTarget) {
+      const sniperActor = formatHistoryActor(livePlayers, "sniper", "القناص");
+      logHistoryEvent("night", nightCount, "🎯", `${sniperActor} أطلق طلقته على ${newActions.sniperTarget}`);
     }
 
     const nextRole = getNextNightStep(nightStep, livePlayers);
@@ -2059,7 +2152,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         countFirstNightOnce();
         const {
           killTarget, protectTarget, silenceTarget,
-          magicianHealTarget, magicianPoisonTarget: poisonT,
+          magicianHealTarget, magicianPoisonTarget: poisonT, sniperTarget,
         } = newActions;
         // Mafia kill: victim dies only if not protected by Girl AND not the
         // explicit life-potion target (healing Player A does not save Player B).
@@ -2070,15 +2163,24 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         ) ? killTarget : null;
         // Magician's poison: separate, unprotectable casualty
         const poisonVictim = poisonT ?? null;
+        // Sniper shot is independent from the Boy and cannot be healed by the
+        // Magician. The Girl protects against it; the bullet is already spent.
+        const sniperVictim = (
+          sniperTarget
+          && sniperTarget !== protectTarget
+        ) ? sniperTarget : null;
         // Build seed deaths for the centralized pipeline (twin cascade + avenger interrupt handled there)
         const seed: DeathEntry[] = [];
         if (boyVictim)    seed.push({ name: boyVictim,    cause: "mafia"  });
+        if (sniperVictim && sniperVictim !== boyVictim) seed.push({ name: sniperVictim, cause: "sniper" });
         if (poisonVictim && poisonVictim !== boyVictim) seed.push({ name: poisonVictim, cause: "poison" });
         const { deaths, avengers } = resolveDeaths(seed, livePlayers);
         const updated = applyDeaths(livePlayers, deaths, "night", silenceTarget, true);
         setLivePlayers(updated);
         logMorningResults(deaths, nightCount);
-        setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+        setLastSilenceTarget(silenceTarget);
+        setLastProtectTarget(protectTarget);
+        setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null });
         setSelectedTarget(null);
       setBoyKillTarget(null);
       setBoySilenceTarget(null);
@@ -2124,9 +2226,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     setCurrentIndex(0);
     setIsPressing(false);
     setHasRevealedOnce(false);
-    setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+    setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null });
     setDayResult({ deaths: [], silenced: null });
     setNightCount(1);
+    setLastSilenceTarget(null);
+    setLastProtectTarget(null);
+    setSeerHistory([]);
+    setSniperBulletAvailable(true);
+    setSniperSuccessionActive(false);
     setInvestigatedTarget(null);
     setDaySubPhase("results");
     setNightTransition("none");
@@ -2192,6 +2299,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const executedPlayer = livePlayers.find(p => p.name === name);
     if (!executedPlayer) return;
 
+    const activatesSniperSuccession =
+      executedPlayer.role === "الولد"
+      && sniperBulletAvailable
+      && livePlayers.some(p => p.role === "sniper" && p.isAlive);
+    if (activatesSniperSuccession) setSniperSuccessionActive(true);
+
     // ── Madman Win — INSTANT bypass of all standard win/cascade logic ──
     // Per spec: if the executed player is the madman, the game ends immediately.
     if (executedPlayer.role === "madman") {
@@ -2222,7 +2335,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       enterAvengerFlow(avengers, deaths, null, "night", name, updated);
       return;
     }
-    finalizeAfterExecution(deaths, updated, name);
+    finalizeAfterExecution(
+      deaths,
+      updated,
+      name,
+      sniperSuccessionActive || activatesSniperSuccession,
+    );
   };
 
   const remaining     = Math.max(0, MIN_PLAYERS - players.length);
@@ -2610,6 +2728,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const stepHint =
       nightStep === "الولد"   ? (boyInheritActiveTop ? "تذبح وتسكت مين يا ولد؟" : "تذبح مين يا ولد؟") :
       nightStep === "الإكة"   ? "تسكتين مين يا إكة؟" :
+      nightStep === "sniper"  ? (nightCount < 2 ? "جهّز سلاحك.. الطلقة من الليلة الثانية" : "تطلق على مين يا قناص؟") :
       nightStep === "الشايب"  ? "تسأل عن مين يا شايب؟" :
       nightStep === "magician" ? "اختر إجراءك يا ساحر" :
                                 "تحمين مين يا بنت؟";
@@ -2702,11 +2821,23 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               );
             }
 
+            if (nightStep === "sniper" && nightCount < 2) {
+              return (
+                <div className="flex flex-col items-center gap-3 py-6 px-4 rounded-2xl text-center"
+                  style={{ backgroundColor: "#10151D", border: "1px solid #94A3B855" }}>
+                  <span className="text-3xl">🎯</span>
+                  <p className="text-sm font-black" style={{ color: "#CBD5E1" }}>الطلقة غير متاحة في الليلة الأولى</p>
+                  <p className="text-xs leading-relaxed" style={{ color: "#64748B" }}>ينام القناص وتُفتح طلقته ابتداءً من الليلة الثانية.</p>
+                </div>
+              );
+            }
+
             // ── Magician (الساحر) — automatic life save + revealing poison ──
             if (nightStep === "magician") {
               const magMeta     = ROLE_META["magician"];
               const canHeal     = magicianState.lifeCharge;
-              const canPoison   = magicianState.deathCharge;
+              const sniperGame  = livePlayers.some(p => p.role === "sniper");
+              const canPoison   = magicianState.deathCharge && !sniperGame;
               const mafiaTarget = nightActions.killTarget;
 
               const spendLifeCharge = () => {
@@ -2739,7 +2870,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 },
               ) => (
                 <div className={PLAYER_SELECTION_WRAP}>
-                  {players.map((p, idx) => {
+                  {players.map((p) => {
                     const card = getCard(p);
                     const isResult = card.isResult;
                     return (
@@ -2756,7 +2887,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             color: isResult ? "#ffffff" : "#888888",
                             border: `1px solid ${isResult ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
                           }}>
-                          {idx + 1}
+                          {p.seatNumber}
                         </span>
                         <span className="text-sm font-semibold text-center leading-tight"
                           style={{ color: isResult ? "#ffffff" : "#AAAAAA" }}>
@@ -2839,6 +2970,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
               return (
                 <div className="flex flex-col gap-3">
+                  {sniperGame && (
+                    <div className="px-4 py-3 rounded-xl text-center"
+                      style={{ backgroundColor: "#10151D", border: "1px solid #94A3B844" }}>
+                      <span className="text-xs font-bold" style={{ color: "#94A3B8" }}>
+                        القناص مفعّل — الساحر يملك جرعة الحياة فقط
+                      </span>
+                    </div>
+                  )}
                   <button
                     disabled={!canHeal || !mafiaTarget}
                     onClick={() => {
@@ -2861,7 +3000,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     }}>
                     {mafiaTarget ? "جرعة حياة" : "لا توجد ضحية لإنقاذها"}
                   </button>
-                  <button
+                  {!sniperGame && <button
                     disabled={!canPoison}
                     onClick={() => {
                       triggerHaptic([30, 50, 30]);
@@ -2876,7 +3015,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       boxShadow:       canPoison ? "0 0 16px #7C3AED22" : "none",
                     }}>
                     جرعة سم
-                  </button>
+                  </button>}
                   <button
                     onClick={() => { triggerHaptic(20); handleNightStep(); }}
                     className="w-full px-4 py-3.5 rounded-xl font-bold text-sm transition-all duration-150 active:scale-95"
@@ -2905,17 +3044,20 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 selected: string | null,
                 onPick: (name: string) => void,
                 accent: string,
+                blockedTarget: string | null = null,
               ) => (
                 <div className={PLAYER_SELECTION_WRAP}>
-                  {list.map((p, idx) => {
+                  {list.map((p) => {
                     const isSelected = selected === p.name;
+                    const isBlocked  = blockedTarget === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
                     const rowBorder = isSelected ? accent   : "#222222";
                     return (
                       <button
                         key={p.name}
+                        disabled={isBlocked}
                         onClick={() => onPick(p.name)}
-                        className={PLAYER_SELECTION_CARD}
+                        className={`${PLAYER_SELECTION_CARD} disabled:opacity-35 disabled:cursor-not-allowed`}
                         style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
                         <span className={PLAYER_SELECTION_INDEX}
                           style={{
@@ -2923,7 +3065,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             color:           isSelected ? "#ffffff"     : "#888888",
                             border:          `1px solid ${isSelected ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
                           }}>
-                          {idx + 1}
+                          {p.seatNumber}
                         </span>
                         <span className="text-sm font-semibold text-center leading-tight"
                           style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
@@ -2931,7 +3073,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         </span>
                         <span className="text-[10px] font-bold tracking-wide"
                           style={{ color: isSelected ? accent : "#444444" }}>
-                          {isSelected ? "تم الاختيار" : "اختر"}
+                          {isBlocked ? "ممنوع ليلتين متتاليتين" : isSelected ? "تم الاختيار" : "اختر"}
                         </span>
                       </button>
                     );
@@ -2974,7 +3116,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         <span className="text-xs font-bold" style={{ color: "#666" }}>· {boySilenceTarget}</span>
                       )}
                     </div>
-                    {renderTargetList(silenceList, boySilenceTarget, setBoySilenceTarget, "#FFB347")}
+                    {renderTargetList(silenceList, boySilenceTarget, setBoySilenceTarget, "#FFB347", lastSilenceTarget)}
                   </div>
                 </div>
               );
@@ -3007,17 +3149,23 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               targetList = girl ? [girl, ...rest] : rest;
             } else if (nightStep === "الشايب") {
               targetList = allAlive.filter(p => p.name !== currentPlayer?.name);
+            } else if (nightStep === "sniper") {
+              targetList = allAlive.filter(p => p.name !== currentPlayer?.name);
             } else {
               targetList = allAlive;
             }
 
             return (
               <div className={PLAYER_SELECTION_WRAP}>
-                {targetList.map((p, idx) => {
+                {targetList.map((p) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
-                  const isMafiaRole     = p.role === "الولد" || p.role === "الإكة";
+                  const isMafiaRole     = p.role === "الولد" || p.role === "الإكة" || p.role === "sniper";
                   const isMadmanRole    = p.role === "madman";
+                  const wasInvestigated = isSeerStep && seerHistory.includes(p.name);
+                  const repeatsLastTarget =
+                    (nightStep === "الإكة" && p.name === lastSilenceTarget)
+                    || (nightStep === "البنت" && p.name === lastProtectTarget);
 
                   // ── Friendly-fire lock: Boy can never silence-click the Ace ──
                   const isAllyLocked = nightStep === "الولد" && p.role === "الإكة";
@@ -3038,7 +3186,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   // Lock all other rows once seer has picked
                   const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
 
-                  const isDisabled = isAllyLocked || seerLocked;
+                  const isDisabled = isAllyLocked || seerLocked || repeatsLastTarget;
                   // Seer reveal: heavily tint the card based on allegiance so
                   // the Narrator sees the result at a glance without reading text.
                   // Seer reveal: vivid solid fill + glow so the result is
@@ -3076,7 +3224,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           color:           isSelected ? "#FF6B6B" : "#888888",
                           border: `1px solid ${isSelected ? "rgba(211,47,47,0.4)" : "rgba(255,255,255,0.08)"}`,
                         }}>
-                        {idx + 1}
+                        {p.seatNumber}
                       </span>
 
                       {/* Name — wolf glyph appended when this is the Boy's disabled Ace ally */}
@@ -3109,6 +3257,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {showSelfBadge && (
                         <span className="text-[10px] font-bold" style={{ color: "#999999" }}>(أنت)</span>
                       )}
+                      {wasInvestigated && !showSeerBadge && (
+                        <span className="text-[10px] font-bold" style={{ color: "#FFB300" }}>سبق السؤال عنه</span>
+                      )}
+                      {repeatsLastTarget && (
+                        <span className="text-[10px] font-bold" style={{ color: "#777" }}>ممنوع ليلتين متتاليتين</span>
+                      )}
                       {showSeerBadge && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                           style={{
@@ -3127,7 +3281,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       )}
 
                       {/* Action label — replaces the old standalone "اختر" button */}
-                      {!isAllyLocked && (
+                      {!isAllyLocked && !repeatsLastTarget && (
                         <span className="text-[10px] font-bold tracking-wide"
                           style={{ color: showSeerBadge ? "#FFFFFF" : (isSelected ? "#D32F2F" : "#444444") }}>
                           {isSelected ? "تم الاختيار" : "اختر"}
@@ -3143,13 +3297,24 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Spacer ── */}
           <div className="flex-1" />
 
+          {nightStep === "sniper" && nightCount >= 2 && !selectedTarget && (
+            <button
+              type="button"
+              onClick={handleNightStep}
+              className="w-full px-4 py-3 rounded-xl text-sm font-bold transition-all active:scale-95"
+              style={{ backgroundColor: "#10151D", color: "#94A3B8", border: "1px solid #94A3B844" }}>
+              احتفظ بالطلقة لليلة لاحقة
+            </button>
+          )}
+
           {/* Magician uses inline action buttons — no bottom sleep control */}
           {nightStep !== "magician" && (() => {
             const currentPlayer       = livePlayers.find(p => p.role === nightStep) ?? null;
             const isCurrentPlayerDead = currentPlayer !== null && !currentPlayer.isAlive;
             const boyInheritActiveBtn = nightStep === "الولد" && boyInheritsAce && !livePlayers.some(p => p.role === "الإكة" && p.isAlive);
             const boyInheritReadyBtn  = boyInheritActiveBtn && !!boyKillTarget && !!boySilenceTarget;
-            const hasTarget = boyInheritActiveBtn ? boyInheritReadyBtn : !!selectedTarget;
+            const sniperPreparing = nightStep === "sniper" && nightCount < 2;
+            const hasTarget = sniperPreparing || (boyInheritActiveBtn ? boyInheritReadyBtn : !!selectedTarget);
             return (
               <motion.button
                 onClick={handleNightStep}
@@ -3418,12 +3583,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setCurrentIndex(0);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null });
       setMagicianState({ lifeCharge: true, deathCharge: true });
       resetMagicianNightUi();
       setAvengerFlow(null);
       setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
+      setLastSilenceTarget(null);
+      setLastProtectTarget(null);
+      setSeerHistory([]);
+      setSniperBulletAvailable(true);
+      setSniperSuccessionActive(false);
       setInvestigatedTarget(null);
       setDaySubPhase("results");
       setNightTransition("none");
@@ -3453,7 +3623,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       // from localStorage before the next save effect runs. The persistence
       // effect will rewrite the snapshot with the preserved settings and the
       // new player list on the next render.
-      const sameNames = assignedRoles.map(p => p.name);
+      const sameNames = [...livePlayers]
+        .sort((a, b) => a.seatNumber - b.seatNumber)
+        .map(p => p.name);
       resetCore();
       setPlayers(sameNames);
       setPhase("setup");
@@ -3618,7 +3790,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // PHASE: day — sub-phases: results → discussion → voting_tally → justification → final_vote
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "day") {
-    const alivePlayers = livePlayers.filter(p => p.isAlive);
+    const alivePlayers = livePlayers
+      .filter(p => p.isAlive)
+      .sort((a, b) => (a.seatNumber ?? livePlayers.indexOf(a) + 1) - (b.seatNumber ?? livePlayers.indexOf(b) + 1));
 
     const restartGame = () => {
       stopAllAudio();
@@ -3630,12 +3804,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       setCurrentIndex(0);
       setIsPressing(false);
       setHasRevealedOnce(false);
-      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null });
+      setNightActions({ killTarget: null, silenceTarget: null, investigateTarget: null, protectTarget: null, magicianHealTarget: null, magicianPoisonTarget: null, sniperTarget: null });
       setMagicianState({ lifeCharge: true, deathCharge: true });
       resetMagicianNightUi();
       setAvengerFlow(null);
       setDayResult({ deaths: [], silenced: null });
       setNightCount(1);
+      setLastSilenceTarget(null);
+      setLastProtectTarget(null);
+      setSeerHistory([]);
+      setSniperBulletAvailable(true);
+      setSniperSuccessionActive(false);
       setInvestigatedTarget(null);
       setDaySubPhase("results");
       setNightTransition("none");
@@ -3780,13 +3959,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               </div>
               {morningBanner}
               <div className={PLAYER_SELECTION_WRAP}>
-                {alivePlayers.map((p, idx) => (
+                {alivePlayers.map((p) => (
                   <div key={p.name}
                     className={PLAYER_SELECTION_CARD}
                     style={{ backgroundColor: "#141414", border: "1px solid #222222" }}>
                     <span className={PLAYER_SELECTION_INDEX}
                       style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
-                      {idx + 1}
+                      {p.seatNumber}
                     </span>
                     <span className="text-sm font-semibold text-center leading-tight"
                       style={{ color: "#AAAAAA" }}>{p.name}</span>
@@ -3896,7 +4075,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>التصويت الأول</span>
               <h1 className="text-2xl font-black text-white">
-                {currentVoter ? `اللاعب رقم ${voteVoterIndex + 1}: ${currentVoter.name}` : "اكتمل تسجيل الأصوات"}
+                {currentVoter ? `اللاعب رقم ${currentVoter.seatNumber}: ${currentVoter.name}` : "اكتمل تسجيل الأصوات"}
               </h1>
               <span className="text-xs mt-1" style={{ color: "#666" }}>
                 المسجّل {voteVoterIndex}/{totalVoters} · الأصوات المحتسبة {totalVotesCast}
@@ -3913,7 +4092,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   )}
                 </div>
                 <div className={PLAYER_SELECTION_WRAP}>
-                  {alivePlayers.map((candidate, idx) => {
+                  {alivePlayers.filter(candidate => candidate.name !== currentVoter.name).map((candidate) => {
                     const count = voteCounts[candidate.name] ?? 0;
                     return (
                       <button key={candidate.name} type="button" onClick={() => recordVote(candidate.name)}
@@ -3921,7 +4100,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         style={{ backgroundColor: "#141414", border: `1px solid ${count > 0 ? "#D32F2F55" : "#222222"}` }}>
                         <span className={PLAYER_SELECTION_INDEX}
                           style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "#888888" }}>
-                          {idx + 1}
+                          {candidate.seatNumber}
                         </span>
                         <span className="text-sm font-semibold text-center leading-tight text-white">{candidate.name}</span>
                         <span className="text-xs font-black tabular-nums" style={{ color: count > 0 ? "#FF6B6B" : "#444" }}>
@@ -3956,12 +4135,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   </button>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  {alivePlayers.slice(0, voteVoterIndex).map((voter, idx) => {
+                  {alivePlayers.slice(0, voteVoterIndex).map((voter) => {
                     const target = voteLedger[voter.name];
                     return (
                       <div key={voter.name} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"
                         style={{ backgroundColor: "#141414" }}>
-                        <span className="text-xs font-semibold text-white">{idx + 1}. {voter.name}</span>
+                        <span className="text-xs font-semibold text-white">{voter.seatNumber}. {voter.name}</span>
                         <span className="text-xs font-bold" style={{ color: target ? "#FF6B6B" : "#666" }}>
                           {target ? `← ${target}` : "امتنع"}
                         </span>
@@ -4056,22 +4235,33 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     // SUB-PHASE 4: justification — accused defends, 1-min timer
     // ════════════════════════════════════════════
     if (daySubPhase === "justification") {
+      const accusedIsSilenced = !!alivePlayers.find(p => p.name === accusedPlayer)?.isSilenced;
+      const defenseBlocked = accusedIsSilenced && silencedCannotDefend;
       return (
         <div className="min-h-full w-full flex flex-col px-5 py-8" style={ROOT_STYLE}>
           {globalControls}
           <div className="flex flex-col gap-5 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
             <div className="flex flex-col items-center gap-1 text-center pt-1">
               <span className="text-xs font-bold tracking-widest" style={{ color: "#D32F2F" }}>المحاكمة</span>
-              <h1 className="text-2xl font-black text-white">{accusedPlayer} يدافع عن نفسه</h1>
+              <h1 className="text-2xl font-black text-white">
+                {defenseBlocked ? `${accusedPlayer} ممنوع من الدفاع` : `${accusedPlayer} يدافع عن نفسه`}
+              </h1>
             </div>
             <div className="flex flex-col items-center gap-3 py-6 rounded-2xl"
               style={{ backgroundColor: "#0D0000", border: "1px solid #D32F2F44" }}>
               <VenetianMask size={36} color="#D32F2F" strokeWidth={1.5} />
               <span className="text-lg font-black text-white">{accusedPlayer}</span>
-              <p className="text-xs text-center" style={{ color: "#555" }}>{`لديه ${speedPreset.lastWords} ثانية للدفاع عن نفسه`}</p>
-              <div className="mt-2 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
-                <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.lastWords} />
-              </div>
+              {defenseBlocked ? (
+                <RtlEmoji text="مسكّت بقرار الإكّة — يبقى له حق التصويت" emoji="🤐" className="text-xs font-bold"
+                  textStyle={{ color: "#FF8F00" }} />
+              ) : (
+                <>
+                  <p className="text-xs text-center" style={{ color: "#555" }}>{`لديه ${speedPreset.lastWords} ثانية للدفاع عن نفسه`}</p>
+                  <div className="mt-2 w-full px-4 py-3 rounded-xl" style={{ backgroundColor: "#1A0000", border: "1px solid #D32F2F33" }}>
+                    <DayTimerBar endsAt={timerEndsAt} maxSeconds={speedPreset.lastWords} />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex-1" />
             <motion.button
@@ -4100,12 +4290,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
 
     // ════════════════════════════════════════════
-    // SUB-PHASE 5: final_vote — 👍 vs 👎 relative majority (أوافق > أعارض)
+    // SUB-PHASE 5: final_vote — only the original accusers vote again;
+    // execution still requires an absolute majority of every living player.
     // ════════════════════════════════════════════
-    const finalTotalVoters = alivePlayers.length;
-    const finalVotesUsed   = finalVoteFor + finalVoteAgainst;
-    const canExecute       = finalVoteFor > finalVoteAgainst;
-    const currentFinalVoter = alivePlayers[finalVoteVoterIndex] ?? null;
+    const finalEligibleVoters = alivePlayers.filter(
+      p => p.name !== accusedPlayer && voteLedger[p.name] === accusedPlayer,
+    );
+    const finalTotalVoters = finalEligibleVoters.length;
+    const finalVotesUsed   = Object.keys(finalVoteLedger).length;
+    const executionThreshold = Math.floor(alivePlayers.length / 2) + 1;
+    const canExecute       = finalVoteFor >= executionThreshold;
+    const currentFinalVoter = finalEligibleVoters[finalVoteVoterIndex] ?? null;
     const finalVotingComplete = finalVoteVoterIndex >= finalTotalVoters;
 
     const recordFinalVote = (choice: "for" | "against" | "abstain") => {
@@ -4119,7 +4314,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     const undoLastFinalVote = () => {
       if (finalVoteVoterIndex <= 0) return;
-      const previousVoter = alivePlayers[finalVoteVoterIndex - 1];
+      const previousVoter = finalEligibleVoters[finalVoteVoterIndex - 1];
       if (!previousVoter) return;
       const choice = finalVoteLedger[previousVoter.name];
       if (choice === "for") setFinalVoteFor(value => Math.max(0, value - 1));
@@ -4152,6 +4347,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <span className="text-xs mt-1" style={{ color: "#666" }}>
               المسجّل {finalVoteVoterIndex}/{finalTotalVoters} · الأصوات المحتسبة {finalVotesUsed}
             </span>
+            <span className="text-xs font-bold" style={{ color: "#FFB300" }}>
+              يحتاج الإعدام إلى {executionThreshold} موافقين من أصل {alivePlayers.length} أحياء
+            </span>
           </div>
           <div className="flex gap-3">
             <div className="flex-1 flex flex-col items-center gap-3 py-5 rounded-2xl"
@@ -4172,7 +4370,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <div className="flex flex-col gap-3 p-4 rounded-2xl"
               style={{ backgroundColor: "#0D0D0D", border: "1px solid #2A2A2A" }}>
               <div className="text-center">
-                <span className="text-xs font-bold" style={{ color: "#888" }}>اللاعب رقم {finalVoteVoterIndex + 1}</span>
+                <span className="text-xs font-bold" style={{ color: "#888" }}>اللاعب رقم {currentFinalVoter.seatNumber}</span>
                 <p className="text-xl font-black text-white mt-1">{currentFinalVoter.name}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -4212,14 +4410,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 </button>
               </div>
               <div className="flex flex-col gap-1.5">
-                {alivePlayers.slice(0, finalVoteVoterIndex).map((voter, idx) => {
+                {finalEligibleVoters.slice(0, finalVoteVoterIndex).map((voter) => {
                   const choice = finalVoteLedger[voter.name];
                   const label = choice === "for" ? "أوافق" : choice === "against" ? "أعارض" : "امتنع";
                   const color = choice === "for" ? "#8BC34A" : choice === "against" ? "#FF6B6B" : "#666";
                   return (
                     <div key={voter.name} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg"
                       style={{ backgroundColor: "#141414" }}>
-                      <span className="text-xs font-semibold text-white">{idx + 1}. {voter.name}</span>
+                      <span className="text-xs font-semibold text-white">{voter.seatNumber}. {voter.name}</span>
                       <span className="text-xs font-bold" style={{ color }}>{label}</span>
                     </div>
                   );
@@ -4560,7 +4758,15 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             {/* ── Magician potion-mode sub-config ──
                                 Only appears when the Magician mod is toggled ON.
                                 Two mutually exclusive options matching the dark theme. */}
-                            {mod.id === "magician" && isOn && (
+                            {mod.id === "magician" && isOn && activeMods.sniper && (
+                              <div className="px-3.5 pb-3 pt-1">
+                                <div className="rounded-lg px-3 py-2.5 text-xs font-bold text-center"
+                                  style={{ backgroundColor: "#10151D", color: "#94A3B8", border: "1px solid #94A3B844" }}>
+                                  القناص مفعّل — جرعة الحياة فقط
+                                </div>
+                              </div>
+                            )}
+                            {mod.id === "magician" && isOn && !activeMods.sniper && (
                               <div className="flex flex-col gap-1.5 px-3.5 pb-3 pt-1">
                                 <span className="text-xs font-semibold" style={{ color: "#666666" }}>
                                   سعة الجرعات
@@ -4811,6 +5017,25 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   backgroundColor: "#FFFFFF",
                   right: boyInheritsAce ? "0.125rem" : "1.125rem",
                 }} />
+            </div>
+          </button>
+
+          <button
+            onClick={() => setSilencedCannotDefend(v => !v)}
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: silencedCannotDefend ? "#170000" : "transparent", borderTop: "1px solid #1A1A1A" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: silencedCannotDefend ? "#FFFFFF" : "#AAAAAA" }}>
+                منع المسكّت من الدفاع
+              </span>
+              <span className="text-[10.5px] leading-snug" style={{ color: "#5C5C5C" }}>
+                لا يتكلم في النقاش أو الدفاع، لكنه يحتفظ بحق التصويت · (الافتراضي: مغلق)
+              </span>
+            </div>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: silencedCannotDefend ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+                style={{ backgroundColor: "#FFFFFF", right: silencedCannotDefend ? "0.125rem" : "1.125rem" }} />
             </div>
           </button>
 

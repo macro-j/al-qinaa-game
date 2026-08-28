@@ -12,7 +12,8 @@ export const ROLE_META: Record<string, { color: string; glow: string; desc: stri
   "madman":   { color: "#E879F9", glow: "#E879F933", desc: "المجنون — يفوز فوراً وتخسر القرية إذا تم إعدامه بالتصويت في النهار." },
   "twin":     { color: "#22D3EE", glow: "#22D3EE33", desc: "التوأم — قرويان يعرفان بعضهما، إذا مات أحدهما يموت الآخر فوراً." },
   "avenger":  { color: "#A0522D", glow: "#A0522D33", desc: "المنتقم — إذا قُتل أو أُعدم، يختار شخصاً ليقتله ويأخذه معه للقبر." },
-  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة حياة لإنقاذ ضحية المافيا، وجرعة سم للتخلص من أي لاعب." },
+  "magician": { color: "#A3E635", glow: "#A3E63533", desc: "الساحر — يملك جرعة حياة وجرعة سم؛ وعند تفعيل القناص تصبح قدرته جرعة الحياة فقط." },
+  "sniper":   { color: "#94A3B8", glow: "#94A3B833", desc: "القناص — مافيا مستقل لا يعرف حلفاءه، يملك طلقة واحدة ابتداءً من الليلة الثانية." },
 };
 
 // Maps English logic keys → Arabic display names for the expansion roles.
@@ -22,10 +23,11 @@ export const ROLE_DISPLAY_NAME: Record<string, string> = {
   twin:     "التوأم",
   avenger:  "المنتقم",
   magician: "الساحر",
+  sniper:   "القناص",
 };
 
 export const getRoleName = (role: string): string => ROLE_DISPLAY_NAME[role] ?? role;
 
 // Display order for the catalog surfaces (Shop / Guide). Keys match ROLE_META.
 export const MAIN_ROLE_KEYS: readonly string[] = ["الولد", "الإكة", "الشايب", "البنت", "المواطن"];
-export const EXPANSION_ROLE_KEYS: readonly string[] = ["madman", "twin", "avenger", "magician"];
+export const EXPANSION_ROLE_KEYS: readonly string[] = ["madman", "twin", "avenger", "magician", "sniper"];

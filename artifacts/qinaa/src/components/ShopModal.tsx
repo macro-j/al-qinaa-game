@@ -103,6 +103,7 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
     { id: "role_madman", roleKey: "madman" },
     { id: "role_avenger", roleKey: "avenger" },
     { id: "role_twins", roleKey: "twin" },
+    { id: "role_sniper", roleKey: "sniper" },
   ];
 
   return (
