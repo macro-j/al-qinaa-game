@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Response } from "express";
 import { getSupabaseAdmin, getUserFromToken } from "../lib/supabase";
+import { deleteCloudDistributionHistory } from "../lib/distributionHistory";
 
 const router: IRouter = Router();
 
@@ -42,6 +43,8 @@ router.post("/account/delete", async (req, res) => {
 
     const admin = getSupabaseAdmin();
     const userId = user.id;
+
+    await deleteCloudDistributionHistory(userId);
 
     const { error: paymentsError } = await admin
       .from("payments")

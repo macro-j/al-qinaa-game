@@ -110,24 +110,6 @@ export type Database = {
         }
         Relationships: []
       }
-      role_distribution_history: {
-        Row: {
-          entries: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          entries?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          entries?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_entitlements: {
         Row: {
           created_at: string

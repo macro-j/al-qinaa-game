@@ -159,35 +159,3 @@ $$;
 revoke all on function public.grant_specific_entitlement(uuid, text) from public;
 revoke all on function public.grant_specific_entitlement(uuid, text) from anon, authenticated;
 grant execute on function public.grant_specific_entitlement(uuid, text) to service_role;
-
--- 6) Account-backed role-distribution memory ---------------------------------
--- Keeps the compact, last-80 local distribution ledger in sync across devices.
--- Each authenticated user can read and replace only their own JSON history.
-create table if not exists public.role_distribution_history (
-  user_id    uuid primary key references auth.users (id) on delete cascade,
-  entries    jsonb not null default '[]'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
-alter table public.role_distribution_history enable row level security;
-
-drop policy if exists "read own role distribution history" on public.role_distribution_history;
-create policy "read own role distribution history"
-  on public.role_distribution_history
-  for select
-  using (auth.uid() = user_id);
-
-drop policy if exists "insert own role distribution history" on public.role_distribution_history;
-create policy "insert own role distribution history"
-  on public.role_distribution_history
-  for insert
-  with check (auth.uid() = user_id);
-
-drop policy if exists "update own role distribution history" on public.role_distribution_history;
-create policy "update own role distribution history"
-  on public.role_distribution_history
-  for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-grant select, insert, update on public.role_distribution_history to authenticated;
