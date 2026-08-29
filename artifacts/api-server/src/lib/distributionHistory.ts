@@ -56,7 +56,7 @@ export async function writeCloudDistributionHistory(
   const { error } = await getSupabaseAdmin().storage
     .from(BUCKET_ID)
     .upload(historyPath(userId), payload, {
-      contentType: "application/json; charset=utf-8",
+      contentType: "application/json",
       cacheControl: "0",
       upsert: true,
     });
