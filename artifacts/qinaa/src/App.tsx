@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import { io, type Socket } from "socket.io-client";
 import QRCode from "react-qr-code";
 import {
@@ -42,6 +42,7 @@ import {
   Minimize2,
   ChevronDown,
   Layers,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "./lib/auth";
@@ -64,6 +65,7 @@ import { syncDistributionHistory } from "./lib/distributionSync";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
 import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD, PLAYER_SELECTION_INDEX } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
+import { RoleIcon } from "./components/RoleIcon";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -930,6 +932,8 @@ interface SetupPrefs {
   customSpeedsV1: SpeedTimings;
   /** When true, night-phase narrator VO is silenced; SFX/victory still play. */
   isNarratorMuted: boolean;
+  /** Reduce decorative movement while preserving phase/state feedback. */
+  reduceMotion: boolean;
 }
 
 function defaultActiveMods(): Record<string, boolean> {
@@ -977,6 +981,7 @@ function defaultSetupPrefs(): SetupPrefs {
     gameSpeed: "medium",
     customSpeedsV1: defaultCustomSpeeds(),
     isNarratorMuted: false,
+    reduceMotion: false,
   };
 }
 
@@ -991,6 +996,29 @@ const NARRATOR_VOICE_FILES = new Set([
   "b1.m4a", "b2.m4a", "b3.m4a",
   "wh1.m4a", "wh2.m4a", "wh3.m4a",
 ]);
+
+const AUDIO_CAPTIONS: Record<string, string> = {
+  "start.m4a": "تغلق القرية أعينها وتبدأ الليلة.",
+  "w1.m4a": "يصحى الولد.",
+  "w2.m4a": "اختر ضحية الولد.",
+  "w3.m4a": "ينام الولد.",
+  "e1.m4a": "تصحى الإكة.",
+  "e2.m4a": "اختر من تسكته الإكة.",
+  "e3.m4a": "تنام الإكة.",
+  "q1.m4a": "يصحى القناص.",
+  "q2.m4a": "اختر ضحية القناص.",
+  "q3.m4a": "ينام القناص.",
+  "wh1.m4a": "يصحى الساحر.",
+  "wh2.m4a": "يختار الساحر جرعته.",
+  "wh3.m4a": "ينام الساحر.",
+  "s1.m4a": "يصحى الشايب.",
+  "s2.m4a": "اختر من يسأل عنه الشايب.",
+  "s3.m4a": "ينام الشايب.",
+  "b1.m4a": "تصحى البنت.",
+  "b2.m4a": "اختر من تحميه البنت.",
+  "b3.m4a": "تنام البنت.",
+  "morning.m4a": "تصحى القرية ويبدأ النهار.",
+};
 
 function isNarratorVoiceTrack(fileName: string): boolean {
   return NARRATOR_VOICE_FILES.has(fileName);
@@ -1022,6 +1050,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
         isNarratorMuted:
           parsed.isNarratorMuted === true ||
           (parsed as { isMuted?: boolean }).isMuted === true,
+        reduceMotion: parsed.reduceMotion === true,
       };
     }
   } catch { /* ignore corrupt snapshot */ }
@@ -1047,6 +1076,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
       isNarratorMuted:
         narratorFallback.isNarratorMuted === true ||
         narratorFallback.isMuted === true,
+      reduceMotion: narratorFallback.reduceMotion === true,
     };
   }
 
@@ -1287,6 +1317,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [isNarratorMuted, setIsNarratorMuted] = useState(
     () => SETUP.isNarratorMuted,
   );
+  const [reduceMotion, setReduceMotion] = useState(
+    () => SETUP.reduceMotion,
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -1392,6 +1425,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       gameSpeed,
       customSpeedsV1: customSpeeds,
       isNarratorMuted,
+      reduceMotion,
     });
   }, [
     isPassPhoneMode,
@@ -1403,6 +1437,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     gameSpeed,
     customSpeeds,
     isNarratorMuted,
+    reduceMotion,
   ]);
 
   // ── Sync in-game narrator snapshot to localStorage on every change ──
@@ -1444,6 +1479,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const audioCache     = useRef<Record<string, HTMLAudioElement>>({});
   const currentPlaying = useRef<HTMLAudioElement | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastPlayedAudioRef = useRef<string | null>(null);
+  const captionTimerRef = useRef<number | null>(null);
+  const [narratorCaption, setNarratorCaption] = useState<string | null>(null);
 
   useEffect(() => {
     const files = [
@@ -1492,6 +1530,14 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     }
     const audio = audioCache.current[fileName];
     if (!audio) return;
+    lastPlayedAudioRef.current = fileName;
+    const caption = AUDIO_CAPTIONS[fileName] ?? null;
+    setNarratorCaption(caption);
+    if (captionTimerRef.current !== null) window.clearTimeout(captionTimerRef.current);
+    captionTimerRef.current = window.setTimeout(() => {
+      setNarratorCaption(null);
+      captionTimerRef.current = null;
+    }, 5_500);
     audio.currentTime = 0;
     currentPlaying.current = audio;
     activeAudioRef.current = audio;
@@ -1507,6 +1553,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       currentPlaying.current.currentTime = 0;
       currentPlaying.current = null;
     }
+    if (captionTimerRef.current !== null) {
+      window.clearTimeout(captionTimerRef.current);
+      captionTimerRef.current = null;
+    }
+    setNarratorCaption(null);
   };
 
   // ── Night-phase audio maps — used by inline triggers at every
@@ -1520,6 +1571,61 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const file = map[role];
     if (file) playGameAudio(file);
   };
+
+  const replayLastAudio = () => {
+    const file = lastPlayedAudioRef.current;
+    if (file) playGameAudio(file);
+  };
+
+  // TV / remote navigation: arrows move through visible controls in DOM order.
+  // Enter/Space remain native browser actions, which keeps buttons and selects
+  // accessible without duplicating their activation logic.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditing = !!target?.closest("input, textarea, select, [contenteditable='true']");
+      if (isEditing || event.altKey || event.ctrlKey || event.metaKey) return;
+
+      if (event.code === "KeyF") {
+        event.preventDefault();
+        toggleAppFullscreen();
+        return;
+      }
+      if (event.code === "KeyM") {
+        event.preventDefault();
+        setIsNarratorMuted(value => !value);
+        return;
+      }
+      if (event.code === "KeyR") {
+        event.preventDefault();
+        replayLastAudio();
+        return;
+      }
+
+      const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
+      const backward = event.key === "ArrowUp" || event.key === "ArrowLeft";
+      if (!forward && !backward) return;
+
+      const root = document.querySelector<HTMLElement>("[data-council-root]");
+      if (!root) return;
+      const controls = Array.from(root.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      )).filter(element => {
+        const style = window.getComputedStyle(element);
+        return style.visibility !== "hidden" && style.display !== "none" && element.getClientRects().length > 0;
+      });
+      if (controls.length === 0) return;
+
+      event.preventDefault();
+      const currentIndex = controls.indexOf(document.activeElement as HTMLElement);
+      const nextIndex = currentIndex < 0
+        ? 0
+        : (currentIndex + (forward ? 1 : -1) + controls.length) % controls.length;
+      controls[nextIndex]?.focus({ preventScroll: false });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   // ── Victory audio — fires once when entering game_over ──
   useEffect(() => {
@@ -2361,7 +2467,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     ? { onClick: onBack,        Icon: ArrowRight, title: "العودة للقائمة الرئيسية" }
     : { onClick: handleEndGame, Icon: X,          title: "إنهاء اللعبة"           };
   const navBtnClass =
-    "pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90";
+    "qinaa-icon-button pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90";
   const navBtnStyle = {
     backgroundColor: "rgba(13,13,13,0.55)",
     border: "1px solid rgba(255,255,255,0.06)",
@@ -2380,6 +2486,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           title={navAction.title}
           aria-label={navAction.title}
           className={navBtnClass}
+          data-tv-control="true"
           style={navBtnStyle}>
           <navAction.Icon size={18} strokeWidth={2} />
         </button>
@@ -2389,6 +2496,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           title={isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
           aria-label={isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
           className={navBtnClass}
+          data-tv-control="true"
           style={{
             ...navBtnStyle,
             color: isFullscreen ? "#ffffff" : "rgba(255,255,255,0.70)",
@@ -2398,22 +2506,61 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         </button>
       </div>
 
-      {/* LEFT — narrator VO mute (SFX / victory stay audible) */}
-      <button
-        onClick={() => setIsNarratorMuted(m => !m)}
-        title={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
-        aria-label={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
-        className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full transition-colors active:scale-90 hover:text-white"
-        style={{
-          backgroundColor: "rgba(13,13,13,0.55)",
-          border: `1px solid ${isNarratorMuted ? "rgba(211,47,47,0.32)" : "rgba(255,255,255,0.06)"}`,
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          color: isNarratorMuted ? "#D32F2F" : "rgba(255,255,255,0.70)",
-        }}>
-        {isNarratorMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-      </button>
+      {/* LEFT — audio controls. R repeats the last cue; M toggles narration. */}
+      <div className="pointer-events-auto flex items-center gap-2" dir="ltr">
+        <button
+          type="button"
+          onClick={replayLastAudio}
+          title="إعادة آخر تعليق صوتي (R)"
+          aria-label="إعادة آخر تعليق صوتي"
+          aria-keyshortcuts="R"
+          data-tv-control="true"
+          className={navBtnClass}
+          style={navBtnStyle}>
+          <RotateCcw size={18} strokeWidth={2} />
+        </button>
+        <button
+          onClick={() => setIsNarratorMuted(m => !m)}
+          title={isNarratorMuted ? "تشغيل الراوي الصوتي (M)" : "كتم الراوي الصوتي (M)"}
+          aria-label={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
+          aria-keyshortcuts="M"
+          data-tv-control="true"
+          className={navBtnClass}
+          style={{
+            ...navBtnStyle,
+            border: `1px solid ${isNarratorMuted ? "rgba(211,47,47,0.32)" : "rgba(255,255,255,0.06)"}`,
+            color: isNarratorMuted ? "#D32F2F" : "rgba(255,255,255,0.70)",
+          }}>
+          {isNarratorMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+      </div>
     </div>
+  );
+
+  const narratorCaptionOverlay = (
+    <AnimatePresence>
+      {narratorCaption && (
+        <motion.div
+          key={narratorCaption}
+          role="status"
+          aria-live="polite"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          className="qinaa-caption fixed top-20 left-1/2 z-40 -translate-x-1/2 pointer-events-none px-5 py-3 rounded-2xl text-center text-sm font-bold"
+          style={{
+            width: "min(42rem, calc(100vw - 2rem))",
+            color: "#F5F5F5",
+            backgroundColor: "rgba(10,10,10,0.86)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 12px 40px rgba(0,0,0,0.36)",
+          }}>
+          {narratorCaption}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
   // ── In-flow spacer that reserves room below the fixed navbar (px-5 py-4
@@ -2624,7 +2771,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
                 {/* Slot 3 — fixed bounding box for mask art, identical to front face */}
                 <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
-                  <VenetianMask size={80} color={meta.color} strokeWidth={1.2} />
+                  <RoleIcon roleKey={current.role} color={meta.color} size={88} />
                 </div>
 
                 {/* Slot 4 — role name, mirrors instruction text slot */}
@@ -5061,6 +5208,26 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 }} />
             </div>
           </button>
+
+          {/* ── Row 4: reduced motion — keeps state feedback without long cinematic movement. */}
+          <button
+            onClick={() => setReduceMotion(v => !v)}
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: reduceMotion ? "#170000" : "transparent", borderTop: "1px solid #1A1A1A" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: reduceMotion ? "#FFFFFF" : "#AAAAAA" }}>
+                تقليل الحركة
+              </span>
+              <span className="text-[10.5px] leading-snug" style={{ color: "#5C5C5C" }}>
+                انتقالات أسرع وبدون تكبير أو وميض زائد · مناسب للتلفزيون
+              </span>
+            </div>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: reduceMotion ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+                style={{ backgroundColor: "#FFFFFF", right: reduceMotion ? "0.125rem" : "1.125rem" }} />
+            </div>
+          </button>
         </div>
 
         {/* ── Bottom: helper text + CTA + back ── */}
@@ -5076,7 +5243,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
             style={{
               backgroundColor: canDistribute ? "#D32F2F" : "#1A1A1A",
               color: canDistribute ? "#ffffff" : "#333333",
@@ -5103,13 +5270,18 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const isDayPhase = phase === "day";
 
   return (
+    <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
     <motion.div
+      className="qinaa-council"
+      data-council-root="true"
+      data-reduce-motion={reduceMotion ? "true" : "false"}
       initial={false}
       animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as unknown as Record<string, string>}
       transition={{ duration: 1.5, ease: "easeInOut" }}
       style={{ "--n-bg": "#000000", height: "100dvh", width: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } as React.CSSProperties}
     >
       {floatingButtons}
+      {narratorCaptionOverlay}
       <AnimatePresence mode="wait">
         <motion.div
           key={phaseKey}
@@ -5123,6 +5295,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         </motion.div>
       </AnimatePresence>
     </motion.div>
+    </MotionConfig>
   );
 }
 

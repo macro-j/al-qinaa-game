@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { VenetianMask, Lock, Unlock } from "lucide-react";
 import { ROLE_META, getRoleName } from "../lib/roles";
 import { playSfx } from "../lib/sfx";
+import { RoleIcon } from "./RoleIcon";
 
 /**
  * Catalog clone of the in-game "Introductory Night" (الليلة التعريفية) reveal
@@ -80,8 +81,8 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
           <div style={{ height: 32, width: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Unlock size={24} color="#4CAF50" />
           </div>
-          <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
-            <VenetianMask size={80} color={meta.color} strokeWidth={1.2} />
+          <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <RoleIcon roleKey={roleKey} color={meta.color} size={88} />
           </div>
           <span style={{
             color: "#FFFFFF", fontSize: 28, fontWeight: 900,
