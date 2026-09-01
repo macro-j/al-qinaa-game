@@ -999,24 +999,24 @@ const NARRATOR_VOICE_FILES = new Set([
 
 const AUDIO_CAPTIONS: Record<string, string> = {
   "start.m4a": "تغلق القرية أعينها وتبدأ الليلة.",
-  "w1.m4a": "يصحى الولد.",
-  "w2.m4a": "اختر ضحية الولد.",
-  "w3.m4a": "ينام الولد.",
-  "e1.m4a": "تصحى الإكة.",
-  "e2.m4a": "اختر من تسكته الإكة.",
-  "e3.m4a": "تنام الإكة.",
+  "w1.m4a": "يصحى القاتل.",
+  "w2.m4a": "اختر ضحية القاتل.",
+  "w3.m4a": "ينام القاتل.",
+  "e1.m4a": "تصحى المُسكّت.",
+  "e2.m4a": "اختر من تُسكّته المُسكّت.",
+  "e3.m4a": "تنام المُسكّت.",
   "q1.m4a": "يصحى القناص.",
   "q2.m4a": "اختر ضحية القناص.",
   "q3.m4a": "ينام القناص.",
   "wh1.m4a": "يصحى الساحر.",
   "wh2.m4a": "يختار الساحر جرعته.",
   "wh3.m4a": "ينام الساحر.",
-  "s1.m4a": "يصحى الشايب.",
-  "s2.m4a": "اختر من يسأل عنه الشايب.",
-  "s3.m4a": "ينام الشايب.",
-  "b1.m4a": "تصحى البنت.",
-  "b2.m4a": "اختر من تحميه البنت.",
-  "b3.m4a": "تنام البنت.",
+  "s1.m4a": "يصحى الكاشف.",
+  "s2.m4a": "اختر من يكشفه الكاشف.",
+  "s3.m4a": "ينام الكاشف.",
+  "b1.m4a": "تصحى الحامية.",
+  "b2.m4a": "اختر من تحميه الحامية.",
+  "b3.m4a": "تنام الحامية.",
   "morning.m4a": "تصحى القرية ويبدأ النهار.",
 };
 
@@ -2186,7 +2186,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
     // ── Match history: log this role's night action ──
     if (nightStep === "الولد") {
-      const boyActor = formatHistoryActor(livePlayers, "الولد", "الولد");
+      const boyActor = formatHistoryActor(livePlayers, "الولد", getRoleName("الولد"));
       if (boyInheritActive) {
         if (boyKillTarget)    logHistoryEvent("night", nightCount, "🔪", `${boyActor} خطط لاغتيال ${boyKillTarget}`);
         if (boySilenceTarget) logHistoryEvent("night", nightCount, "🤫", `${boyActor} أسكت ${boySilenceTarget}`);
@@ -2197,19 +2197,19 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     if (nightStep === "الإكة") {
       const aceIsAliveLog = livePlayers.some(p => p.role === "الإكة" && p.isAlive);
       if (aceIsAliveLog && selectedTarget) {
-        const aceActor = formatHistoryActor(livePlayers, "الإكة", "الإكة");
+        const aceActor = formatHistoryActor(livePlayers, "الإكة", getRoleName("الإكة"));
         logHistoryEvent("night", nightCount, "🤫", `${aceActor} أسكت ${selectedTarget}`);
       }
     }
     if (nightStep === "الشايب" && selectedTarget) {
-      const seerActor = formatHistoryActor(livePlayers, "الشايب", "الشايب");
+      const seerActor = formatHistoryActor(livePlayers, "الشايب", getRoleName("الشايب"));
       const investigated = livePlayers.find(p => p.name === selectedTarget);
       const result = seerInvestigationLabel(investigated?.role ?? "المواطن");
       logHistoryEvent("night", nightCount, "🔍", `${seerActor} فحص ${selectedTarget} واكتشف أنه ${result}`);
       setSeerHistory(prev => prev.includes(selectedTarget) ? prev : [...prev, selectedTarget]);
     }
     if (nightStep === "البنت" && selectedTarget) {
-      const guardActor = formatHistoryActor(livePlayers, "البنت", "البنت");
+      const guardActor = formatHistoryActor(livePlayers, "البنت", getRoleName("البنت"));
       logHistoryEvent("night", nightCount, "🛡️", `${guardActor} حمت ${selectedTarget}`);
     }
     if (nightStep === "magician") {
@@ -2873,12 +2873,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const boyInheritReady     = boyInheritActiveTop && !!boyKillTarget && !!boySilenceTarget;
 
     const stepHint =
-      nightStep === "الولد"   ? (boyInheritActiveTop ? "تذبح وتسكت مين يا ولد؟" : "تذبح مين يا ولد؟") :
-      nightStep === "الإكة"   ? "تسكتين مين يا إكة؟" :
+      nightStep === "الولد"   ? (boyInheritActiveTop ? "تقتل وتُسكّت مين يا قاتل؟" : "تقتل مين يا قاتل؟") :
+      nightStep === "الإكة"   ? "تُسكّتين مين يا مُسكّت؟" :
       nightStep === "sniper"  ? (nightCount < 2 ? "جهّز سلاحك.. الطلقة من الليلة الثانية" : "تطلق على مين يا قناص؟") :
-      nightStep === "الشايب"  ? "تسأل عن مين يا شايب؟" :
+      nightStep === "الشايب"  ? "تكشف مين يا كاشف؟" :
       nightStep === "magician" ? "اختر إجراءك يا ساحر" :
-                                "تحمين مين يا بنت؟";
+                                "تحمين مين يا حامية؟";
     // Header label gets a special "وريث الزعامة" tag in inheritance mode.
     const roleHeaderLabel = boyInheritActiveTop
       ? `${getRoleName(nightStep)} (وريث الزعامة)`
@@ -2929,7 +2929,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             if (!ally) return null;
             return (
               <UnifiedNightBanner
-                label="حليفك (الإكة):"
+                label="حليفتك (المُسكّت):"
                 playerName={ally.name}
                 icon="🐺"
               />
@@ -2943,7 +2943,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             if (!boy || !boyTarget) return null;
             return (
               <UnifiedNightBanner
-                label="الولد يخطط لاغتيال:"
+                label="القاتل يخطط لاغتيال:"
                 playerName={boyTarget}
                 icon="🔪"
               />
@@ -3058,7 +3058,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                     <div className="flex flex-col gap-1">
                       <span className="text-xs font-black tracking-widest" style={{ color: magMeta.color }}>رجعة الحياة</span>
                       <span className="text-lg font-black text-white">تم إنقاذ {magicianHealOutcome.target}</span>
-                      <span className="text-xs font-semibold" style={{ color: "#8FB85A" }}>كانت ضحية الولد هذه الليلة</span>
+                      <span className="text-xs font-semibold" style={{ color: "#8FB85A" }}>كانت ضحية القاتل هذه الليلة</span>
                     </div>
                     <span className="text-[11px]" style={{ color: "#647044" }}>ينام الساحر تلقائياً...</span>
                   </div>
@@ -3233,7 +3233,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <div className="px-3 py-2 rounded-xl text-center"
                     style={{ backgroundColor: "#1A0000", border: `1px solid ${boyMeta.color}55` }}>
                     <span className="text-xs font-bold tracking-wide" style={{ color: "#FF8888" }}>
-                      وريث الزعامة — الإكة ماتت
+                      وريث الزعامة — المُسكّت ماتت
                     </span>
                   </div>
 
@@ -5151,10 +5151,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             style={{ backgroundColor: boyInheritsAce ? "#170000" : "transparent" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
-                توريث الزعامة (للولد)
+                توريث الزعامة (للـقاتل)
               </span>
               <span className="text-[10.5px] leading-snug truncate" style={{ color: "#5C5C5C" }}>
-                (يقوم بالاغتيال والتسكيت معًا إذا ماتت الإكة) · (الافتراضي: مغلق)
+                (يقوم بالاغتيال والتسكيت معًا إذا ماتت المُسكّت) · (الافتراضي: مغلق)
               </span>
             </div>
             <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
