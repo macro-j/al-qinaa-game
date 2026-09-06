@@ -65,7 +65,7 @@ import { syncDistributionHistory } from "./lib/distributionSync";
 import { RtlEmoji, UnifiedNightBanner } from "./components/RtlEmoji";
 import { PLAYER_SELECTION_WRAP, PLAYER_SELECTION_CARD, PLAYER_SELECTION_INDEX } from "./components/PlayerSelectionGrid";
 import { MatchHistoryModal, type MatchHistoryPhase } from "./components/MatchHistoryModal";
-import { RoleIcon } from "./components/RoleIcon";
+import { RoleCardFace } from "./components/RoleCardFace";
 
 // NarratorMode registers its preloaded pool here so the root App iOS-resume
 // overlay can unlock the actual HTMLAudioElement instances via user gesture.
@@ -2586,10 +2586,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   // ─────────────────────────────────────────────────────────────────────────
   if (phase === "distribution" && assignedRoles.length > 0) {
     const current = assignedRoles[currentIndex];
-    const meta    = ROLE_META[current.role] ?? ROLE_META["المواطن"];
     const isLast  = currentIndex === assignedRoles.length - 1;
-
-    const CARD_HEIGHT = 320;
+    const currentTwin = current.role === "twin"
+      ? assignedRoles.find(role => role.role === "twin" && role.name !== current.name)
+      : null;
+    const cardDescription = currentTwin
+      ? `توأمك هو ${currentTwin.name} — إذا مات أحدكما يلحق به الآخر.`
+      : undefined;
 
     // ── Pass-the-Phone gate ──
     // Intercepts before the role card is even mounted. Only renders when
@@ -2700,8 +2703,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               playSfx("card_flip.mp3");
               playSfx("role_reveal.mp3");
             }}
-            style={{ perspective: "900px", height: CARD_HEIGHT, cursor: isCardFlipped ? "default" : "pointer" }}
-            className="w-full select-none">
+            style={{ perspective: "900px", cursor: isCardFlipped ? "default" : "pointer" }}
+            className="role-card-shell w-full select-none">
 
             {/* Rotating inner wrapper */}
             <motion.div
@@ -2750,61 +2753,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
                 transform: "rotateY(180deg)",
-                borderRadius: 16,
-                backgroundColor: "#0A0000",
-                border: `1.5px solid ${meta.color}55`,
-                boxShadow: `0 0 40px ${meta.color}22`,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 20,
-                padding: "20px 16px",
+                borderRadius: 20,
+                overflow: "hidden",
               }}>
-                {/* Slot 1 — mirrors "قناعك مخفي" */}
-                <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك يا {current.name} هو</span>
-
-                {/* Slot 2 — fixed bounding box for unlock icon, identical to front face */}
-                <div style={{ height: 32, width: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Unlock size={24} color="#4CAF50" />
-                </div>
-
-                {/* Slot 3 — fixed bounding box for mask art, identical to front face */}
-                <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 0 20px ${meta.color}99)` }}>
-                  <RoleIcon roleKey={current.role} color={meta.color} size={88} />
-                </div>
-
-                {/* Slot 4 — role name, mirrors instruction text slot */}
-                <span style={{
-                  color: "#FFFFFF", fontSize: 28, fontWeight: 900,
-                  textAlign: "center", lineHeight: 1.2,
-                  textShadow: `0 0 24px ${meta.color}66`,
-                }}>
-                  {getRoleName(current.role)}
-                </span>
-
-                {/* Description box — extra slot below the 4 mirrored elements */}
-                <div style={{
-                  width: "100%",
-                  backgroundColor: "rgba(0,0,0,0.45)",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                  border: `1px solid ${meta.color}22`,
-                }}>
-                  {/* Smart Twin reveal — show partner's name on the card itself */}
-                  {current.role === "twin" && (() => {
-                    const otherTwin = assignedRoles.find(r => r.role === "twin" && r.name !== current.name);
-                    if (!otherTwin) return null;
-                    return (
-                      <span style={{ color: "#CCCCCC", fontSize: 13, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl", marginBottom: 6, fontWeight: 700 }}>
-                        توأمك هو: <span style={{ color: meta.color, fontWeight: 900 }}>{otherTwin.name}</span>
-                      </span>
-                    );
-                  })()}
-                  <span style={{ color: "#888888", fontSize: 11, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
-                    {meta.desc}
-                  </span>
-                </div>
+                <RoleCardFace roleKey={current.role} description={cardDescription} />
               </div>
 
             </motion.div>

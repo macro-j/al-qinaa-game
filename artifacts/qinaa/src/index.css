@@ -507,6 +507,104 @@ body {
   filter: drop-shadow(0 0 10px currentColor);
 }
 
+/* ── Fixed paper-card template + deterministic role emblems ─────────────── */
+.role-card-shell {
+  aspect-ratio: 823 / 1230;
+  max-width: 19rem;
+  margin-inline: auto;
+}
+
+.role-card-hidden-face {
+  background:
+    radial-gradient(circle at 50% 42%, rgba(211, 47, 47, 0.08), transparent 32%),
+    #0d0d0d;
+}
+
+.role-card-face {
+  --role-accent: #d32f2f;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: inline-size;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  color: white;
+}
+
+.role-card-face__emblem {
+  position: absolute;
+  top: 18.5%;
+  right: 19%;
+  width: 62%;
+  height: 39%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-card-face__emblem::before {
+  content: "";
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--role-accent) 35%, transparent), transparent 68%);
+  filter: blur(12px);
+  opacity: 0.8;
+}
+
+.role-mask-svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.72)) drop-shadow(0 0 12px color-mix(in srgb, var(--role-accent) 44%, transparent));
+}
+
+.role-mask-fallback {
+  position: relative;
+  z-index: 1;
+}
+
+.role-card-face__name,
+.role-card-face__description {
+  position: absolute;
+  right: 15%;
+  width: 70%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  direction: rtl;
+  text-wrap: balance;
+}
+
+.role-card-face__name {
+  top: 68.4%;
+  height: 7.7%;
+  color: #fff;
+  font-size: 1.25rem;
+  font-size: 7cqw;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 2px 4px #000, 0 0 16px color-mix(in srgb, var(--role-accent) 55%, transparent);
+}
+
+.role-card-face__description {
+  top: 79.2%;
+  height: 10.8%;
+  padding-inline: 5%;
+  color: #e5e5e5;
+  font-size: 0.7rem;
+  font-size: 3.45cqw;
+  font-weight: 600;
+  line-height: 1.55;
+  text-shadow: 0 1px 3px #000;
+}
+
 /* A living-room display needs a wider stage and copy readable from a few
    metres away. The attribute selector targets the existing shared container
    token without changing the phone/tablet layout. */

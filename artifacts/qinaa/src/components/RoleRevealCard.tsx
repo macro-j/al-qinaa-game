@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { VenetianMask, Lock, Unlock } from "lucide-react";
-import { ROLE_META, getRoleName } from "../lib/roles";
+import { VenetianMask, Lock } from "lucide-react";
+import { ROLE_META } from "../lib/roles";
 import { playSfx } from "../lib/sfx";
-import { RoleIcon } from "./RoleIcon";
+import { RoleCardFace } from "./RoleCardFace";
 
 /**
  * Catalog clone of the in-game "Introductory Night" (الليلة التعريفية) reveal
@@ -13,18 +13,16 @@ import { RoleIcon } from "./RoleIcon";
  * visual identity with the game. All role text comes from ROLE_META (single
  * source of truth); nothing is authored here.
  */
-export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; height?: number }) {
+export function RoleRevealCard({ roleKey }: { roleKey: string }) {
   const [flipped, setFlipped] = useState(false);
   const meta = ROLE_META[roleKey];
   if (!meta) return null;
-  const name = getRoleName(roleKey);
-
   return (
     <motion.div
       onClick={() => { setFlipped((f) => !f); playSfx("card_flip.mp3"); }}
       whileTap={{ scale: 0.98 }}
-      style={{ perspective: "900px", height, cursor: "pointer" }}
-      className="w-full select-none">
+      style={{ perspective: "900px", cursor: "pointer" }}
+      className="role-card-shell w-full select-none">
       <div
         style={{
           width: "100%",
@@ -36,7 +34,7 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
         }}>
 
         {/* ── FRONT (hidden/mystery) ── */}
-        <div style={{
+        <div className="role-card-hidden-face" style={{
           position: "absolute", inset: 0,
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
@@ -66,42 +64,11 @@ export function RoleRevealCard({ roleKey, height = 320 }: { roleKey: string; hei
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
           transform: "rotateY(180deg)",
-          borderRadius: 16,
-          backgroundColor: "#0A0000",
-          border: `1.5px solid ${meta.color}55`,
+          borderRadius: 20,
+          overflow: "hidden",
           boxShadow: `0 0 40px ${meta.color}22`,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 20,
-          padding: "20px 16px",
         }}>
-          <span style={{ color: "#555555", fontSize: 18, fontWeight: 800, textAlign: "center" }}>قناعك هو</span>
-          <div style={{ height: 32, width: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Unlock size={24} color="#4CAF50" />
-          </div>
-          <div style={{ height: 112, width: 112, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <RoleIcon roleKey={roleKey} color={meta.color} size={88} />
-          </div>
-          <span style={{
-            color: "#FFFFFF", fontSize: 28, fontWeight: 900,
-            textAlign: "center", lineHeight: 1.2,
-            textShadow: `0 0 24px ${meta.color}66`,
-          }}>
-            {name}
-          </span>
-          <div style={{
-            width: "100%",
-            backgroundColor: "rgba(0,0,0,0.45)",
-            borderRadius: 10,
-            padding: "10px 14px",
-            border: `1px solid ${meta.color}22`,
-          }}>
-            <span style={{ color: "#888888", fontSize: 11, textAlign: "center", lineHeight: 1.7, display: "block", direction: "rtl" }}>
-              {meta.desc}
-            </span>
-          </div>
+          <RoleCardFace roleKey={roleKey} />
         </div>
 
       </div>
