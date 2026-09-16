@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { VenetianMask, Lock } from "lucide-react";
-import { ROLE_META } from "../lib/roles";
+import { ROLE_META, getRoleName } from "../lib/roles";
 import { playSfx } from "../lib/sfx";
 import { RoleCardFace } from "./RoleCardFace";
 
@@ -17,19 +17,33 @@ export function RoleRevealCard({ roleKey }: { roleKey: string }) {
   const [flipped, setFlipped] = useState(false);
   const meta = ROLE_META[roleKey];
   if (!meta) return null;
+  const toggleCard = () => {
+    setFlipped((value) => !value);
+    playSfx("card_flip.mp3");
+  };
   return (
     <motion.div
-      onClick={() => { setFlipped((f) => !f); playSfx("card_flip.mp3"); }}
+      role="button"
+      tabIndex={0}
+      aria-pressed={flipped}
+      aria-label={flipped ? `إخفاء بطاقة ${getRoleName(roleKey)}` : `كشف بطاقة ${getRoleName(roleKey)}`}
+      data-tv-primary="true"
+      onClick={toggleCard}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleCard();
+      }}
       whileTap={{ scale: 0.98 }}
       style={{ perspective: "900px", cursor: "pointer" }}
       className="role-card-shell w-full select-none">
       <div
+        className="role-card-flip-inner"
         style={{
           width: "100%",
           height: "100%",
           transformStyle: "preserve-3d",
           position: "relative",
-          transition: "transform 0.55s cubic-bezier(0.4,0,0.2,1)",
           transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
         }}>
 
@@ -38,7 +52,7 @@ export function RoleRevealCard({ roleKey }: { roleKey: string }) {
           position: "absolute", inset: 0,
           backfaceVisibility: "hidden",
           WebkitBackfaceVisibility: "hidden",
-          borderRadius: 16,
+          borderRadius: 20,
           backgroundColor: "#0D0D0D",
           border: "1.5px solid #222222",
           display: "flex",

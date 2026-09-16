@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BookOpen, X, Moon, Sun } from "lucide-react";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { MAIN_ROLE_KEYS, EXPANSION_ROLE_KEYS } from "../lib/roles";
@@ -11,6 +11,43 @@ import { MAIN_ROLE_KEYS, EXPANSION_ROLE_KEYS } from "../lib/roles";
  */
 export function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [phase, setPhase] = useState<"night" | "day">("night");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus({ preventScroll: true });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = closeButtonRef.current?.closest<HTMLElement>("[role='dialog']");
+      const focusable = dialog
+        ? Array.from(dialog.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        )).filter(element => element.getClientRects().length > 0)
+        : [];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus({ preventScroll: true });
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const isNight = phase === "night";
@@ -18,7 +55,10 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="شرح لعبة القناع"
+      className="qinaa-modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor: "rgba(0,0,0,0.88)", backdropFilter: "blur(12px)" }}
       onClick={onClose}>
 
@@ -27,10 +67,12 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
         dir="rtl"
         className="fixed top-0 inset-x-0 z-[60] flex items-center justify-between px-4 md:px-8 lg:px-12 py-4 pointer-events-none">
         <button
+          ref={closeButtonRef}
           onClick={onClose}
           title="إغلاق"
           aria-label="إغلاق شرح اللعبة"
-          className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white transition-colors active:scale-90"
+          className="qinaa-icon-button pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full text-white/70 hover:text-white"
+          data-tv-control="true"
           style={{
             backgroundColor: "rgba(13,13,13,0.55)",
             border: "1px solid rgba(255,255,255,0.06)",
@@ -43,7 +85,7 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
 
       <div
         dir="rtl"
-        className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl rounded-2xl flex flex-col gap-5 p-5 overflow-y-auto max-h-[90vh]"
+        className="qinaa-guide-panel w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-6xl rounded-2xl flex flex-col gap-5 p-5 overflow-y-auto max-h-[90vh]"
         style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A" }}
         onClick={(e) => e.stopPropagation()}>
 
@@ -69,7 +111,8 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
             <button
               type="button"
               onClick={() => setPhase("night")}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-150 active:scale-[0.98]"
+              aria-pressed={isNight}
+              className="qinaa-segment-button flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold"
               style={isNight
                 ? { backgroundColor: "#16162A", color: "#C7D2FE", border: "1px solid rgba(129,140,248,0.4)" }
                 : { color: "#777777", border: "1px solid transparent" }}>
@@ -79,7 +122,8 @@ export function GuideModal({ open, onClose }: { open: boolean; onClose: () => vo
             <button
               type="button"
               onClick={() => setPhase("day")}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all duration-150 active:scale-[0.98]"
+              aria-pressed={!isNight}
+              className="qinaa-segment-button flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold"
               style={!isNight
                 ? { backgroundColor: "#2A2110", color: "#FDE68A", border: "1px solid rgba(245,158,11,0.4)" }
                 : { color: "#777777", border: "1px solid transparent" }}>

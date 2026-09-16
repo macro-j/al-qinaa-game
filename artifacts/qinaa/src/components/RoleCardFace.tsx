@@ -15,7 +15,7 @@ export function RoleCardFace({
     <div
       className="role-card-face"
       style={{
-        backgroundImage: "url('/cards/qinaa-card-base-v1.jpg')",
+        backgroundImage: "url('/cards/qinaa-card-base-v2.jpg')",
         "--role-accent": meta.color,
       } as CSSProperties}>
       <div className="role-card-face__emblem">

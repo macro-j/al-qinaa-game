@@ -1,10 +1,10 @@
 /** Centered flex-wrap player pick layout — balanced rows for 5–9 players on laptop. */
 export const PLAYER_SELECTION_WRAP =
-  "flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-2 w-full";
+  "qinaa-stage-grid flex flex-wrap justify-center gap-3 sm:gap-4 md:gap-2 w-full";
 
 /** Uniform card widths: 2-up on phone, fixed tiles on tablet/desktop, centered orphans. */
 export const PLAYER_SELECTION_CARD =
-  "w-[47%] sm:w-[160px] md:w-[180px] flex flex-col items-center justify-center gap-2 md:gap-1.5 px-3 py-3.5 md:py-2 rounded-xl transition-colors duration-200 active:scale-95";
+  "qinaa-choice-card w-[47%] sm:w-[160px] md:w-[180px] flex flex-col items-center justify-center gap-2 md:gap-1.5 px-3 py-3.5 md:py-2 rounded-xl active:scale-[0.98]";
 
 /** Number badge inside each player card. */
 export const PLAYER_SELECTION_INDEX =

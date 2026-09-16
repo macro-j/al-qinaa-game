@@ -262,7 +262,78 @@ function getSocket(): Socket {
 const BASE_BUTTON =
   "flex flex-row-reverse items-center gap-4 w-full px-6 py-4 rounded-xl border font-bold text-white text-lg transition-all duration-200 hover:brightness-125 active:scale-95";
 
-const ROOT_STYLE: React.CSSProperties = { backgroundColor: "var(--n-bg, #000000)" };
+const ROOT_STYLE: React.CSSProperties = { backgroundColor: "transparent" };
+
+const SPATIAL_CONTROL_SELECTOR =
+  "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+type SpatialDirection = "ArrowDown" | "ArrowRight" | "ArrowUp" | "ArrowLeft";
+
+/**
+ * Text fields keep left/right for caret movement, while up/down remain useful
+ * escape routes for a TV remote. Multiline and choice controls keep all of
+ * their native arrow-key behaviour.
+ */
+function shouldKeepNativeEditableKey(target: HTMLElement | null, key: string): boolean {
+  const editable = target?.closest<HTMLElement>("input, textarea, select, [contenteditable='true']");
+  if (!editable) return false;
+  if (!(editable instanceof HTMLInputElement)) return true;
+
+  const textInputTypes = new Set(["text", "search", "email", "password", "tel", "url"]);
+  return !textInputTypes.has(editable.type) || key === "ArrowLeft" || key === "ArrowRight";
+}
+
+/** Move remote/keyboard focus according to the controls' real screen positions. */
+function moveSpatialFocus(root: HTMLElement, direction: SpatialDirection): boolean {
+  const controls = Array.from(root.querySelectorAll<HTMLElement>(SPATIAL_CONTROL_SELECTOR))
+    .filter(element => {
+      const style = window.getComputedStyle(element);
+      return style.visibility !== "hidden"
+        && style.display !== "none"
+        && element.getClientRects().length > 0
+        && element.getAttribute("aria-disabled") !== "true";
+    });
+  if (controls.length === 0) return false;
+
+  const activeElement = document.activeElement as HTMLElement | null;
+  if (!activeElement || !controls.includes(activeElement)) {
+    const preferred = controls.find(element => element.dataset.tvPrimary === "true")
+      ?? controls.find(element => element.dataset.tvNav !== "true")
+      ?? controls[0];
+    preferred?.focus({ preventScroll: true });
+    preferred?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    return true;
+  }
+
+  const currentRect = activeElement.getBoundingClientRect();
+  const currentX = currentRect.left + currentRect.width / 2;
+  const currentY = currentRect.top + currentRect.height / 2;
+  const candidates = controls
+    .filter(element => element !== activeElement)
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const dx = rect.left + rect.width / 2 - currentX;
+      const dy = rect.top + rect.height / 2 - currentY;
+      const isInDirection =
+        (direction === "ArrowRight" && dx > 4) ||
+        (direction === "ArrowLeft" && dx < -4) ||
+        (direction === "ArrowDown" && dy > 4) ||
+        (direction === "ArrowUp" && dy < -4);
+      if (!isInDirection) return null;
+      const horizontal = direction === "ArrowRight" || direction === "ArrowLeft";
+      const primaryDistance = horizontal ? Math.abs(dx) : Math.abs(dy);
+      const crossDistance = horizontal ? Math.abs(dy) : Math.abs(dx);
+      return { element, score: primaryDistance + crossDistance * 2.25 };
+    })
+    .filter((candidate): candidate is { element: HTMLElement; score: number } => candidate !== null)
+    .sort((a, b) => a.score - b.score);
+
+  const next = candidates[0]?.element;
+  if (!next) return false;
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: "nearest", inline: "nearest" });
+  return true;
+}
 
 // ── Haptic Feedback — safe wrapper around navigator.vibrate ───────────────────
 const triggerHaptic = (pattern: number | number[]) => {
@@ -414,15 +485,44 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
     window.history.replaceState({}, "", url.toString());
   }, [showAuth]);
 
+  // Smart-TV remotes often expose only arrows + Enter. Keep navigation spatial
+  // on the landing screen and constrain it to the topmost modal when one opens.
+  useEffect(() => {
+    const handleRemoteNavigation = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) return;
+      if (shouldKeepNativeEditableKey(target, event.key)) return;
+
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']"))
+        .filter(dialog => dialog.getClientRects().length > 0);
+      const overlays = Array.from(document.querySelectorAll<HTMLElement>(".fixed.inset-0"))
+        .filter(overlay => overlay.getClientRects().length > 0)
+        .sort((a, b) => {
+          const zA = Number.parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
+          const zB = Number.parseInt(window.getComputedStyle(b).zIndex, 10) || 0;
+          return zA - zB;
+        });
+      const root = dialogs[dialogs.length - 1]
+        ?? overlays[overlays.length - 1]
+        ?? document.querySelector<HTMLElement>("[data-qinaa-home-root]");
+      if (root && moveSpatialFocus(root, event.key as SpatialDirection)) event.preventDefault();
+    };
+    window.addEventListener("keydown", handleRemoteNavigation);
+    return () => window.removeEventListener("keydown", handleRemoteNavigation);
+  }, []);
+
   return (
-    <div className="min-h-full w-full flex flex-col relative" style={ROOT_STYLE}>
+    <div
+      className="qinaa-home min-h-full w-full flex flex-col relative"
+      data-qinaa-home-root="true"
+      style={ROOT_STYLE}>
       {/* flex-1 centering region — footer sits below this, anchored naturally by flex column */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
-      <div className="flex flex-col items-center gap-10 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+      <div className="qinaa-home__content flex flex-col items-center gap-10 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
 
         {/* Logo + Title */}
-        <div className="flex flex-col items-center gap-3">
-          <div style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
+        <div className="qinaa-home__brand flex flex-col items-center gap-3">
+          <div className="qinaa-home__mark" style={{ filter: "drop-shadow(0 0 40px #D32F2F55)" }}>
             <VenetianMask size={120} color="#D32F2F" strokeWidth={0.8} />
           </div>
           <h1 className="text-6xl font-black tracking-widest" style={{ color: "#D32F2F" }}>القناع</h1>
@@ -438,7 +538,8 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           <button
             dir="rtl"
             onClick={() => { if (!user) { setShowAuth(true); return; } onSelect("narrator"); }}
-            className="w-full flex items-center px-5 py-5 rounded-2xl transition-all duration-200 active:scale-95"
+            data-tv-primary="true"
+            className="qinaa-button qinaa-button--council qinaa-home__primary w-full flex items-center px-5 py-5 rounded-2xl"
             style={{ backgroundColor: "#061210", border: "1px solid #10B98133", boxShadow: "0 0 24px #10B98111" }}>
             {/* Child 1 — RIGHT: icon */}
             <div className="flex items-center justify-center w-12 h-12 rounded-xl shrink-0"
@@ -494,7 +595,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
           {/* Rules — ghost/outline style, visually subordinate */}
           <button
             onClick={() => setShowGuide(true)}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-200 active:scale-95"
+            className="qinaa-button qinaa-button--secondary qinaa-home__guide w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-3.5 rounded-2xl"
             style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#666666" }}>
             <BookOpen size={18} strokeWidth={1.8} />
             <span className="text-sm font-semibold">شرح اللعبة</span>
@@ -585,7 +686,9 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
       {/* ── Info button — fixed top-left ── */}
       <button
         onClick={() => setShowAbout(true)}
-        className="fixed top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 active:scale-90"
+        aria-label="عن لعبة القناع"
+        data-tv-nav="true"
+        className="qinaa-icon-button fixed top-6 left-6 flex items-center justify-center w-10 h-10 rounded-full"
         style={{ backgroundColor: "#111111", border: "1px solid #2A2A2A", color: "rgba(255,255,255,0.35)" }}
         onMouseEnter={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.85)")}
         onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}>
@@ -934,6 +1037,8 @@ interface SetupPrefs {
   isNarratorMuted: boolean;
   /** Reduce decorative movement while preserving phase/state feedback. */
   reduceMotion: boolean;
+  /** Force the living-room layout on laptops and displays below the auto breakpoint. */
+  largeScreenMode: boolean;
 }
 
 function defaultActiveMods(): Record<string, boolean> {
@@ -982,6 +1087,7 @@ function defaultSetupPrefs(): SetupPrefs {
     customSpeedsV1: defaultCustomSpeeds(),
     isNarratorMuted: false,
     reduceMotion: false,
+    largeScreenMode: false,
   };
 }
 
@@ -1051,6 +1157,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
           parsed.isNarratorMuted === true ||
           (parsed as { isMuted?: boolean }).isMuted === true,
         reduceMotion: parsed.reduceMotion === true,
+        largeScreenMode: parsed.largeScreenMode === true,
       };
     }
   } catch { /* ignore corrupt snapshot */ }
@@ -1077,6 +1184,7 @@ function loadSetupPrefs(narratorFallback?: Record<string, unknown> | null): Setu
         narratorFallback.isNarratorMuted === true ||
         narratorFallback.isMuted === true,
       reduceMotion: narratorFallback.reduceMotion === true,
+      largeScreenMode: narratorFallback.largeScreenMode === true,
     };
   }
 
@@ -1320,6 +1428,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [reduceMotion, setReduceMotion] = useState(
     () => SETUP.reduceMotion,
   );
+  const [largeScreenMode, setLargeScreenMode] = useState(
+    () => SETUP.largeScreenMode,
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -1426,6 +1537,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       customSpeedsV1: customSpeeds,
       isNarratorMuted,
       reduceMotion,
+      largeScreenMode,
     });
   }, [
     isPassPhoneMode,
@@ -1438,6 +1550,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     customSpeeds,
     isNarratorMuted,
     reduceMotion,
+    largeScreenMode,
   ]);
 
   // ── Sync in-game narrator snapshot to localStorage on every change ──
@@ -1584,44 +1697,32 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const isEditing = !!target?.closest("input, textarea, select, [contenteditable='true']");
-      if (isEditing || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
 
-      if (event.code === "KeyF") {
+      const direction = event.key;
+      const isArrow = ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(direction);
+      if (isEditing && (!isArrow || shouldKeepNativeEditableKey(target, direction))) return;
+
+      if (!isEditing && event.code === "KeyF") {
         event.preventDefault();
         toggleAppFullscreen();
         return;
       }
-      if (event.code === "KeyM") {
+      if (!isEditing && event.code === "KeyM") {
         event.preventDefault();
         setIsNarratorMuted(value => !value);
         return;
       }
-      if (event.code === "KeyR") {
+      if (!isEditing && event.code === "KeyR") {
         event.preventDefault();
         replayLastAudio();
         return;
       }
 
-      const forward = event.key === "ArrowDown" || event.key === "ArrowRight";
-      const backward = event.key === "ArrowUp" || event.key === "ArrowLeft";
-      if (!forward && !backward) return;
+      if (!isArrow) return;
 
       const root = document.querySelector<HTMLElement>("[data-council-root]");
-      if (!root) return;
-      const controls = Array.from(root.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
-      )).filter(element => {
-        const style = window.getComputedStyle(element);
-        return style.visibility !== "hidden" && style.display !== "none" && element.getClientRects().length > 0;
-      });
-      if (controls.length === 0) return;
-
-      event.preventDefault();
-      const currentIndex = controls.indexOf(document.activeElement as HTMLElement);
-      const nextIndex = currentIndex < 0
-        ? 0
-        : (currentIndex + (forward ? 1 : -1) + controls.length) % controls.length;
-      controls[nextIndex]?.focus({ preventScroll: false });
+      if (root && moveSpatialFocus(root, direction as SpatialDirection)) event.preventDefault();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -2487,6 +2588,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           aria-label={navAction.title}
           className={navBtnClass}
           data-tv-control="true"
+          data-tv-nav="true"
+          data-tv-danger="true"
           style={navBtnStyle}>
           <navAction.Icon size={18} strokeWidth={2} />
         </button>
@@ -2497,6 +2600,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           aria-label={isFullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
           className={navBtnClass}
           data-tv-control="true"
+          data-tv-nav="true"
           style={{
             ...navBtnStyle,
             color: isFullscreen ? "#ffffff" : "rgba(255,255,255,0.70)",
@@ -2515,6 +2619,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           aria-label="إعادة آخر تعليق صوتي"
           aria-keyshortcuts="R"
           data-tv-control="true"
+          data-tv-nav="true"
           className={navBtnClass}
           style={navBtnStyle}>
           <RotateCcw size={18} strokeWidth={2} />
@@ -2525,6 +2630,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           aria-label={isNarratorMuted ? "تشغيل الراوي الصوتي" : "كتم الراوي الصوتي"}
           aria-keyshortcuts="M"
           data-tv-control="true"
+          data-tv-nav="true"
           className={navBtnClass}
           style={{
             ...navBtnStyle,
@@ -2593,6 +2699,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const cardDescription = currentTwin
       ? `توأمك هو ${currentTwin.name} — إذا مات أحدكما يلحق به الآخر.`
       : undefined;
+    const revealCurrentCard = () => {
+      if (isCardFlipped) return;
+      setIsCardFlipped(true);
+      playSfx("card_flip.mp3");
+      playSfx("role_reveal.mp3");
+    };
 
     // ── Pass-the-Phone gate ──
     // Intercepts before the role card is even mounted. Only renders when
@@ -2614,7 +2726,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>
                 الليلة التعريفية
               </span>
-              <p className="text-xs" style={{ color: "#333333" }}>
+              <p dir="ltr" className="text-xs" style={{ color: "#333333" }}>
                 {currentIndex + 1} / {assignedRoles.length}
               </p>
             </div>
@@ -2649,10 +2761,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             {/* Reveal CTA — named so only the intended player taps it */}
             <motion.button
               onClick={() => setIsBlindScreen(false)}
+              data-tv-primary="true"
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-300 active:scale-95"
+              className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
               style={{
                 backgroundColor: "#D32F2F",
                 color: "#ffffff",
@@ -2679,7 +2792,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               الليلة التعريفية
             </span>
             <h1 className="text-2xl font-black text-white">الجميع ينام..</h1>
-            <p className="text-xs" style={{ color: "#333333" }}>
+            <p dir="ltr" className="text-xs" style={{ color: "#333333" }}>
               {currentIndex + 1} / {assignedRoles.length}
             </p>
           </div>
@@ -2697,11 +2810,16 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               linger or peek through during the transition. */}
           <div
             key={currentIndex}
-            onClick={() => {
-              if (isCardFlipped) return;
-              setIsCardFlipped(true);
-              playSfx("card_flip.mp3");
-              playSfx("role_reveal.mp3");
+            role="button"
+            tabIndex={0}
+            aria-label={isCardFlipped ? `دور ${current.name} مكشوف` : `اكشف دور ${current.name}`}
+            aria-disabled={isCardFlipped}
+            data-tv-primary="true"
+            onClick={revealCurrentCard}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              revealCurrentCard();
             }}
             style={{ perspective: "900px", cursor: isCardFlipped ? "default" : "pointer" }}
             className="role-card-shell w-full select-none">
@@ -2710,7 +2828,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <motion.div
               whileTap={isCardFlipped ? {} : { scale: 0.98 }}
               animate={{ rotateY: isCardFlipped ? 180 : 0 }}
-              transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
+              transition={{ duration: reduceMotion ? 0.05 : 0.42, ease: [0.22, 1, 0.36, 1] }}
               style={{
                 width: "100%",
                 height: "100%",
@@ -2719,11 +2837,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               }}>
 
               {/* ── FRONT (hidden/mystery) ── */}
-              <div style={{
+              <div className="role-card-hidden-face" style={{
                 position: "absolute", inset: 0,
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
-                borderRadius: 16,
+                borderRadius: 20,
                 backgroundColor: "#0D0D0D",
                 border: "1.5px solid #222222",
                 display: "flex",
@@ -2769,10 +2887,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <motion.button
             onClick={handleNext}
             disabled={!isCardFlipped}
+            data-tv-primary="true"
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-300 active:scale-95"
+            className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
             style={{
               backgroundColor: isCardFlipped ? "#D32F2F" : "#111111",
               color:           isCardFlipped ? "#ffffff" : "#2A2A2A",
@@ -3418,10 +3537,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <motion.button
                 onClick={handleNightStep}
                 disabled={!isCurrentPlayerDead && !hasTarget && !nightTimerExpired}
+                data-tv-primary="true"
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+                className="qinaa-button w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
                 style={{
                   backgroundColor: isCurrentPlayerDead ? "#1A1A1A" : hasTarget ? meta.color : nightTimerExpired ? "#2A2A2A" : "#1A1A1A",
                   color: isCurrentPlayerDead ? "#555555" : hasTarget ? "#ffffff" : nightTimerExpired ? "#888888" : "#333",
@@ -3525,7 +3645,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.02 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+        data-tv-primary="true"
+        className="qinaa-button qinaa-button--secondary w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
         style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
         <ChevronRight size={20} strokeWidth={2} />
         <span>متابعة</span>
@@ -3650,7 +3771,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            data-tv-primary="true"
+            className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
             style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
             <AdvanceIcon size={20} strokeWidth={2} />
             <span>{advanceLabel}</span>
@@ -3841,7 +3963,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            className="qinaa-button w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
             style={{
               backgroundColor: isTownWin ? "#001428" : isMadmanWin ? "#140020" : "#1A0000",
               border: `1.5px solid ${borderCol}`,
@@ -3857,10 +3979,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
           <motion.button
             onClick={handlePlayAgainSamePlayers}
+            data-tv-primary="true"
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+            className="qinaa-button qinaa-button--secondary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
             style={{
               backgroundColor: "transparent",
               color: accent,
@@ -3932,7 +4055,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.02 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        className="w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold transition-all duration-200 active:scale-95"
+        className="qinaa-button qinaa-button--skip w-full flex flex-row-reverse items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-semibold"
         style={{ backgroundColor: "transparent", border: "1px solid #2A2A2A", color: "#555" }}>
         <Shuffle size={16} strokeWidth={2} />
         <span>إعادة اللعبة من البداية</span>
@@ -3942,10 +4065,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const skipNightBtn = (
       <motion.button
         onClick={handleStartNextNight}
+        data-tv-primary="true"
         whileTap={{ scale: 0.95 }}
         whileHover={{ scale: 1.02 }}
         transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+        className="qinaa-button qinaa-button--secondary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
         style={{ backgroundColor: "#1A1A1A", color: "#888", border: "1px solid #2A2A2A" }}>
         <Moon size={20} strokeWidth={2} />
         <span>بدء الليلة التالية</span>
@@ -4011,10 +4135,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 setTimerEndsAt(Date.now() + speedPreset.discuss * 1000);
                 setDaySubPhase("discussion");
               }}
+              data-tv-primary="true"
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>بدء النقاش</span>
@@ -4082,10 +4207,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               <div className="flex-1" />
               <motion.button
                 onClick={startVoting}
+                data-tv-primary="true"
                 whileTap={{ scale: 0.95 }}
                 whileHover={{ scale: 1.02 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+                className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
                 style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
                 <Users size={20} strokeWidth={2} />
                 <span>بدء التصويت</span>
@@ -4253,10 +4379,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             <motion.button
               onClick={handleCountVotes}
               disabled={!votingComplete}
+              data-tv-primary="true"
               whileTap={votingComplete ? { scale: 0.95 } : {}}
               whileHover={votingComplete ? { scale: 1.02 } : {}}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 disabled:cursor-not-allowed"
+              className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base disabled:cursor-not-allowed"
               style={{
                 backgroundColor: votingComplete ? "#D32F2F" : "#1A1A1A",
                 color: votingComplete ? "#fff" : "#555",
@@ -4373,10 +4500,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 setFinalVoteVoterIndex(0);
                 setDaySubPhase("final_vote");
               }}
+              data-tv-primary="true"
               whileTap={{ scale: 0.95 }}
               whileHover={{ scale: 1.02 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              className="w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200 active:scale-95"
+              className="qinaa-button qinaa-button--primary w-full flex flex-row-reverse items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-base"
               style={{ backgroundColor: "#D32F2F", color: "#fff", boxShadow: "0 0 32px #D32F2F55" }}>
               <Users size={20} strokeWidth={2} />
               <span>بدء التصويت النهائي</span>
@@ -4528,11 +4656,12 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <motion.button
             onClick={handleFinalVerdict}
             disabled={!finalVotingComplete}
+            data-tv-primary="true"
             whileTap={finalVotingComplete ? { scale: 0.95 } : {}}
             whileHover={finalVotingComplete ? { scale: 1.02 } : {}}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
             dir="rtl"
-            className="w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-black text-base transition-all duration-200"
+            className="qinaa-button w-full flex items-center justify-center gap-2 px-5 py-4 rounded-2xl font-black text-base"
             style={{
               backgroundColor: finalVotingComplete ? (canExecute ? "#D32F2F" : "#1B5E20") : "#1A1A1A",
               color: finalVotingComplete ? "#fff" : "#555555",
@@ -4568,10 +4697,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-full w-full flex flex-col px-5 pt-3 pb-8" style={ROOT_STYLE}>
       {globalControls}
-      <div className="flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
+      <div className="qinaa-setup-layout qinaa-stage-grid flex flex-col gap-6 w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex-1">
 
         {/* ── Header ── */}
-        <div className="flex flex-col gap-1">
+        <div className="qinaa-setup-header flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Monitor size={18} color="#D32F2F" strokeWidth={1.8} />
             <span className="text-xs font-bold tracking-widest uppercase" style={{ color: "#D32F2F" }}>طور المجلس</span>
@@ -4581,7 +4710,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* ── Add Player Input ── */}
-        <div className="flex flex-col gap-1.5">
+        <div className="qinaa-setup-input flex flex-col gap-1.5">
           <div className="flex gap-2">
             <input
               ref={inputRef}
@@ -4600,6 +4729,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               }}
             />
             <button
+              type="button"
+              aria-label="إضافة اللاعب"
               onClick={addPlayer}
               disabled={!newPlayer.trim()}
               className="flex items-center justify-center w-12 h-12 rounded-2xl flex-shrink-0 transition-all duration-150 active:scale-95"
@@ -4622,7 +4753,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             narrator can see the current roster size at a glance even when the
             list is scrolled. ── */}
         {players.length > 0 && (
-          <div className="flex items-center justify-end px-1 -mb-1">
+          <div className="qinaa-setup-counter flex items-center justify-end px-1 -mb-1">
             <span className="text-[11px] font-semibold tracking-wide" style={{ color: "#666666" }}>
               {`عدد اللاعبين: ${players.length}`}
             </span>
@@ -4632,7 +4763,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         {/* ── Players List — capped scroll height keeps the bottom CTA visible
             on small screens regardless of roster size. ── */}
         {players.length > 0 ? (
-          <div className="flex flex-col rounded-2xl overflow-y-auto"
+          <div className="qinaa-setup-roster flex flex-col rounded-2xl overflow-y-auto"
             style={{ border: "1px solid #1E1E1E", backgroundColor: "#0A0A0A", maxHeight: "min(42vh, 360px)" }}>
             {players.map((name, idx) => (
               <div key={name} className="flex items-center justify-between px-4 py-3.5"
@@ -4646,7 +4777,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   <span className="text-sm font-semibold text-white">{name}</span>
                 </div>
                 {/* Trash icon: last in DOM = far left in RTL */}
-                <button onClick={() => removePlayer(name)}
+                <button type="button" aria-label={`حذف ${name}`} onClick={() => removePlayer(name)}
                   className="flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-150 active:scale-90"
                   style={{ backgroundColor: "transparent" }}>
                   <Trash2 size={15} color="#3A3A3A" strokeWidth={2} />
@@ -4655,7 +4786,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-2xl"
+          <div className="qinaa-setup-roster flex flex-col items-center justify-center gap-3 py-10 rounded-2xl"
             style={{ border: "1px dashed #1E1E1E" }}>
             <UserPlus size={28} color="#2A2A2A" strokeWidth={1.5} />
             <span className="text-sm" style={{ color: "#333333" }}>لا يوجد لاعبون بعد</span>
@@ -4663,7 +4794,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         )}
 
         {/* ── Spacer ── */}
-        <div className="flex-1" />
+        <div className="qinaa-setup-spacer flex-1" />
 
         {/* ── Expansion Pack — fully interactive ── */}
         {(() => {
@@ -4676,7 +4807,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           const activeCount = Object.values(activeMods).filter(Boolean).length;
 
           return (
-            <div className="flex flex-col rounded-2xl overflow-hidden"
+            <div className="qinaa-setup-expansions flex flex-col rounded-2xl overflow-hidden"
               style={{
                 border: `1px solid ${isModsEnabled ? "#2A2A2A" : "#1A1A1A"}`,
                 backgroundColor: "#080808",
@@ -4713,6 +4844,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
                 {/* Left side: master toggle only — no chevron */}
                 <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isModsEnabled}
+                  aria-label="تفعيل إضافات القناع"
                   onClick={() => {
                     if (isModsEnabled) {
                       setIsModsEnabled(false);
@@ -4755,7 +4890,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
                     <div style={{ height: 1, backgroundColor: "#141414", margin: "0 16px" }} />
 
-                    <div className="flex flex-col p-3 gap-2">
+                    <div className="qinaa-expansion-grid flex flex-col p-3 gap-2">
                       {EXPANSION_MODS.map(mod => {
                         const isOn = activeMods[mod.id];
                         const cost = MOD_COST[mod.id] ?? 1;
@@ -4832,6 +4967,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                 </button>
                               ) : (
                                 <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={isOn}
+                                  aria-label={`${isOn ? "تعطيل" : "تفعيل"} ${mod.name}`}
                                   onClick={e => { e.stopPropagation(); if (!isDisabled) toggleMod(mod.id); }}
                                   disabled={isDisabled}
                                   style={{
@@ -4880,6 +5019,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                                       <button
                                         key={opt.id}
                                         type="button"
+                                        aria-pressed={selected}
                                         onClick={e => { e.stopPropagation(); setMagicianPotionMode(opt.id); }}
                                         className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-all duration-150 active:scale-[0.99] text-right"
                                         style={{
@@ -4943,7 +5083,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             One unified container with a slim header, a segmented "سرعة"
             control, and a low-profile inheritance row. Tight vertical
             rhythm keeps the bottom CTA in view on small screens. */}
-        <div className="flex flex-col rounded-2xl overflow-hidden"
+        <div className="qinaa-setup-settings flex flex-col rounded-2xl overflow-hidden"
           style={{ backgroundColor: "#141414", border: "1px solid #1F1F1F" }}>
 
           {/* Header */}
@@ -4981,6 +5121,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 return (
                   <button
                     key={id}
+                    type="button"
+                    aria-pressed={isActive}
                     onClick={() => setGameSpeed(id)}
                     className="flex-1 px-1.5 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-[0.97]"
                     style={{
@@ -5072,8 +5214,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           {/* ── Row 1.5: الراوي الصوتي ──
               Mutes night-phase narrator VO only; card / victory / UI SFX stay on. */}
           <button
+            type="button"
+            role="switch"
+            aria-checked={!isNarratorMuted}
             onClick={() => setIsNarratorMuted(m => !m)}
-            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: !isNarratorMuted ? "#170000" : "transparent", borderBottom: "1px solid #1A1A1A" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: !isNarratorMuted ? "#FFFFFF" : "#AAAAAA" }}>
@@ -5098,8 +5243,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               second. Parent is `flex justify-between` so RTL flow pushes
               the text to the right edge and the switch to the left edge. */}
           <button
+            type="button"
+            role="switch"
+            aria-checked={boyInheritsAce}
             onClick={() => setBoyInheritsAce(v => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: boyInheritsAce ? "#170000" : "transparent" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: boyInheritsAce ? "#FFFFFF" : "#AAAAAA" }}>
@@ -5120,8 +5268,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           </button>
 
           <button
+            type="button"
+            role="switch"
+            aria-checked={silencedCannotDefend}
             onClick={() => setSilencedCannotDefend(v => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: silencedCannotDefend ? "#170000" : "transparent", borderTop: "1px solid #1A1A1A" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: silencedCannotDefend ? "#FFFFFF" : "#AAAAAA" }}>
@@ -5140,8 +5291,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
           {/* ── Row 3: نظام تمرير الجوال — same layout contract as Row 2 ── */}
           <button
+            type="button"
+            role="switch"
+            aria-checked={isPassPhoneMode}
             onClick={() => setIsPassPhoneMode(v => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: isPassPhoneMode ? "#170000" : "transparent" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: isPassPhoneMode ? "#FFFFFF" : "#AAAAAA" }}>
@@ -5161,10 +5315,36 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </div>
           </button>
 
-          {/* ── Row 4: reduced motion — keeps state feedback without long cinematic movement. */}
+          {/* ── Row 4: large-screen mode — manual override for TVs and laptops. */}
           <button
+            type="button"
+            role="switch"
+            aria-checked={largeScreenMode}
+            onClick={() => setLargeScreenMode(value => !value)}
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            style={{ backgroundColor: largeScreenMode ? "#0B141C" : "transparent", borderTop: "1px solid #1A1A1A" }}>
+            <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
+              <span className="text-xs font-bold" style={{ color: largeScreenMode ? "#FFFFFF" : "#AAAAAA" }}>
+                وضع الشاشة الكبيرة
+              </span>
+              <span className="text-[10.5px] leading-snug" style={{ color: "#5C5C5C" }}>
+                يعمل تلقائيًا على التلفزيون · فعّله يدويًا للابتوب
+              </span>
+            </div>
+            <div className="w-9 h-5 rounded-full relative transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor: largeScreenMode ? "#D32F2F" : "#262626" }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+                style={{ backgroundColor: "#FFFFFF", right: largeScreenMode ? "0.125rem" : "1.125rem" }} />
+            </div>
+          </button>
+
+          {/* ── Row 5: reduced motion — keeps state feedback without long cinematic movement. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={reduceMotion}
             onClick={() => setReduceMotion(v => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
+            className="qinaa-setting-row w-full flex items-center justify-between gap-3 px-3.5 py-3 transition-colors duration-200 active:scale-[0.995]"
             style={{ backgroundColor: reduceMotion ? "#170000" : "transparent", borderTop: "1px solid #1A1A1A" }}>
             <div className="flex flex-col gap-0.5 text-right flex-1 min-w-0">
               <span className="text-xs font-bold" style={{ color: reduceMotion ? "#FFFFFF" : "#AAAAAA" }}>
@@ -5183,7 +5363,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* ── Bottom: helper text + CTA + back ── */}
-        <div className="flex flex-col gap-3">
+        <div className="qinaa-setup-footer flex flex-col gap-3">
           {!canDistribute && (
             <p className="text-xs text-center font-semibold" style={{ color: "#444444" }}>
               أضف {remaining} {remaining === 1 ? "لاعباً" : "لاعبين"} على الأقل للبدء
@@ -5192,6 +5372,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
           <motion.button
             onClick={handleDistribute}
             disabled={!canDistribute}
+            data-tv-primary="true"
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -5227,9 +5408,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       className="qinaa-council"
       data-council-root="true"
       data-reduce-motion={reduceMotion ? "true" : "false"}
+      data-display-mode={largeScreenMode ? "tv" : "auto"}
+      data-phase={phase}
       initial={false}
       animate={{ "--n-bg": isDayPhase ? "#1A1A1A" : "#000000" } as unknown as Record<string, string>}
-      transition={{ duration: 1.5, ease: "easeInOut" }}
+      transition={{ duration: reduceMotion ? 0.05 : 0.45, ease: "easeInOut" }}
       style={{ "--n-bg": "#000000", height: "100dvh", width: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } as React.CSSProperties}
     >
       {floatingButtons}
@@ -5237,10 +5420,11 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       <AnimatePresence mode="wait">
         <motion.div
           key={phaseKey}
+          className="qinaa-stage-scroll"
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -15 }}
-          transition={{ duration: 0.25, ease: "easeOut" }}
+          transition={{ duration: reduceMotion ? 0.05 : 0.22, ease: "easeOut" }}
           style={{ width: "100%", flex: 1, overflowY: "auto", minHeight: 0 }}
         >
           {renderPhaseContent()}

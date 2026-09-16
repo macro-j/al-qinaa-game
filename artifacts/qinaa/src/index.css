@@ -423,6 +423,7 @@
    (NarratorMode) so the browser chrome never bounces. */
 html,
 body {
+  height: 100vh;
   height: 100dvh;
   width: 100%;
   overflow: hidden;
@@ -435,6 +436,70 @@ body {
   background-color: #000;
 }
 
+#root button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 4px;
+  box-shadow: 0 0 0 7px rgba(251, 191, 36, 0.16);
+}
+
+/* Landing page shares the same restrained paper/red language as the council. */
+.qinaa-home {
+  --qinaa-tv-scale: 0;
+  background-color: #000;
+  background-image:
+    radial-gradient(circle at 50% 38%, rgba(127, 29, 29, 0.11), transparent 29%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.009) 0 1px, transparent 1px 34px);
+}
+
+.qinaa-button--council {
+  background: linear-gradient(180deg, #071714 0%, #04100e 100%);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: #fff;
+  box-shadow: 0 12px 34px rgba(16, 185, 129, 0.08);
+}
+
+@media (min-width: 1280px) and (min-height: 680px) {
+  .qinaa-home {
+    --qinaa-tv-scale: 1;
+  }
+
+  .qinaa-home__content {
+    max-width: min(58rem, calc(100vw - 10rem)) !important;
+    gap: 3rem;
+  }
+
+  .qinaa-home__mark svg {
+    width: 9.5rem;
+    height: 9.5rem;
+  }
+
+  .qinaa-home__brand h1 {
+    font-size: 5rem;
+  }
+
+  .qinaa-home__brand p,
+  .qinaa-home__primary [class~="text-xs"] {
+    font-size: 1rem;
+  }
+
+  .qinaa-home__primary [class~="text-lg"] {
+    font-size: 1.5rem;
+  }
+
+  .qinaa-home__primary {
+    min-height: 6rem;
+  }
+
+  .qinaa-home__guide {
+    min-height: 4.5rem;
+    font-size: 1.125rem;
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
    Council design system — shared screen / TV behavior
    ───────────────────────────────────────────────────────────────────────── */
@@ -445,10 +510,47 @@ body {
   --qinaa-surface-raised: rgba(23, 23, 23, 0.96);
   --qinaa-border: rgba(255, 255, 255, 0.1);
   --qinaa-focus: #fbbf24;
+  --qinaa-tv-scale: 0;
   isolation: isolate;
-  background:
-    radial-gradient(circle at 50% -20%, rgba(127, 29, 29, 0.14), transparent 42%),
-    var(--n-bg, #000);
+  height: 100vh;
+  height: 100dvh;
+  background-color: var(--n-bg, #000);
+  background-image:
+    radial-gradient(circle at 50% -18%, rgba(160, 22, 22, 0.2), transparent 38%),
+    radial-gradient(circle at 8% 88%, rgba(98, 18, 18, 0.1), transparent 34%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 32px);
+  transition: background-color 0.45s ease;
+}
+
+.qinaa-council[data-phase="day"] {
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(180, 116, 18, 0.13), transparent 40%),
+    radial-gradient(circle at 92% 88%, rgba(120, 63, 8, 0.07), transparent 34%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 32px);
+}
+
+.qinaa-council[data-display-mode="tv"] {
+  --qinaa-tv-scale: 1;
+}
+
+.qinaa-stage-scroll {
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(211, 47, 47, 0.45) transparent;
+  scrollbar-width: thin;
+  scroll-padding-block: 6rem 2rem;
+}
+
+.qinaa-stage-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.qinaa-stage-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(211, 47, 47, 0.42);
+}
+
+.qinaa-council :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  scroll-margin-block: 6rem 2rem;
 }
 
 .qinaa-council :is(button, a, input, select, textarea):focus-visible {
@@ -458,10 +560,31 @@ body {
 }
 
 .qinaa-button {
-  min-height: 3.5rem;
-  border: 1px solid transparent;
+  min-height: calc(3.5rem + (0.75rem * var(--qinaa-tv-scale, 0)));
+  padding-inline: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  font-weight: 900;
   letter-spacing: 0.01em;
   touch-action: manipulation;
+  transition: filter 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.qinaa-button:not(:disabled):hover {
+  filter: brightness(1.09);
+}
+
+.qinaa-button:not(:disabled):active {
+  filter: brightness(0.92);
+}
+
+.qinaa-council button:disabled {
+  cursor: not-allowed;
+}
+
+.qinaa-button:disabled {
+  opacity: 0.48;
+  box-shadow: none !important;
 }
 
 .qinaa-button--primary {
@@ -471,7 +594,7 @@ body {
 }
 
 .qinaa-button--secondary {
-  background: var(--qinaa-surface-raised);
+  background: linear-gradient(180deg, rgba(35, 35, 35, 0.98), rgba(20, 20, 20, 0.98));
   border-color: var(--qinaa-border);
   color: #f5f5f5;
 }
@@ -488,8 +611,153 @@ body {
   color: #a3a3a3;
 }
 
-.qinaa-icon-button {
+.qinaa-setting-row {
+  min-height: calc(3.25rem + (0.5rem * var(--qinaa-tv-scale, 0)));
   touch-action: manipulation;
+}
+
+.qinaa-setting-row:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+/* Setup becomes a two-column host console on large shared screens. The same
+   markup stays a simple vertical flow on phones and tablets. */
+.qinaa-setup-layout {
+  display: var(--qinaa-setup-display, flex);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.qinaa-setup-header { grid-column: 1 / -1; grid-row: 1; }
+.qinaa-setup-input { grid-column: 1; grid-row: 2; }
+.qinaa-setup-counter { grid-column: 1; grid-row: 3; }
+.qinaa-setup-roster { grid-column: 1; grid-row: 4; min-height: 10rem; }
+.qinaa-setup-settings { grid-column: 2; grid-row: 2 / span 3; }
+.qinaa-setup-expansions { grid-column: 1 / -1; grid-row: 5; }
+.qinaa-setup-footer { grid-column: 1 / -1; grid-row: 6; }
+
+@media (min-width: 900px) {
+  .qinaa-council[data-display-mode="tv"] {
+    --qinaa-setup-display: grid;
+  }
+
+  .qinaa-council[data-display-mode="tv"] [class~="lg:max-w-3xl"] {
+    max-width: min(56rem, calc(100vw - 8rem)) !important;
+  }
+
+  .qinaa-council[data-display-mode="tv"] .qinaa-stage-grid {
+    max-width: min(68rem, calc(100vw - 8rem)) !important;
+  }
+
+  .qinaa-council[data-display-mode="tv"] .role-card-shell {
+    max-width: min(23rem, 34dvh);
+  }
+
+  .qinaa-council[data-display-mode="tv"] .qinaa-setup-spacer {
+    display: none;
+  }
+
+  .qinaa-council[data-display-mode="tv"] .qinaa-expansion-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) and (min-height: 680px) {
+  .qinaa-council {
+    --qinaa-setup-display: grid;
+  }
+
+  .qinaa-council [class~="lg:max-w-3xl"] {
+    max-width: min(56rem, calc(100vw - 8rem)) !important;
+  }
+
+  .qinaa-council .qinaa-stage-grid {
+    max-width: min(68rem, calc(100vw - 8rem)) !important;
+  }
+
+  .qinaa-council .qinaa-setup-spacer {
+    display: none;
+  }
+
+  .qinaa-council .qinaa-expansion-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qinaa-council .role-card-shell {
+    max-width: min(23rem, 34dvh);
+  }
+}
+
+.qinaa-choice-card {
+  min-height: calc(5rem + (1rem * var(--qinaa-tv-scale, 0)));
+  border-radius: 0.9rem;
+  touch-action: manipulation;
+  transition: filter 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.qinaa-choice-card:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.qinaa-segment-button {
+  min-height: calc(2.75rem + (0.5rem * var(--qinaa-tv-scale, 0)));
+  touch-action: manipulation;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, filter 150ms ease;
+}
+
+.qinaa-segment-button:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+.qinaa-icon-button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(13, 13, 13, 0.88);
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease, filter 150ms ease;
+  touch-action: manipulation;
+}
+
+.qinaa-icon-button:not(:disabled):hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+  filter: brightness(1.12);
+}
+
+.qinaa-modal-backdrop :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 4px;
+  box-shadow: 0 0 0 7px rgba(251, 191, 36, 0.16);
+}
+
+.qinaa-guide-panel {
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(211, 47, 47, 0.42) transparent;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 1280px) and (min-height: 680px) {
+  .qinaa-modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.96) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .qinaa-guide-panel {
+    max-width: min(72rem, calc(100vw - 8rem));
+    max-height: calc(100vh - 7rem);
+    padding: 2rem;
+  }
+
+  .qinaa-guide-panel [class~="text-xs"] {
+    font-size: 0.95rem;
+  }
+
+  .qinaa-guide-panel [class~="text-sm"] {
+    font-size: 1.08rem;
+  }
 }
 
 .role-icon {
@@ -509,9 +777,23 @@ body {
 
 /* ── Fixed paper-card template + deterministic role emblems ─────────────── */
 .role-card-shell {
-  aspect-ratio: 823 / 1230;
-  max-width: 19rem;
+  aspect-ratio: 1026 / 1533;
+  max-width: calc(19rem + (4rem * var(--qinaa-tv-scale, 0)));
   margin-inline: auto;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #070707;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.role-card-shell:focus-visible {
+  outline: 3px solid var(--qinaa-focus, #fbbf24);
+  outline-offset: 5px;
+}
+
+.role-card-flip-inner {
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .role-card-hidden-face {
@@ -530,6 +812,9 @@ body {
   background-repeat: no-repeat;
   background-position: center;
   background-size: 100% 100%;
+  background-color: #080808;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
   color: white;
 }
 
@@ -605,43 +890,62 @@ body {
   text-shadow: 0 1px 3px #000;
 }
 
-/* A living-room display needs a wider stage and copy readable from a few
-   metres away. The attribute selector targets the existing shared container
-   token without changing the phone/tablet layout. */
+/* Shared-screen scaling is automatic on large displays and can also be forced
+   from Council settings on laptops or browsers with unusual TV viewports. */
 @media (min-width: 1280px) and (min-height: 680px) {
-  .qinaa-council [class~="lg:max-w-3xl"] {
-    max-width: min(72rem, calc(100vw - 10rem)) !important;
+  .qinaa-council {
+    --qinaa-tv-scale: 1;
   }
+}
 
-  .qinaa-council [class~="text-xs"] {
-    font-size: clamp(0.875rem, 0.75rem + 0.2vw, 1rem);
-    line-height: 1.6;
-  }
+.qinaa-council [class~="text-[9px]"],
+.qinaa-council [class~="text-[10px]"],
+.qinaa-council [class~="text-[10.5px]"],
+.qinaa-council [class~="text-[11px]"] {
+  font-size: calc(0.6875rem + (0.1875rem * var(--qinaa-tv-scale)));
+  line-height: 1.55;
+}
 
-  .qinaa-council [class~="text-sm"] {
-    font-size: clamp(1rem, 0.85rem + 0.25vw, 1.125rem);
-    line-height: 1.55;
-  }
+.qinaa-council [class~="text-xs"] {
+  font-size: calc(0.75rem + (0.25rem * var(--qinaa-tv-scale)));
+  line-height: 1.6;
+}
 
-  .qinaa-council [class~="text-base"] {
-    font-size: clamp(1.125rem, 0.95rem + 0.3vw, 1.25rem);
-  }
+.qinaa-council [class~="text-sm"] {
+  font-size: calc(0.875rem + (0.25rem * var(--qinaa-tv-scale)));
+  line-height: 1.55;
+}
 
-  .qinaa-council [class~="text-[10.5px]"],
-  .qinaa-council [class~="text-[11px]"] {
-    font-size: 0.875rem;
-    line-height: 1.55;
-  }
+.qinaa-council [class~="text-base"] {
+  font-size: calc(1rem + (0.25rem * var(--qinaa-tv-scale)));
+}
 
-  .qinaa-council [data-tv-control="true"] {
-    width: 3.25rem !important;
-    height: 3.25rem !important;
-  }
+.qinaa-council [class~="text-xl"] {
+  font-size: calc(1.25rem + (0.25rem * var(--qinaa-tv-scale)));
+}
 
-  .qinaa-council .qinaa-button {
-    min-height: 4.25rem;
-    font-size: 1.25rem;
-  }
+.qinaa-council [class~="text-2xl"] {
+  font-size: calc(1.5rem + (0.5rem * var(--qinaa-tv-scale)));
+}
+
+.qinaa-council [class~="text-3xl"] {
+  font-size: calc(1.875rem + (0.625rem * var(--qinaa-tv-scale)));
+}
+
+.qinaa-council [data-tv-control="true"] {
+  width: calc(2.5rem + (0.75rem * var(--qinaa-tv-scale))) !important;
+  height: calc(2.5rem + (0.75rem * var(--qinaa-tv-scale))) !important;
+}
+
+.qinaa-council [data-tv-control="true"] svg {
+  width: calc(1.125rem + (0.25rem * var(--qinaa-tv-scale)));
+  height: calc(1.125rem + (0.25rem * var(--qinaa-tv-scale)));
+}
+
+.qinaa-council[data-display-mode="tv"] :is(.qinaa-caption, [data-tv-surface="glass"]) {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background-color: rgba(10, 10, 10, 0.96) !important;
 }
 
 /* Explicit setting wins, while the media query covers people who selected
@@ -656,6 +960,12 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .qinaa-home .qinaa-button,
+  .qinaa-modal-backdrop .role-card-flip-inner,
+  .qinaa-modal-backdrop .qinaa-segment-button {
+    transition-duration: 0.01ms !important;
+  }
+
   .qinaa-council *,
   .qinaa-council *::before,
   .qinaa-council *::after {
