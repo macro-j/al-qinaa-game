@@ -1103,29 +1103,6 @@ const NARRATOR_VOICE_FILES = new Set([
   "wh1.m4a", "wh2.m4a", "wh3.m4a",
 ]);
 
-const AUDIO_CAPTIONS: Record<string, string> = {
-  "start.m4a": "تغلق القرية أعينها وتبدأ الليلة.",
-  "w1.m4a": "يصحى القاتل.",
-  "w2.m4a": "اختر ضحية القاتل.",
-  "w3.m4a": "ينام القاتل.",
-  "e1.m4a": "تصحى المُسكّت.",
-  "e2.m4a": "اختر من تُسكّته المُسكّت.",
-  "e3.m4a": "تنام المُسكّت.",
-  "q1.m4a": "يصحى القناص.",
-  "q2.m4a": "اختر ضحية القناص.",
-  "q3.m4a": "ينام القناص.",
-  "wh1.m4a": "يصحى الساحر.",
-  "wh2.m4a": "يختار الساحر جرعته.",
-  "wh3.m4a": "ينام الساحر.",
-  "s1.m4a": "يصحى الكاشف.",
-  "s2.m4a": "اختر من يكشفه الكاشف.",
-  "s3.m4a": "ينام الكاشف.",
-  "b1.m4a": "تصحى الحامية.",
-  "b2.m4a": "اختر من تحميه الحامية.",
-  "b3.m4a": "تنام الحامية.",
-  "morning.m4a": "تصحى القرية ويبدأ النهار.",
-};
-
 function isNarratorVoiceTrack(fileName: string): boolean {
   return NARRATOR_VOICE_FILES.has(fileName);
 }
@@ -1593,8 +1570,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const currentPlaying = useRef<HTMLAudioElement | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const lastPlayedAudioRef = useRef<string | null>(null);
-  const captionTimerRef = useRef<number | null>(null);
-  const [narratorCaption, setNarratorCaption] = useState<string | null>(null);
 
   useEffect(() => {
     const files = [
@@ -1644,13 +1619,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     const audio = audioCache.current[fileName];
     if (!audio) return;
     lastPlayedAudioRef.current = fileName;
-    const caption = AUDIO_CAPTIONS[fileName] ?? null;
-    setNarratorCaption(caption);
-    if (captionTimerRef.current !== null) window.clearTimeout(captionTimerRef.current);
-    captionTimerRef.current = window.setTimeout(() => {
-      setNarratorCaption(null);
-      captionTimerRef.current = null;
-    }, 5_500);
     audio.currentTime = 0;
     currentPlaying.current = audio;
     activeAudioRef.current = audio;
@@ -1666,11 +1634,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       currentPlaying.current.currentTime = 0;
       currentPlaying.current = null;
     }
-    if (captionTimerRef.current !== null) {
-      window.clearTimeout(captionTimerRef.current);
-      captionTimerRef.current = null;
-    }
-    setNarratorCaption(null);
   };
 
   // ── Night-phase audio maps — used by inline triggers at every
@@ -2643,32 +2606,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     </div>
   );
 
-  const narratorCaptionOverlay = (
-    <AnimatePresence>
-      {narratorCaption && (
-        <motion.div
-          key={narratorCaption}
-          role="status"
-          aria-live="polite"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          className="qinaa-caption fixed top-20 left-1/2 z-40 -translate-x-1/2 pointer-events-none px-5 py-3 rounded-2xl text-center text-sm font-bold"
-          style={{
-            width: "min(42rem, calc(100vw - 2rem))",
-            color: "#F5F5F5",
-            backgroundColor: "rgba(10,10,10,0.86)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            boxShadow: "0 12px 40px rgba(0,0,0,0.36)",
-          }}>
-          {narratorCaption}
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
   // ── In-flow spacer that reserves room below the fixed navbar (px-5 py-4
   //    + 40px button ≈ 72px). h-16 keeps every phase's first element clear
   //    of the bar without needing per-screen offsets.
@@ -3088,7 +3025,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 },
               ) => (
                 <div className={PLAYER_SELECTION_WRAP}>
-                  {players.map((p) => {
+                  {players.map((p, index) => {
                     const card = getCard(p);
                     const isResult = card.isResult;
                     return (
@@ -3105,7 +3042,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             color: isResult ? "#ffffff" : "#888888",
                             border: `1px solid ${isResult ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
                           }}>
-                          {p.seatNumber}
+                          {index + 1}
                         </span>
                         <span className="text-sm font-semibold text-center leading-tight"
                           style={{ color: isResult ? "#ffffff" : "#AAAAAA" }}>
@@ -3265,7 +3202,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 blockedTarget: string | null = null,
               ) => (
                 <div className={PLAYER_SELECTION_WRAP}>
-                  {list.map((p) => {
+                  {list.map((p, index) => {
                     const isSelected = selected === p.name;
                     const isBlocked  = blockedTarget === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
@@ -3283,7 +3220,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                             color:           isSelected ? "#ffffff"     : "#888888",
                             border:          `1px solid ${isSelected ? `${accent}66` : "rgba(255,255,255,0.08)"}`,
                           }}>
-                          {p.seatNumber}
+                          {index + 1}
                         </span>
                         <span className="text-sm font-semibold text-center leading-tight"
                           style={{ color: isSelected ? "#ffffff" : "#AAAAAA" }}>
@@ -3375,7 +3312,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
 
             return (
               <div className={PLAYER_SELECTION_WRAP}>
-                {targetList.map((p) => {
+                {targetList.map((p, index) => {
                   const isSelected      = selectedTarget === p.name;
                   const isCurrentPlayer = currentPlayer !== null && p.name === currentPlayer.name;
                   const isMafiaRole     = p.role === "الولد" || p.role === "الإكة" || p.role === "sniper";
@@ -3442,7 +3379,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                           color:           isSelected ? "#FF6B6B" : "#888888",
                           border: `1px solid ${isSelected ? "rgba(211,47,47,0.4)" : "rgba(255,255,255,0.08)"}`,
                         }}>
-                        {p.seatNumber}
+                        {index + 1}
                       </span>
 
                       {/* Name — wolf glyph appended when this is the Boy's disabled Ace ally */}
@@ -5416,7 +5353,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       style={{ "--n-bg": "#000000", height: "100dvh", width: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } as React.CSSProperties}
     >
       {floatingButtons}
-      {narratorCaptionOverlay}
       <AnimatePresence mode="wait">
         <motion.div
           key={phaseKey}

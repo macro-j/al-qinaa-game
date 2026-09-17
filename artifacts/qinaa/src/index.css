@@ -942,7 +942,7 @@ body {
   height: calc(1.125rem + (0.25rem * var(--qinaa-tv-scale)));
 }
 
-.qinaa-council[data-display-mode="tv"] :is(.qinaa-caption, [data-tv-surface="glass"]) {
+.qinaa-council[data-display-mode="tv"] [data-tv-surface="glass"] {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   background-color: rgba(10, 10, 10, 0.96) !important;
