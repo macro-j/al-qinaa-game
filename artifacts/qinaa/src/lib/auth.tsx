@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase, FREE_GAME_LIMIT, type Entitlements, getValidAccessToken } from "./supabase";
+import {
+  supabase,
+  FREE_GAME_LIMIT,
+  type Entitlements,
+  getValidAccessToken,
+} from "./supabase";
 import { apiPost } from "./api";
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
@@ -60,7 +65,9 @@ export function entitlementsIncludePurchase(
 ): boolean {
   if (!ent) return false;
   if (!itemId) {
-    return ent.has_base_game || ent.has_all_access || ent.owned_items.length > 0;
+    return (
+      ent.has_base_game || ent.has_all_access || ent.owned_items.length > 0
+    );
   }
   if (itemId === "all_access") return ent.has_all_access;
   if (itemId === "base_game") return ent.has_base_game || ent.has_all_access;
@@ -110,101 +117,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
   // ── Fetch-or-create the user's entitlements row ──
-  const loadEntitlements = useCallback(async (uid: string): Promise<Entitlements | null> => {
-    setEntitlementsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("user_entitlements")
-        .select("games_played, has_base_game, has_all_access, owned_items")
-        .eq("id", uid)
-        .maybeSingle();
+  const loadEntitlements = useCallback(
+    async (uid: string): Promise<Entitlements | null> => {
+      setEntitlementsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("user_entitlements")
+          .select("games_played, has_base_game, has_all_access, owned_items")
+          .eq("id", uid)
+          .maybeSingle();
 
-      if (activeUidRef.current !== uid) return entitlementsRef.current;
+        if (activeUidRef.current !== uid) return entitlementsRef.current;
 
-      if (error) {
-        console.error("Supabase Entitlement Error:", error);
-        applyEntitlements(DEFAULT_ENTITLEMENTS);
-        return DEFAULT_ENTITLEMENTS;
-      }
+        if (error) {
+          console.error("Supabase Entitlement Error:", error);
+          applyEntitlements(DEFAULT_ENTITLEMENTS);
+          return DEFAULT_ENTITLEMENTS;
+        }
 
-      if (data) {
-        const next = mapEntitlements(data);
+        if (data) {
+          const next = mapEntitlements(data);
+          applyEntitlements(next);
+          return next;
+        }
+
+        const { data: inserted, error: insertError } = await supabase
+          .from("user_entitlements")
+          .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
+          .select("games_played, has_base_game, has_all_access, owned_items")
+          .single();
+
+        if (activeUidRef.current !== uid) return entitlementsRef.current;
+
+        if (insertError) {
+          console.error("Supabase Entitlement Error:", insertError);
+          applyEntitlements(DEFAULT_ENTITLEMENTS);
+          return DEFAULT_ENTITLEMENTS;
+        }
+
+        const next = mapEntitlements(inserted);
         applyEntitlements(next);
         return next;
+      } catch (error) {
+        console.error("Supabase Entitlement Error:", error);
+        if (activeUidRef.current === uid) {
+          applyEntitlements(DEFAULT_ENTITLEMENTS);
+          return DEFAULT_ENTITLEMENTS;
+        }
+        return entitlementsRef.current;
+      } finally {
+        if (activeUidRef.current === uid) setEntitlementsLoading(false);
       }
+    },
+    [],
+  );
 
-      const { data: inserted, error: insertError } = await supabase
-        .from("user_entitlements")
-        .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
-        .select("games_played, has_base_game, has_all_access, owned_items")
-        .single();
+  const loadProfile = useCallback(
+    async (uid: string): Promise<UserProfile | null> => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("is_premium, premium_until")
+          .eq("id", uid)
+          .maybeSingle();
 
-      if (activeUidRef.current !== uid) return entitlementsRef.current;
+        if (activeUidRef.current !== uid) return null;
 
-      if (insertError) {
-        console.error("Supabase Entitlement Error:", insertError);
-        applyEntitlements(DEFAULT_ENTITLEMENTS);
-        return DEFAULT_ENTITLEMENTS;
-      }
+        if (error) {
+          console.error("Supabase Profile Error:", error);
+          return null;
+        }
 
-      const next = mapEntitlements(inserted);
-      applyEntitlements(next);
-      return next;
-    } catch (error) {
-      console.error("Supabase Entitlement Error:", error);
-      if (activeUidRef.current === uid) {
-        applyEntitlements(DEFAULT_ENTITLEMENTS);
-        return DEFAULT_ENTITLEMENTS;
-      }
-      return entitlementsRef.current;
-    } finally {
-      if (activeUidRef.current === uid) setEntitlementsLoading(false);
-    }
-  }, []);
+        if (!data) return null;
 
-  const loadProfile = useCallback(async (uid: string): Promise<UserProfile | null> => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("is_premium, premium_until")
-        .eq("id", uid)
-        .maybeSingle();
-
-      if (activeUidRef.current !== uid) return null;
-
-      if (error) {
+        const next: UserProfile = {
+          is_premium: !!data.is_premium,
+          premium_until: data.premium_until ?? null,
+        };
+        setProfile(next);
+        return next;
+      } catch (error) {
         console.error("Supabase Profile Error:", error);
         return null;
       }
+    },
+    [],
+  );
 
-      if (!data) return null;
+  const refreshEntitlements =
+    useCallback(async (): Promise<Entitlements | null> => {
+      const uid = await resolveUserId();
+      if (!uid) return null;
+      activeUidRef.current = uid;
+      return loadEntitlements(uid);
+    }, [loadEntitlements, resolveUserId]);
 
-      const next: UserProfile = {
-        is_premium: !!data.is_premium,
-        premium_until: data.premium_until ?? null,
-      };
-      setProfile(next);
-      return next;
-    } catch (error) {
-      console.error("Supabase Profile Error:", error);
-      return null;
-    }
-  }, []);
-
-  const refreshEntitlements = useCallback(async (): Promise<Entitlements | null> => {
-    const uid = await resolveUserId();
-    if (!uid) return null;
-    activeUidRef.current = uid;
-    return loadEntitlements(uid);
-  }, [loadEntitlements, resolveUserId]);
-
-  const refreshAfterPurchase = useCallback(async (): Promise<Entitlements | null> => {
-    const uid = await resolveUserId();
-    if (!uid) return null;
-    activeUidRef.current = uid;
-    const [ent] = await Promise.all([loadEntitlements(uid), loadProfile(uid)]);
-    return ent;
-  }, [loadEntitlements, loadProfile, resolveUserId]);
+  const refreshAfterPurchase =
+    useCallback(async (): Promise<Entitlements | null> => {
+      const uid = await resolveUserId();
+      if (!uid) return null;
+      activeUidRef.current = uid;
+      const [ent] = await Promise.all([
+        loadEntitlements(uid),
+        loadProfile(uid),
+      ]);
+      return ent;
+    }, [loadEntitlements, loadProfile, resolveUserId]);
 
   useEffect(() => {
     let active = true;
@@ -216,11 +234,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      setLoading(false);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        setLoading(false);
+      },
+    );
 
     return () => {
       active = false;
@@ -272,23 +292,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteAccount = async (): Promise<{ error: string | null }> => {
-    const token = await getValidAccessToken();
-    if (!token) return { error: "not_authenticated" };
-
-    const { resp, data } = await apiPost<{ ok?: boolean; error?: string }>(
-      "/api/account/delete",
-      {},
-      { Authorization: `Bearer ${token}` },
-    );
-
-    if (!resp.ok) {
-      return { error: data.error ?? "delete_failed" };
-    }
-
     try {
+      const token = await getValidAccessToken();
+      if (!token) return { error: "not_authenticated" };
+
+      const { resp, data } = await apiPost<{ ok?: boolean; error?: string }>(
+        "/api/account/delete",
+        {},
+        { Authorization: `Bearer ${token}` },
+      );
+
+      // Fail closed: a static host can return an empty HTTP 200 for an unknown
+      // POST route. Only the API's explicit acknowledgement means deletion.
+      if (!resp.ok || data.ok !== true) {
+        return { error: data.error ?? "delete_failed" };
+      }
+
       localStorage.removeItem("qinaa_narrator_state");
       localStorage.removeItem("qinaa_setup_prefs");
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error("Account deletion failed:", err);
+      return { error: "delete_failed" };
+    }
 
     await signOut();
     return { error: null };
@@ -346,7 +371,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       >
         <div className="flex flex-col items-center gap-5">
           <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-white font-bold tracking-wide">جاري تهيئة اللعبة...</p>
+          <p className="text-white font-bold tracking-wide">
+            جاري تهيئة اللعبة...
+          </p>
         </div>
       </div>
     );
