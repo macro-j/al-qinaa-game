@@ -1,21 +1,26 @@
 /**
- * Server-side Supabase helpers used by the Tap payment flow.
+ * Server-side Supabase helpers.
  *
- * Auth verification uses the anon key + the caller's JWT.
- * Fulfillment (profiles premium flag) uses a service-role client that bypasses RLS.
+ * Caller authentication uses the anon key plus the caller's JWT. All payment
+ * rows and entitlement fulfillment use the service-role client and are never
+ * exposed as client-writeable operations.
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database";
 
+type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
+type PaymentInsert = Database["public"]["Tables"]["payments"]["Insert"];
+
+export type UserEntitlementsSummary = {
+  has_base_game: boolean;
+  has_all_access: boolean;
+  owned_items: string[];
+};
+
 function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `${name} is not set. Add it to the project root .env and export it ` +
-        "before starting the api-server.",
-    );
-  }
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is not configured`);
   return value;
 }
 
@@ -23,21 +28,12 @@ const SUPABASE_URL = requireEnv("SUPABASE_URL");
 const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
 
 function getServiceRoleKey(): string {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not set. It is required for the payment " +
-        "webhook to grant entitlements. Add it from Supabase → Project " +
-        "Settings → API → service_role secret.",
-    );
-  }
-  return key;
+  return requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 }
 
 let adminClient: SupabaseClient<Database> | null = null;
 let authVerifyClient: SupabaseClient<Database> | null = null;
 
-/** Anon-key client for verifying caller JWTs (no persisted session). */
 function getSupabaseAuthClient(): SupabaseClient<Database> {
   if (!authVerifyClient) {
     authVerifyClient = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -47,7 +43,7 @@ function getSupabaseAuthClient(): SupabaseClient<Database> {
   return authVerifyClient;
 }
 
-/** Service-role client — bypasses RLS. For webhook fulfillment only. */
+/** Service-role client — bypasses RLS. Keep it server-side only. */
 export function getSupabaseAdmin(): SupabaseClient<Database> {
   if (!adminClient) {
     adminClient = createClient<Database>(SUPABASE_URL, getServiceRoleKey(), {
@@ -57,140 +53,168 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
   return adminClient;
 }
 
-/**
- * Verifies a Supabase access token and returns the authenticated user.
- * Throws if the token is missing/invalid.
- */
 export async function getUserFromToken(
   accessToken: string,
 ): Promise<{ id: string; email: string | null }> {
-  const jwt = accessToken.trim();
-  const { data, error } = await getSupabaseAuthClient().auth.getUser(jwt);
-
+  const { data, error } = await getSupabaseAuthClient().auth.getUser(
+    accessToken.trim(),
+  );
   if (error || !data.user) {
-    console.error(
-      "Supabase getUser failed:",
-      error?.status,
-      error?.message ?? "no user returned",
-    );
-    throw new Error(
-      `Invalid Supabase session token: ${error?.status ?? "unknown"} ${error?.message ?? "no user"}`,
-    );
+    throw new Error("invalid_supabase_session");
   }
-
   return { id: data.user.id, email: data.user.email ?? null };
 }
 
-/**
- * Resolves a Supabase auth user id from an email address.
- */
-export async function findUserIdByEmail(email: string): Promise<string | null> {
-  const admin = getSupabaseAdmin();
-  const normalized = email.trim().toLowerCase();
-  let page = 1;
+export async function getUserEntitlements(
+  userId: string,
+): Promise<UserEntitlementsSummary> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("user_entitlements")
+    .select("has_base_game, has_all_access, owned_items")
+    .eq("id", userId)
+    .maybeSingle();
 
-  while (true) {
-    const { data, error } = await admin.auth.admin.listUsers({
-      page,
-      perPage: 200,
-    });
-
-    if (error) {
-      throw new Error(`auth.admin.listUsers failed: ${error.message}`);
-    }
-
-    const match = data.users.find(
-      (user) => user.email?.trim().toLowerCase() === normalized,
-    );
-    if (match) return match.id;
-
-    if (data.users.length < 200) break;
-    page += 1;
-  }
-
-  return null;
+  if (error) throw new Error(`entitlements lookup failed: ${error.message}`);
+  return {
+    has_base_game: !!data?.has_base_game,
+    has_all_access: !!data?.has_all_access,
+    owned_items: Array.isArray(data?.owned_items) ? data.owned_items : [],
+  };
 }
 
-/**
- * Activates premium for the buyer identified by email (profiles.is_premium).
- * Used by the Tap webhook after a CAPTURED charge.
- */
-export async function activatePremiumByEmail(email: string): Promise<void> {
-  const userId = await findUserIdByEmail(email);
-  if (!userId) {
-    throw new Error(`No auth user found for email=${email}`);
+export function entitlementsOwnItem(
+  entitlements: UserEntitlementsSummary,
+  itemId: string,
+): boolean {
+  if (itemId === "all_access") return entitlements.has_all_access;
+  if (itemId === "base_game") {
+    return entitlements.has_base_game || entitlements.has_all_access;
   }
-
-  await activatePremiumProfile(userId);
-  await grantSpecificEntitlement(userId, "all_access");
+  return (
+    entitlements.has_all_access || entitlements.owned_items.includes(itemId)
+  );
 }
 
-/**
- * Marks a payment row as completed for the given gateway order id.
- */
-export async function completePaymentByGatewayOrderId(
-  gatewayOrderId: string,
-): Promise<number> {
+async function ensureProfile(userId: string): Promise<void> {
+  const { error } = await getSupabaseAdmin()
+    .from("profiles")
+    .upsert({ id: userId }, { onConflict: "id", ignoreDuplicates: true });
+  if (error) throw new Error(`profile provisioning failed: ${error.message}`);
+}
+
+export async function createPayment(
+  payment: PaymentInsert,
+): Promise<PaymentRow> {
+  await ensureProfile(payment.user_id);
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .insert(payment)
+    .select("*")
+    .single();
+  if (error) throw new Error(`payment insert failed: ${error.message}`);
+  return data;
+}
+
+export async function markPaymentInvoiceCreated(input: {
+  paymentId: string;
+  transactionNo: string;
+}): Promise<void> {
   const { data, error } = await getSupabaseAdmin()
     .from("payments")
     .update({
-      status: "completed",
+      gateway_order_id: input.transactionNo,
+      status: "pending",
       updated_at: new Date().toISOString(),
     })
-    .eq("gateway_order_id", gatewayOrderId)
+    .eq("id", input.paymentId)
+    .eq("gateway", "paylink")
     .select("id");
-
-  if (error) {
-    throw new Error(
-      `payments update failed for gateway_order_id=${gatewayOrderId}: ${error.message}`,
-    );
+  if (error || !data?.length) {
+    throw new Error(`payment update failed: ${error?.message ?? "not found"}`);
   }
-
-  return data?.length ?? 0;
 }
 
-/**
- * Activates premium on the buyer's profile. One-time Checkout purchases are
- * treated as lifetime premium (`premium_until = null`). Pass `premiumUntil`
- * when fulfilling a timed subscription.
- */
-export async function activatePremiumProfile(
-  userId: string,
-  premiumUntil: string | null = null,
-): Promise<void> {
-  const admin = getSupabaseAdmin();
-  const { data, error } = await admin
-    .from("profiles")
+export async function markPaymentStatus(input: {
+  paymentId: string;
+  status: "creating" | "pending" | "canceled" | "failed";
+  transactionNo?: string;
+  paymentMethod?: string | null;
+  verified?: boolean;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await getSupabaseAdmin()
+    .from("payments")
     .update({
-      is_premium: true,
-      premium_until: premiumUntil,
+      status: input.status,
+      updated_at: now,
+      ...(input.transactionNo ? { gateway_order_id: input.transactionNo } : {}),
+      ...(input.paymentMethod !== undefined
+        ? { payment_method: input.paymentMethod }
+        : {}),
+      ...(input.verified ? { verified_at: now } : {}),
     })
-    .eq("id", userId)
-    .select("id");
-
-  if (error) {
-    throw new Error(`profiles update failed for id=${userId}: ${error.message}`);
-  }
-
-  if (data?.length) return;
-
-  const { error: insertError } = await admin.from("profiles").insert({
-    id: userId,
-    is_premium: true,
-    premium_until: premiumUntil,
-  });
-
-  if (insertError) {
-    throw new Error(
-      `profiles insert failed for id=${userId}: ${insertError.message}`,
-    );
-  }
+    .eq("id", input.paymentId)
+    .eq("gateway", "paylink")
+    .neq("status", "completed");
+  if (error) throw new Error(`payment status update failed: ${error.message}`);
 }
 
-/**
- * Grants a SPECIFIC purchased entitlement via the SECURITY DEFINER RPC.
- * Idempotent — safe to run alongside the webhook verify-on-return path.
- */
+export async function findPaymentByOrderNumber(
+  orderNumber: string,
+): Promise<PaymentRow | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .select("*")
+    .eq("gateway", "paylink")
+    .eq("merchant_order_number", orderNumber)
+    .maybeSingle();
+  if (error) throw new Error(`payment lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function findPaymentByTransactionNo(
+  transactionNo: string,
+): Promise<PaymentRow | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .select("*")
+    .eq("gateway", "paylink")
+    .eq("gateway_order_id", transactionNo)
+    .maybeSingle();
+  if (error) throw new Error(`payment lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function completeVerifiedPaylinkPayment(input: {
+  paymentId: string;
+  transactionNo: string;
+  amount: number;
+  currency: string;
+}): Promise<{ itemId: string; userId: string; alreadyCompleted: boolean }> {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "complete_verified_paylink_payment",
+    {
+      target_payment: input.paymentId,
+      expected_transaction_no: input.transactionNo,
+      expected_amount: input.amount,
+      expected_currency: input.currency,
+    },
+  );
+  if (error) {
+    throw new Error(`payment fulfillment failed: ${error.message}`);
+  }
+  const result = data?.[0];
+  if (!result?.item_id || !result.user_id) {
+    throw new Error("payment fulfillment returned no result");
+  }
+  return {
+    itemId: result.item_id,
+    userId: result.user_id,
+    alreadyCompleted: !!result.already_completed,
+  };
+}
+
+/** Retained for non-payment administrative flows. */
 export async function grantSpecificEntitlement(
   userId: string,
   itemId: string,
@@ -199,10 +223,7 @@ export async function grantSpecificEntitlement(
     target_user: userId,
     item_id: itemId,
   });
-
   if (error) {
-    throw new Error(
-      `grant_specific_entitlement RPC failed: ${error.message}`,
-    );
+    throw new Error(`grant_specific_entitlement RPC failed: ${error.message}`);
   }
 }

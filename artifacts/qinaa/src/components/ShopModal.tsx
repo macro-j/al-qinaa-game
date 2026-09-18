@@ -1,17 +1,68 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../lib/auth";
+import { getValidAccessToken } from "../lib/supabase";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
 import { RtlEmoji } from "./RtlEmoji";
-import { apiUrl, readResponseJson } from "../lib/api";
+import { apiPost } from "../lib/api";
+
+const ADD_ON_IDS = new Set([
+  "role_wizard",
+  "role_madman",
+  "role_avenger",
+  "role_twins",
+  "role_sniper",
+]);
+
+const ITEM_LABELS: Record<string, string> = {
+  base_game: "اللعبة الأساسية",
+  all_access: "الباقة الشاملة",
+  role_wizard: "دور الساحر",
+  role_madman: "دور المجنون",
+  role_avenger: "دور المنتقم",
+  role_twins: "دور التوأم",
+  role_sniper: "دور القناص",
+};
+
+function normalizeSaudiMobile(value: string): string {
+  const latinDigits = value
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+  const compact = latinDigits.replace(/[\s()-]/g, "");
+  return compact.startsWith("+966") ? compact.slice(1) : compact;
+}
+
+function isValidSaudiMobile(value: string): boolean {
+  return /^(?:05\d{8}|9665\d{8})$/.test(value);
+}
+
+function checkoutErrorMessage(error?: string): string {
+  switch (error) {
+    case "base_game_required":
+      return "يلزم شراء اللعبة الأساسية قبل شراء دور منفرد.";
+    case "already_owned":
+      return "هذا العنصر مملوك في حسابك بالفعل.";
+    case "invalid_client_name":
+      return "تحقق من الاسم ثم حاول مرة أخرى.";
+    case "invalid_client_mobile":
+      return "تحقق من رقم الجوال السعودي ثم حاول مرة أخرى.";
+    case "invalid_auth_token":
+    case "missing_auth_token":
+      return "انتهت جلسة الدخول. سجّل الدخول مرة أخرى.";
+    case "payment_not_configured":
+      return "بوابة الدفع غير مهيأة حاليًا.";
+    default:
+      return "تعذّر بدء عملية الدفع. حاول مرة أخرى.";
+  }
+}
 
 /**
- * Pricing / packages modal. Each "buy" button starts a Tap hosted checkout for
+ * Pricing / packages modal. Each "buy" button starts a Paylink hosted checkout for
  * the premium subscription (entitlement unlock happens server-side via the
- * Tap webhook). The card footers react to the live entitlement state so the
+ * verified Paylink flow). The card footers react to the live entitlement state so the
  * user's current tier is always reflected.
  * Rendered globally via ShopProvider so it can be opened from anywhere
  * (footer button, entitlement gatekeeper, etc.).
@@ -29,10 +80,14 @@ export function ShopModal({
   // When a guest taps a purchase / try action we surface the login flow instead
   // of hitting checkout — the catalog itself stays public for browsing.
   const [showAuth, setShowAuth] = useState(false);
+  const [checkoutItemId, setCheckoutItemId] = useState<string | null>(null);
+  const [clientName, setClientName] = useState("");
+  const [clientMobile, setClientMobile] = useState("");
   const { user, entitlements, entitlementsLoading } = useAuth();
 
   const hasBase = !!entitlements?.has_base_game;
   const hasAll = !!entitlements?.has_all_access;
+  const hasBaseAccess = hasBase || hasAll;
   const currentTier: "free" | "base" | "all_access" = hasAll
     ? "all_access"
     : hasBase
@@ -41,52 +96,88 @@ export function ShopModal({
 
   const busy = loadingItemId !== null;
 
-  const handleBuy = async (itemId: string) => {
+  const handleBuy = (itemId: string) => {
     if (busy) return;
     // Guests can browse the catalog but must authenticate before any checkout.
     if (!user) {
       setShowAuth(true);
       return;
     }
-    if (!user.email) {
-      toast.error("يرجى تسجيل الدخول بحساب يحتوي على بريد إلكتروني.");
+    if (ADD_ON_IDS.has(itemId) && !hasBaseAccess) {
+      toast.error("يلزم شراء اللعبة الأساسية قبل شراء دور منفرد.");
       return;
     }
-    setLoadingItemId(itemId);
-    try {
-      const resp = await fetch(apiUrl("/api/payment/tap-charge"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ email: user.email }),
-      });
 
-      const data = await readResponseJson<{
+    const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const suggestedName = [
+      metadata.full_name,
+      metadata.name,
+      metadata.display_name,
+    ].find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length >= 2,
+    );
+
+    setClientName((current) => current || suggestedName?.trim() || "");
+    setClientMobile((current) => current || user.phone || "");
+    setCheckoutItemId(itemId);
+  };
+
+  const startCheckout = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!checkoutItemId || busy || !user) return;
+
+    const normalizedName = clientName.trim().replace(/\s+/g, " ");
+    const normalizedMobile = normalizeSaudiMobile(clientMobile);
+    if (normalizedName.length < 2) {
+      toast.error("اكتب الاسم المستخدم في فاتورة الدفع.");
+      return;
+    }
+    if (!isValidSaudiMobile(normalizedMobile)) {
+      toast.error("اكتب رقمًا سعوديًا بصيغة 05xxxxxxxx أو 9665xxxxxxxx.");
+      return;
+    }
+
+    setLoadingItemId(checkoutItemId);
+    try {
+      const token = await getValidAccessToken();
+      if (!token) {
+        setCheckoutItemId(null);
+        setShowAuth(true);
+        throw new Error("missing_auth_token");
+      }
+
+      const { resp, data } = await apiPost<{
         checkoutUrl?: string;
         error?: string;
-      }>(resp);
+      }>(
+        "/api/payment/paylink-invoice",
+        {
+          itemId: checkoutItemId,
+          clientName: normalizedName,
+          clientMobile: normalizedMobile,
+        },
+        { Authorization: `Bearer ${token}` },
+      );
 
       if (!resp.ok) {
-        console.error("Tap checkout failed:", resp.status, data);
-        throw new Error(
-          typeof data.error === "string"
-            ? data.error
-            : `checkout failed: ${resp.status}`,
-        );
+        console.error("Paylink checkout failed:", resp.status, data);
+        toast.error(checkoutErrorMessage(data.error));
+        return;
       }
 
       const checkoutUrl = data.checkoutUrl;
       if (typeof checkoutUrl !== "string" || !checkoutUrl) {
-        console.error("Tap checkout response missing checkoutUrl:", data);
+        console.error("Paylink checkout response missing checkoutUrl:", data);
         throw new Error("missing checkout url");
       }
 
-      window.location.href = checkoutUrl;
+      window.location.assign(checkoutUrl);
     } catch (err) {
       console.error("Checkout error:", err);
-      toast.error("تعذّر بدء عملية الدفع. حاول مرة أخرى.");
+      const error = err instanceof Error ? err.message : undefined;
+      toast.error(checkoutErrorMessage(error));
+    } finally {
       setLoadingItemId(null);
     }
   };
@@ -258,7 +349,7 @@ export function ShopModal({
               </p>
               {entitlementsLoading ? (
                 checkingBadge
-              ) : hasBase ? (
+              ) : hasBaseAccess ? (
                 <div
                   className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
                   style={{
@@ -369,6 +460,7 @@ export function ShopModal({
               // the user's purchased owned_items list.
               const owned =
                 hasAll || (entitlements?.owned_items?.includes(id) ?? false);
+              const requiresBase = !!user && !hasBaseAccess;
               const name = getRoleName(roleKey);
               return (
                 <div key={id} dir="rtl" className="flex flex-col gap-3">
@@ -388,16 +480,18 @@ export function ShopModal({
                     <button
                       type="button"
                       onClick={() => handleBuy(id)}
-                      disabled={busy || entitlementsLoading}
+                      disabled={busy || entitlementsLoading || requiresBase}
                       className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                       style={{
                         backgroundColor: "rgba(245,158,11,0.08)",
                         border: "1px solid rgba(245,158,11,0.35)",
                       }}
                     >
-                      {loadingItemId === id
-                        ? "جارٍ التحويل…"
-                        : `شراء ${name} • 7.99 ر.س`}
+                      {requiresBase
+                        ? "اشترِ اللعبة الأساسية أولاً"
+                        : loadingItemId === id
+                          ? "جارٍ التحويل…"
+                          : `شراء ${name} • 7.99 ر.س`}
                     </button>
                   )}
                 </div>
@@ -415,6 +509,114 @@ export function ShopModal({
       {showAuth && (
         <div style={{ position: "relative", zIndex: 70 }}>
           <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+        </div>
+      )}
+      {checkoutItemId && (
+        <div
+          dir="rtl"
+          className="fixed inset-0 z-[80] flex items-center justify-center px-4"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.82)",
+            backdropFilter: "blur(10px)",
+          }}
+          onClick={() => {
+            if (!busy) setCheckoutItemId(null);
+          }}
+        >
+          <form
+            onSubmit={startCheckout}
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl p-5 flex flex-col gap-4 shadow-2xl"
+            style={{
+              backgroundColor: "#111111",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  إكمال بيانات الدفع
+                </h3>
+                <p className="mt-1 text-xs text-neutral-400">
+                  {ITEM_LABELS[checkoutItemId] ?? "عملية الشراء"} عبر بيلينك
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="إغلاق"
+                disabled={busy}
+                onClick={() => setCheckoutItemId(null)}
+                className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-neutral-400 hover:text-white disabled:opacity-50"
+                style={{ backgroundColor: "#1A1A1A" }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <label className="flex flex-col gap-2 text-sm font-bold text-neutral-200">
+              الاسم
+              <input
+                type="text"
+                autoComplete="name"
+                value={clientName}
+                onChange={(event) => setClientName(event.target.value)}
+                disabled={busy}
+                maxLength={80}
+                placeholder="الاسم المستخدم في الفاتورة"
+                className="w-full rounded-xl px-3.5 py-3 text-white outline-none focus:border-amber-500 disabled:opacity-60"
+                style={{
+                  backgroundColor: "#0A0A0A",
+                  border: "1px solid #303030",
+                }}
+              />
+            </label>
+
+            <label className="flex flex-col gap-2 text-sm font-bold text-neutral-200">
+              رقم الجوال السعودي
+              <input
+                dir="ltr"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={clientMobile}
+                onChange={(event) => setClientMobile(event.target.value)}
+                disabled={busy}
+                maxLength={20}
+                placeholder="05xxxxxxxx"
+                className="w-full rounded-xl px-3.5 py-3 text-left text-white outline-none focus:border-amber-500 disabled:opacity-60"
+                style={{
+                  backgroundColor: "#0A0A0A",
+                  border: "1px solid #303030",
+                }}
+              />
+              <span className="text-[11px] font-normal text-neutral-500">
+                يقبل 05xxxxxxxx أو 9665xxxxxxxx
+              </span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setCheckoutItemId(null)}
+                className="rounded-xl py-3 text-sm font-bold text-neutral-300 disabled:opacity-50"
+                style={{
+                  backgroundColor: "#1A1A1A",
+                  border: "1px solid #303030",
+                }}
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-xl py-3 text-sm font-black text-neutral-950 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#F59E0B" }}
+              >
+                {busy ? "جارٍ التحويل…" : "المتابعة للدفع"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </>
