@@ -53,6 +53,8 @@ function checkoutErrorMessage(error?: string): string {
       return "انتهت جلسة الدخول. سجّل الدخول مرة أخرى.";
     case "payment_not_configured":
       return "بوابة الدفع غير مهيأة حاليًا.";
+    case "payment_gateway_inactive":
+      return "بوابة الدفع تنتظر تفعيل حساب التاجر.";
     default:
       return "تعذّر بدء عملية الدفع. حاول مرة أخرى.";
   }

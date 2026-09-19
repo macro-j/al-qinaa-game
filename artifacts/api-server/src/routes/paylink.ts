@@ -133,6 +133,23 @@ function safePaylinkErrorDetails(details: unknown): Record<string, unknown> {
   return safe;
 }
 
+function isInactivePaylinkMerchant(error: unknown): boolean {
+  if (
+    !(error instanceof PaylinkApiError) ||
+    error.operation !== "create_invoice" ||
+    error.status !== 406 ||
+    !error.details ||
+    typeof error.details !== "object"
+  ) {
+    return false;
+  }
+  const details = error.details as Record<string, unknown>;
+  const text = [details.title, details.detail, details.message]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  return text.includes("حسابك غير مفعل");
+}
+
 type StoredPayment = NonNullable<
   Awaited<ReturnType<typeof findPaymentByOrderNumber>>
 >;
@@ -286,8 +303,13 @@ router.post("/payment/paylink-invoice", async (req, res) => {
     const notConfigured =
       error instanceof Error &&
       /PAYLINK_(?:API_ID|SECRET_KEY)|PUBLIC_APP_URL/.test(error.message);
-    return json(res, notConfigured ? 503 : 502, {
-      error: notConfigured ? "payment_not_configured" : "payment_start_failed",
+    const inactiveMerchant = isInactivePaylinkMerchant(error);
+    return json(res, notConfigured || inactiveMerchant ? 503 : 502, {
+      error: notConfigured
+        ? "payment_not_configured"
+        : inactiveMerchant
+          ? "payment_gateway_inactive"
+          : "payment_start_failed",
     });
   }
 });
