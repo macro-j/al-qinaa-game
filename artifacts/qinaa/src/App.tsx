@@ -187,6 +187,24 @@ interface StoredSession {
   myName: string;
 }
 
+function createGameUuid(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
 function getOrCreateUserId(): string {
   let id = localStorage.getItem(STORAGE_UID);
   if (!id) {
@@ -1177,7 +1195,7 @@ function saveSetupPrefs(prefs: SetupPrefs): void {
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
-  const { user, canStartGame, incrementGamesPlayed, entitlements, refreshEntitlements } = useAuth();
+  const { user, incrementGamesPlayed, entitlements, refreshEntitlements } = useAuth();
   const { openShop } = useShop();
   const distributionSyncedForRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1195,6 +1213,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const [players, setPlayers]       = useState<string[]>(() => pick("players", [] as string[]));
   const [newPlayer, setNewPlayer]   = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [isCheckingGameAccess, setIsCheckingGameAccess] = useState(false);
   const inputRef                    = useRef<HTMLInputElement>(null);
 
   // ── Distribution phase state ──
@@ -1209,6 +1228,13 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     pick("hasCountedFirstNightV1", !!SAVED && SAVED.phase !== "setup"),
   );
   const hasCountedFirstNightRef = useRef(hasCountedFirstNight);
+  const [trialGameId, setTrialGameId] = useState<string | null>(() =>
+    pick("trialGameIdV1", null as string | null),
+  );
+  const trialGameIdRef = useRef(trialGameId);
+  const firstNightCountInFlightRef = useRef(false);
+  const firstNightCountRetryTimerRef = useRef<number | null>(null);
+  const firstNightCountErrorShownRef = useRef(false);
 
   const [assignedRoles, setAssignedRoles]   = useState<AssignedRole[]>(() => pick("assignedRoles", [] as AssignedRole[]));
   const [currentIndex, setCurrentIndex]     = useState(() => pick("currentIndex", 0));
@@ -1550,6 +1576,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       gameOver, executionReveal,
       magicianStateV3: magicianState, magicianPotionMode, boyInheritsAce, silencedCannotDefend, isPassPhoneMode, gameSpeedV1: gameSpeed, avengerFlow, executionResult,
       hasCountedFirstNightV1: hasCountedFirstNight,
+      trialGameIdV1: trialGameId,
       isModsEnabled, activeMods,
       customSpeedsV1: customSpeeds,
     });
@@ -1562,7 +1589,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
     finalVoteFor, finalVoteAgainst, finalVoteLedger, finalVoteVoterIndex,
     gameOver, executionReveal,
     magicianState, magicianPotionMode, boyInheritsAce, silencedCannotDefend, isPassPhoneMode, gameSpeed, avengerFlow, executionResult,
-    hasCountedFirstNight, isModsEnabled, activeMods, customSpeeds,
+    hasCountedFirstNight, trialGameId, isModsEnabled, activeMods, customSpeeds,
   ]);
 
   // ── Audio Manager — preloaded cache for zero-delay playback ──
@@ -1819,38 +1846,74 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const removePlayer = (name: string) =>
     setPlayers((prev) => prev.filter((p) => p !== name));
 
-  const handleDistribute = () => {
-    // ── Gatekeeper: block a new round once the free trial is spent ──
-    if (!canStartGame) {
-      if (!entitlements) {
-        // Entitlements not loaded yet (or fetch failed) — stay fail-closed,
-        // re-verify, and ask the user to retry rather than wrongly upselling.
-        void refreshEntitlements();
-        toast.error("جارٍ التحقق من اشتراكك. يرجى المحاولة بعد لحظات.");
+  const handleDistribute = async () => {
+    if (isCheckingGameAccess) return;
+    setIsCheckingGameAccess(true);
+    try {
+      // Always re-read the authoritative counter before starting a new game.
+      // This closes the common stale-tab/device path and stays fail-closed when
+      // Supabase is temporarily unavailable.
+      const latestEntitlements = user?.id
+        ? await refreshEntitlements()
+        : null;
+      if (!latestEntitlements) {
+        toast.error("تعذّر التحقق من اشتراكك الآن. حاول مرة أخرى بعد لحظات.");
         return;
       }
-      openShop();
-      toast.error("لقد استهلكت تجربتك المجانية (مرتين). يرجى الاشتراك لمتابعة اللعب!");
-      return;
+
+      const canStartNow =
+        latestEntitlements.has_base_game ||
+        latestEntitlements.has_all_access ||
+        latestEntitlements.games_played < FREE_GAME_LIMIT;
+      if (!canStartNow) {
+        openShop();
+        toast.error("انتهت تجربتاك المجانيتان. اختر الباقة المناسبة لمتابعة اللعب.");
+        return;
+      }
+
+      // Re-authorize every selected add-on against the fresh server snapshot.
+      // React effects run after state commits, so relying only on the effect
+      // above leaves a one-click window where a stale paid-role selection from
+      // another account could slip into this deck.
+      const modsForDeck = isModsEnabled
+        ? Object.fromEntries(
+            Object.entries(activeMods).map(([modId, enabled]) => {
+              const itemId = MOD_TO_ITEM[modId];
+              const isOwned =
+                !itemId ||
+                latestEntitlements.has_all_access ||
+                latestEntitlements.owned_items.includes(itemId);
+              return [modId, enabled && isOwned];
+            }),
+          )
+        : {};
+      const roles = generateAndShuffleRoles(players, modsForDeck);
+      // Keep this outside the resumable game snapshot: replay/reset must retain
+      // distribution memory so the same roster receives fresh roles next time.
+      rememberDistribution(roles);
+      if (user?.id) void syncDistributionHistory(user.id);
+      setAssignedRoles(roles);
+      setCurrentIndex(0);
+      setIsPressing(false);
+      setHasRevealedOnce(false);
+      hasCountedFirstNightRef.current = false;
+      setHasCountedFirstNight(false);
+      const nextTrialGameId = createGameUuid();
+      if (firstNightCountRetryTimerRef.current !== null) {
+        window.clearTimeout(firstNightCountRetryTimerRef.current);
+        firstNightCountRetryTimerRef.current = null;
+      }
+      trialGameIdRef.current = nextTrialGameId;
+      setTrialGameId(nextTrialGameId);
+      firstNightCountErrorShownRef.current = false;
+      // Blind-screen gate seeds from the mode toggle: ON → every card is
+      // locked until the named player taps to unlock; OFF → legacy behavior
+      // (card visible immediately, flip-to-reveal).
+      setIsBlindScreen(isPassPhoneMode);
+      setPhase("pre_distribution");
+    } finally {
+      setIsCheckingGameAccess(false);
     }
-    // Pass activeMods only when the master toggle is on; otherwise pure-vanilla deck
-    const modsForDeck = isModsEnabled ? activeMods : {};
-    const roles = generateAndShuffleRoles(players, modsForDeck);
-    // Keep this outside the resumable game snapshot: replay/reset must retain
-    // distribution memory so the same roster receives fresh roles next time.
-    rememberDistribution(roles);
-    if (user?.id) void syncDistributionHistory(user.id);
-    setAssignedRoles(roles);
-    setCurrentIndex(0);
-    setIsPressing(false);
-    setHasRevealedOnce(false);
-    hasCountedFirstNightRef.current = false;
-    setHasCountedFirstNight(false);
-    // Blind-screen gate seeds from the mode toggle: ON → every card is
-    // locked until the named player taps to unlock; OFF → legacy behavior
-    // (card visible immediately, flip-to-reveal).
-    setIsBlindScreen(isPassPhoneMode);
-    setPhase("pre_distribution");
   };
 
   // Night order: wolf → shadow → sniper → magician → seer → guard
@@ -1882,11 +1945,90 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   };
 
   const countFirstNightOnce = () => {
-    if (nightCount !== 1 || hasCountedFirstNightRef.current) return;
-    hasCountedFirstNightRef.current = true;
-    setHasCountedFirstNight(true);
-    void incrementGamesPlayed();
+    if (
+      !trialGameId ||
+      hasCountedFirstNightRef.current ||
+      firstNightCountInFlightRef.current
+    ) return;
+
+    const gameIdToCount = trialGameId;
+    firstNightCountInFlightRef.current = true;
+    void (async () => {
+      let settled = false;
+      try {
+        // Repeating this call is safe: the database keys consumption by the
+        // current game id, so a lost response can never charge twice.
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const consumption = await incrementGamesPlayed(gameIdToCount);
+          if (consumption === "limit_reached") {
+            // A second tab/device consumed the final trial after this game was
+            // opened. Do not silently grant an extra full game: stop safely at
+            // the first morning and show the purchase choices.
+            settled = true;
+            if (trialGameIdRef.current !== gameIdToCount) return;
+            hasCountedFirstNightRef.current = true;
+            setHasCountedFirstNight(true);
+            stopAllAudio();
+            clearNarratorState();
+            setAssignedRoles([]);
+            setLivePlayers([]);
+            setCurrentIndex(0);
+            setNightTransition("none");
+            setPhase("setup");
+            openShop();
+            toast.error("اكتملت التجربتان في جلسة أخرى. اختر باقتك لمتابعة اللعب.");
+            return;
+          }
+          if (consumption === "settled") {
+            settled = true;
+            if (trialGameIdRef.current !== gameIdToCount) return;
+            hasCountedFirstNightRef.current = true;
+            setHasCountedFirstNight(true);
+            firstNightCountErrorShownRef.current = false;
+            if (firstNightCountRetryTimerRef.current !== null) {
+              window.clearTimeout(firstNightCountRetryTimerRef.current);
+              firstNightCountRetryTimerRef.current = null;
+            }
+            return;
+          }
+          if (attempt < 2) {
+            await new Promise(resolve => window.setTimeout(resolve, 1000 * (attempt + 1)));
+          }
+        }
+      } finally {
+        firstNightCountInFlightRef.current = false;
+      }
+
+      if (!settled && trialGameIdRef.current === gameIdToCount) {
+        if (!firstNightCountErrorShownRef.current) {
+          firstNightCountErrorShownRef.current = true;
+          toast.error("تعذّر تثبيت التجربة مؤقتًا، وسنعيد المحاولة تلقائيًا.");
+        }
+        firstNightCountRetryTimerRef.current = window.setTimeout(
+          countFirstNightOnce,
+          15_000,
+        );
+      }
+    })();
   };
+
+  // A restored snapshot may already be past the first morning while the final
+  // database acknowledgement was interrupted. Resume the same idempotent
+  // settlement instead of granting or charging a second game.
+  useEffect(() => {
+    const firstNightIsComplete =
+      phase === "day" || phase === "game_over" || nightCount > 1;
+    if (firstNightIsComplete && trialGameId && !hasCountedFirstNight) {
+      countFirstNightOnce();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, nightCount, trialGameId, hasCountedFirstNight]);
+
+  useEffect(() => () => {
+    if (firstNightCountRetryTimerRef.current !== null) {
+      window.clearTimeout(firstNightCountRetryTimerRef.current);
+    }
+  }, []);
 
   // ── Win condition checker — called after every death ──
   const checkWinCondition = (
@@ -5307,8 +5449,8 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             </p>
           )}
           <motion.button
-            onClick={handleDistribute}
-            disabled={!canDistribute}
+            onClick={() => { void handleDistribute(); }}
+            disabled={!canDistribute || isCheckingGameAccess}
             data-tv-primary="true"
             whileTap={{ scale: 0.95 }}
             whileHover={{ scale: 1.02 }}
@@ -5321,7 +5463,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
               boxShadow: canDistribute ? "0 0 24px #D32F2F44" : "none",
             }}>
             <VenetianMask size={20} strokeWidth={2} />
-            <span>توزيع الأقنعة</span>
+            <span>{isCheckingGameAccess ? "جارٍ التحقق…" : "توزيع الأقنعة"}</span>
           </motion.button>
 
           {/* Bottom "back" button removed — primary back action lives in the

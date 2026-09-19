@@ -12,9 +12,8 @@ import {
   supabase,
   FREE_GAME_LIMIT,
   type Entitlements,
-  getValidAccessToken,
 } from "./supabase";
-import { apiPost } from "./api";
+import { apiPostAuthenticated } from "./api";
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
   games_played: 0,
@@ -44,7 +43,10 @@ type AuthContextValue = {
   signInWithEmail: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error: string | null }>;
-  incrementGamesPlayed: () => Promise<void>;
+  /** Idempotently settles the free-game counter for one completed game. */
+  incrementGamesPlayed: (
+    gameId: string,
+  ) => Promise<"settled" | "limit_reached" | "retry">;
   refreshEntitlements: () => Promise<Entitlements | null>;
   /** Re-fetch entitlements + profile after a verified purchase. */
   refreshAfterPurchase: () => Promise<Entitlements | null>;
@@ -131,8 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (error) {
           console.error("Supabase Entitlement Error:", error);
-          applyEntitlements(DEFAULT_ENTITLEMENTS);
-          return DEFAULT_ENTITLEMENTS;
+          entitlementsRef.current = null;
+          setEntitlements(null);
+          return null;
         }
 
         if (data) {
@@ -149,10 +152,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (activeUidRef.current !== uid) return entitlementsRef.current;
 
+        if (insertError?.code === "23505") {
+          // Another tab may have provisioned the same first-login row between
+          // our SELECT and INSERT. Read that authoritative row instead of
+          // turning a harmless race into a permanent loading state.
+          const { data: concurrentRow, error: concurrentReadError } =
+            await supabase
+              .from("user_entitlements")
+              .select("games_played, has_base_game, has_all_access, owned_items")
+              .eq("id", uid)
+              .single();
+
+          if (activeUidRef.current !== uid) return entitlementsRef.current;
+          if (!concurrentReadError && concurrentRow) {
+            const next = mapEntitlements(concurrentRow);
+            applyEntitlements(next);
+            return next;
+          }
+        }
+
         if (insertError) {
           console.error("Supabase Entitlement Error:", insertError);
-          applyEntitlements(DEFAULT_ENTITLEMENTS);
-          return DEFAULT_ENTITLEMENTS;
+          entitlementsRef.current = null;
+          setEntitlements(null);
+          return null;
         }
 
         const next = mapEntitlements(inserted);
@@ -161,8 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error("Supabase Entitlement Error:", error);
         if (activeUidRef.current === uid) {
-          applyEntitlements(DEFAULT_ENTITLEMENTS);
-          return DEFAULT_ENTITLEMENTS;
+          entitlementsRef.current = null;
+          setEntitlements(null);
+          return null;
         }
         return entitlementsRef.current;
       } finally {
@@ -293,18 +317,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteAccount = async (): Promise<{ error: string | null }> => {
     try {
-      const token = await getValidAccessToken();
-      if (!token) return { error: "not_authenticated" };
-
-      const { resp, data } = await apiPost<{ ok?: boolean; error?: string }>(
+      const { resp, data } = await apiPostAuthenticated<{
+        ok?: boolean;
+        error?: string;
+      }>(
         "/api/account/delete",
         {},
-        { Authorization: `Bearer ${token}` },
       );
 
       // Fail closed: a static host can return an empty HTTP 200 for an unknown
       // POST route. Only the API's explicit acknowledgement means deletion.
-      if (!resp.ok || data.ok !== true) {
+      if (!resp || !resp.ok || data.ok !== true) {
         return { error: data.error ?? "delete_failed" };
       }
 
@@ -319,24 +342,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   };
 
-  const incrementGamesPlayed = async () => {
-    if (!user) return;
+  const incrementGamesPlayed = async (
+    gameId: string,
+  ): Promise<"settled" | "limit_reached" | "retry"> => {
+    if (!user || !gameId) return "retry";
 
-    setEntitlements((prev) =>
-      prev ? { ...prev, games_played: prev.games_played + 1 } : prev,
-    );
-    if (entitlementsRef.current) {
-      entitlementsRef.current = {
-        ...entitlementsRef.current,
-        games_played: entitlementsRef.current.games_played + 1,
-      };
-    }
-
-    const { error } = await supabase.rpc("increment_games_played");
+    const { data, error } = await supabase.rpc("consume_free_game", {
+      target_game_id: gameId,
+    });
     if (error) {
       console.error("Supabase Entitlement Error:", error);
-      void refreshEntitlements();
+      await refreshEntitlements();
+      return "retry";
     }
+
+    const result = Array.isArray(data) ? data[0] : null;
+    if (!result || typeof result.status !== "string") {
+      console.error("Supabase Entitlement Error: invalid consume_free_game response");
+      await refreshEntitlements();
+      return "retry";
+    }
+
+    // The RPC is serialized per user and idempotent per game id. Refreshing
+    // makes this tab match the authoritative value even after a duplicate retry
+    // or when the account became paid while the game was in progress.
+    await refreshEntitlements();
+    if (result.status === "limit_reached") return "limit_reached";
+    return ["consumed", "already_consumed", "paid"].includes(result.status)
+      ? "settled"
+      : "retry";
   };
 
   const canStartGame = entitlements

@@ -182,6 +182,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/qinaa-rules':
+        specifier: workspace:*
+        version: link:../../lib/qinaa-rules
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -417,6 +420,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.107.0
         version: 2.108.1
+      '@workspace/qinaa-rules':
+        specifier: workspace:*
+        version: link:../../lib/qinaa-rules
       react-qr-code:
         specifier: ^2.0.18
         version: 2.2.0(react@19.1.0)
@@ -668,6 +674,8 @@ importers:
       drizzle-kit:
         specifier: ^0.31.9
         version: 0.31.10
+
+  lib/qinaa-rules: {}
 
   scripts:
     devDependencies:

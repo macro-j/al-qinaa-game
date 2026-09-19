@@ -46,7 +46,13 @@ async function authenticatedUser(req: Request, res: Response) {
   }
   try {
     return await getUserFromToken(token);
-  } catch {
+  } catch (error) {
+    req.log.warn(
+      {
+        reason: error instanceof Error ? error.message : "unknown_error",
+      },
+      "Rejected payment request with an invalid Supabase session",
+    );
     json(res, 401, { error: "invalid_auth_token" });
     return null;
   }

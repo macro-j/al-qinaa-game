@@ -1,3 +1,5 @@
+import { getValidAccessToken } from "./supabase";
+
 /**
  * Builds an absolute API URL for fetch calls.
  * Production: `VITE_PUBLIC_SERVER_URL` (or `VITE_API_URL`) points at the api-server.
@@ -102,6 +104,41 @@ export async function apiPost<
   });
   const data = await readResponseJson<T>(resp);
   return { resp, data };
+}
+
+/**
+ * Authenticated POST with one forced session refresh on HTTP 401.
+ *
+ * Supabase refresh tokens rotate, so the refresh is deduplicated in
+ * `getValidAccessToken`. A missing local session is represented by a null
+ * response and the same error shape returned by the API.
+ */
+export async function apiPostAuthenticated<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(
+  path: string,
+  body: unknown,
+): Promise<{ resp: Response | null; data: T }> {
+  const firstToken = await getValidAccessToken();
+  if (!firstToken) {
+    return {
+      resp: null,
+      data: { error: "missing_auth_token" } as unknown as T,
+    };
+  }
+
+  let result = await apiPost<T>(path, body, {
+    Authorization: `Bearer ${firstToken}`,
+  });
+  if (result.resp.status !== 401) return result;
+
+  const refreshedToken = await getValidAccessToken({ forceRefresh: true });
+  if (!refreshedToken) return result;
+
+  result = await apiPost<T>(path, body, {
+    Authorization: `Bearer ${refreshedToken}`,
+  });
+  return result;
 }
 
 /** @deprecated Use readResponseJson — kept for compatibility; never calls response.json(). */

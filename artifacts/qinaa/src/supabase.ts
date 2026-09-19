@@ -112,6 +112,7 @@ export type Database = {
       }
       user_entitlements: {
         Row: {
+          consumed_game_ids: string[]
           created_at: string
           games_played: number | null
           has_all_access: boolean | null
@@ -121,6 +122,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          consumed_game_ids?: string[]
           created_at?: string
           games_played?: number | null
           has_all_access?: boolean | null
@@ -130,6 +132,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          consumed_game_ids?: string[]
           created_at?: string
           games_played?: number | null
           has_all_access?: boolean | null
@@ -145,6 +148,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_free_game: {
+        Args: { target_game_id: string }
+        Returns: {
+          games_played: number
+          status: string
+        }[]
+      }
       grant_specific_entitlement: {
         Args: { item_id: string; target_user: string }
         Returns: undefined

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { apiPost } from "../lib/api";
+import { apiPostAuthenticated } from "../lib/api";
 import { entitlementsIncludePurchase, useAuth } from "../lib/auth";
-import { getValidAccessToken } from "../lib/supabase";
 
 /**
  * Captured at module load so Paylink's callback values survive URL cleanup.
@@ -109,27 +108,20 @@ export function CheckoutReturn() {
     }
 
     void (async () => {
-      const token = await getValidAccessToken();
-      if (!token) {
-        toast.error("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى.");
-        return;
-      }
-
       let verification: PaylinkVerifyResponse | null = null;
 
       // Paylink can redirect a fraction before its payment state is final.
       // Re-verification is server-authoritative and safe to repeat.
       for (let attempt = 0; attempt < 4; attempt += 1) {
-        const { resp, data } = await apiPost<PaylinkVerifyResponse>(
+        const { resp, data } = await apiPostAuthenticated<PaylinkVerifyResponse>(
           "/api/payment/paylink-verify",
           { orderNumber, transactionNo },
-          { Authorization: `Bearer ${token}` },
         );
 
-        if (!resp.ok) {
-          console.error("Paylink verification failed:", resp.status, data);
+        if (!resp || !resp.ok) {
+          console.error("Paylink verification failed:", resp?.status, data);
           toast.error(
-            resp.status === 401
+            !resp || resp.status === 401
               ? "انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."
               : "تعذّر التحقق من عملية الدفع. لم يتم تفعيل أي عنصر.",
           );

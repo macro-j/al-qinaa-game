@@ -24,7 +24,31 @@ function requireEnv(name: string): string {
   return value;
 }
 
-const SUPABASE_URL = requireEnv("SUPABASE_URL");
+function requireHttpOrigin(name: string): string {
+  const raw = requireEnv(name);
+  // Be defensive against values pasted from rich-text editors as Markdown.
+  const markdownLink = raw.match(/^\[[^\]]+\]\((https?:\/\/[^)]+)\)$/i);
+  const candidate = markdownLink?.[1] ?? raw;
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new Error(`${name} is not a valid URL`);
+  }
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error(`${name} uses an invalid protocol`);
+  }
+  if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+    throw new Error(`${name} must use HTTPS in production`);
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error(`${name} must be a plain origin`);
+  }
+  return url.origin;
+}
+
+const SUPABASE_URL = requireHttpOrigin("SUPABASE_URL");
 const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
 
 function getServiceRoleKey(): string {

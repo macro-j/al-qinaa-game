@@ -1,21 +1,20 @@
 import { useState, type FormEvent } from "react";
+import {
+  ADD_ON_ITEM_IDS,
+  FREE_GAME_LIMIT,
+  QINAA_CATALOG,
+  formatSarAmount,
+} from "@workspace/qinaa-rules";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../lib/auth";
-import { getValidAccessToken } from "../lib/supabase";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
 import { RtlEmoji } from "./RtlEmoji";
-import { apiPost } from "../lib/api";
+import { apiPostAuthenticated } from "../lib/api";
 
-const ADD_ON_IDS = new Set([
-  "role_wizard",
-  "role_madman",
-  "role_avenger",
-  "role_twins",
-  "role_sniper",
-]);
+const ADD_ON_IDS = new Set<string>(ADD_ON_ITEM_IDS);
 
 const ITEM_LABELS: Record<string, string> = {
   base_game: "اللعبة الأساسية",
@@ -61,7 +60,7 @@ function checkoutErrorMessage(error?: string): string {
 
 /**
  * Pricing / packages modal. Each "buy" button starts a Paylink hosted checkout for
- * the premium subscription (entitlement unlock happens server-side via the
+ * a lifetime entitlement (unlock happens server-side via the
  * verified Paylink flow). The card footers react to the live entitlement state so the
  * user's current tier is always reflected.
  * Rendered globally via ShopProvider so it can be opened from anywhere
@@ -83,11 +82,20 @@ export function ShopModal({
   const [checkoutItemId, setCheckoutItemId] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
   const [clientMobile, setClientMobile] = useState("");
-  const { user, entitlements, entitlementsLoading } = useAuth();
+  const {
+    user,
+    entitlements,
+    entitlementsLoading,
+    refreshEntitlements,
+  } = useAuth();
 
   const hasBase = !!entitlements?.has_base_game;
   const hasAll = !!entitlements?.has_all_access;
   const hasBaseAccess = hasBase || hasAll;
+  const freeRemaining = entitlements
+    ? Math.max(0, FREE_GAME_LIMIT - entitlements.games_played)
+    : null;
+  const checkingEntitlements = !!user && (entitlementsLoading || !entitlements);
   const currentTier: "free" | "base" | "all_access" = hasAll
     ? "all_access"
     : hasBase
@@ -140,14 +148,7 @@ export function ShopModal({
 
     setLoadingItemId(checkoutItemId);
     try {
-      const token = await getValidAccessToken();
-      if (!token) {
-        setCheckoutItemId(null);
-        setShowAuth(true);
-        throw new Error("missing_auth_token");
-      }
-
-      const { resp, data } = await apiPost<{
+      const { resp, data } = await apiPostAuthenticated<{
         checkoutUrl?: string;
         error?: string;
       }>(
@@ -157,12 +158,22 @@ export function ShopModal({
           clientName: normalizedName,
           clientMobile: normalizedMobile,
         },
-        { Authorization: `Bearer ${token}` },
       );
 
-      if (!resp.ok) {
-        console.error("Paylink checkout failed:", resp.status, data);
-        toast.error(checkoutErrorMessage(data.error));
+      if (!resp || !resp.ok) {
+        const authFailed =
+          !resp ||
+          resp.status === 401 ||
+          data.error === "missing_auth_token" ||
+          data.error === "invalid_auth_token";
+        if (authFailed) {
+          setCheckoutItemId(null);
+          setShowAuth(true);
+        }
+        console.error("Paylink checkout failed:", resp?.status, data);
+        toast.error(
+          checkoutErrorMessage(authFailed ? "invalid_auth_token" : data.error),
+        );
         return;
       }
 
@@ -186,7 +197,7 @@ export function ShopModal({
 
   // Neutral placeholder shown in the tier card footers while we don't yet know
   // the user's entitlements (avoids briefly assuming the free tier).
-  const checkingBadge = (
+  const checkingBadge = entitlementsLoading ? (
     <div
       className="w-full text-center py-2.5 rounded-xl text-sm font-bold"
       style={{
@@ -197,6 +208,19 @@ export function ShopModal({
     >
       جارٍ التحقق…
     </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => { void refreshEntitlements(); }}
+      className="w-full text-center py-2.5 rounded-xl text-sm font-bold transition-colors hover:text-white"
+      style={{
+        backgroundColor: "#211414",
+        color: "#FCA5A5",
+        border: "1px solid rgba(239,68,68,0.32)",
+      }}
+    >
+      تعذّر التحقق — إعادة المحاولة
+    </button>
   );
 
   // Each add-on is the shared in-game RoleRevealCard (single source of truth for
@@ -288,9 +312,10 @@ export function ShopModal({
                 className="text-sm leading-relaxed flex-1"
                 style={{ color: "#888888" }}
               >
-                وصول مجاني للأدوار الرئيسية لمرتين فقط.
+                تجربتان بالأدوار الرئيسية. تُحسب التجربة بعد اكتمال الليلة
+                الأولى، والخروج قبلها لا يستهلكها.
               </p>
-              {entitlementsLoading ? (
+              {checkingEntitlements ? (
                 checkingBadge
               ) : !user ? (
                 <button
@@ -314,7 +339,11 @@ export function ShopModal({
                     border: "1px solid #2A2A2A",
                   }}
                 >
-                  {currentTier === "free" ? "الباقة الحالية" : "تمت الترقية"}
+                  {currentTier !== "free"
+                    ? "تمت الترقية"
+                    : freeRemaining && freeRemaining > 0
+                      ? `المتبقي ${freeRemaining} من ${FREE_GAME_LIMIT}`
+                      : "انتهت التجربتان"}
                 </div>
               )}
             </div>
@@ -332,7 +361,8 @@ export function ShopModal({
                   اللعبة الأساسية
                 </span>
                 <span className="text-2xl font-black text-white">
-                  14.99 <span className="text-base font-bold">ر.س</span>
+                  {formatSarAmount(QINAA_CATALOG.base_game.amount)}{" "}
+                  <span className="text-base font-bold">ر.س</span>
                 </span>
               </div>
               <div
@@ -347,7 +377,7 @@ export function ShopModal({
               >
                 وصول لا محدود للأدوار الرئيسية للأبد.
               </p>
-              {entitlementsLoading ? (
+              {checkingEntitlements ? (
                 checkingBadge
               ) : hasBaseAccess ? (
                 <div
@@ -405,7 +435,8 @@ export function ShopModal({
                   className="text-2xl font-black"
                   style={{ color: "#FBBF24" }}
                 >
-                  29.99 <span className="text-base font-bold">ر.س</span>
+                  {formatSarAmount(QINAA_CATALOG.all_access.amount)}{" "}
+                  <span className="text-base font-bold">ر.س</span>
                 </span>
               </div>
               <div
@@ -418,9 +449,10 @@ export function ShopModal({
                 className="text-sm leading-relaxed flex-1"
                 style={{ color: "#D4B97A" }}
               >
-                التجربة الكاملة للعبة بجميع أدوارها بلا قيود.
+                اللعبة الأساسية وجميع الأدوار الإضافية الحالية والقادمة بلا
+                قيود.
               </p>
-              {entitlementsLoading ? (
+              {checkingEntitlements ? (
                 checkingBadge
               ) : hasAll ? (
                 <div
@@ -491,7 +523,7 @@ export function ShopModal({
                         ? "اشترِ اللعبة الأساسية أولاً"
                         : loadingItemId === id
                           ? "جارٍ التحويل…"
-                          : `شراء ${name} • 7.99 ر.س`}
+                          : `شراء ${name} • ${formatSarAmount(QINAA_CATALOG[id as keyof typeof QINAA_CATALOG].amount)} ر.س`}
                     </button>
                   )}
                 </div>
@@ -500,7 +532,8 @@ export function ShopModal({
           </div>
 
           <p className="text-center text-xs" style={{ color: "#555555" }}>
-            الأسعار قابلة للتغيير. تُعالَج المدفوعات عبر بوابة دفع آمنة.
+            جميع الأسعار دفعة واحدة لوصول دائم وليست اشتراكًا. الإضافات
+            المفردة تتطلب اللعبة الأساسية، وتُعالَج المدفوعات عبر بوابة آمنة.
           </p>
         </div>
       </div>

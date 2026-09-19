@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { FREE_GAME_LIMIT } from "@workspace/qinaa-rules";
 import type { Database } from "../supabase";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").trim();
@@ -33,10 +34,32 @@ export type Entitlements = {
   owned_items: string[];
 };
 
-export const FREE_GAME_LIMIT = 2;
+export { FREE_GAME_LIMIT };
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.error("refreshSession failed:", error);
+        return null;
+      }
+      return data.session?.access_token ?? null;
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
 
 /** Returns a fresh access token, refreshing the Supabase session when stale. */
-export async function getValidAccessToken(): Promise<string | null> {
+export async function getValidAccessToken(options?: {
+  forceRefresh?: boolean;
+}): Promise<string | null> {
+  if (options?.forceRefresh) return refreshAccessToken();
+
   const { data: sessionData, error: sessionError } =
     await supabase.auth.getSession();
   if (sessionError) {
@@ -53,12 +76,5 @@ export async function getValidAccessToken(): Promise<string | null> {
 
   if (!needsRefresh) return session.access_token;
 
-  const { data: refreshed, error: refreshError } =
-    await supabase.auth.refreshSession();
-  if (refreshError) {
-    console.error("refreshSession failed:", refreshError);
-    return null;
-  }
-
-  return refreshed.session?.access_token ?? null;
+  return refreshAccessToken();
 }
