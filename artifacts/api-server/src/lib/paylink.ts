@@ -32,6 +32,10 @@ export class PaylinkApiError extends Error {
     message: string,
     readonly status?: number,
     readonly details?: unknown,
+    readonly operation?:
+      | "authenticate"
+      | "create_invoice"
+      | "retrieve_invoice",
   ) {
     super(message);
     this.name = "PaylinkApiError";
@@ -74,6 +78,7 @@ async function parseJson(resp: Response): Promise<unknown> {
 async function paylinkFetch(
   path: string,
   init: RequestInit,
+  operation: PaylinkApiError["operation"],
 ): Promise<{ response: Response; data: unknown }> {
   let response: Response;
   try {
@@ -87,12 +92,22 @@ async function paylinkFetch(
       signal: AbortSignal.timeout(12_000),
     });
   } catch (error) {
-    throw new PaylinkApiError("paylink_unavailable", undefined, error);
+    throw new PaylinkApiError(
+      "paylink_unavailable",
+      undefined,
+      error,
+      operation,
+    );
   }
 
   const data = await parseJson(response);
   if (!response.ok) {
-    throw new PaylinkApiError("paylink_request_failed", response.status, data);
+    throw new PaylinkApiError(
+      "paylink_request_failed",
+      response.status,
+      data,
+      operation,
+    );
   }
   return { response, data };
 }
@@ -105,7 +120,7 @@ async function authenticate(): Promise<string> {
       secretKey: requireEnv("PAYLINK_SECRET_KEY"),
       persistToken: false,
     }),
-  });
+  }, "authenticate");
 
   const token = (data as PaylinkAuthResponse).id_token;
   if (typeof token !== "string" || token.length < 20) {
@@ -168,7 +183,7 @@ export async function createPaylinkInvoice(input: {
       displayPending: true,
       note: `طلب رقمي من لعبة القناع — ${input.orderNumber}`,
     }),
-  });
+  }, "create_invoice");
 
   const invoice = data as PaylinkInvoice;
   if (invoice.success !== true) {
@@ -211,6 +226,7 @@ export async function getPaylinkInvoice(
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     },
+    "retrieve_invoice",
   );
   return data as PaylinkInvoice;
 }

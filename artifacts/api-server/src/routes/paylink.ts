@@ -117,6 +117,22 @@ function secureStringEquals(
   return timingSafeEqual(actualDigest, expectedDigest);
 }
 
+function safePaylinkErrorDetails(details: unknown): Record<string, unknown> {
+  if (!details || typeof details !== "object" || Array.isArray(details)) {
+    return {};
+  }
+  const source = details as Record<string, unknown>;
+  const safe: Record<string, unknown> = {};
+  for (const key of ["code", "status", "title", "message", "detail", "error"]) {
+    const value = source[key];
+    if (typeof value === "string") safe[key] = value.slice(0, 300);
+    else if (typeof value === "number" || typeof value === "boolean") {
+      safe[key] = value;
+    }
+  }
+  return safe;
+}
+
 type StoredPayment = NonNullable<
   Awaited<ReturnType<typeof findPaymentByOrderNumber>>
 >;
@@ -258,6 +274,12 @@ router.post("/payment/paylink-invoice", async (req, res) => {
         paymentId,
         message: error instanceof Error ? error.message : "unknown_error",
         status: error instanceof PaylinkApiError ? error.status : undefined,
+        operation:
+          error instanceof PaylinkApiError ? error.operation : undefined,
+        gatewayError:
+          error instanceof PaylinkApiError
+            ? safePaylinkErrorDetails(error.details)
+            : undefined,
       },
       "Failed to create Paylink invoice",
     );
