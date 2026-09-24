@@ -31,6 +31,11 @@ app.use(
   }),
 );
 
+// NalPay signs the exact request bytes. Capture this route before JSON parsing.
+app.use(
+  "/api/payment/nalpay-webhook",
+  express.raw({ type: "application/json", limit: "256kb" }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

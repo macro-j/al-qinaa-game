@@ -55,15 +55,19 @@ function checkoutErrorMessage(error?: string): string {
       return "بوابة الدفع غير مهيأة حاليًا.";
     case "payment_gateway_inactive":
       return "بوابة الدفع تنتظر تفعيل حساب التاجر.";
+    case "item_below_gateway_minimum":
+      return "الحد الأدنى للدفع عبر NalPay هو 10 ر.س. هذا الدور غير متاح منفردًا حاليًا.";
+    case "payment_in_progress":
+      return "هناك عملية دفع مفتوحة لهذا المنتج. أكمِلها أو انتظر انتهاءها ثم حاول مجددًا.";
     default:
       return "تعذّر بدء عملية الدفع. حاول مرة أخرى.";
   }
 }
 
 /**
- * Pricing / packages modal. Each "buy" button starts a Paylink hosted checkout for
+ * Pricing / packages modal. Each "buy" button starts a NalPay hosted checkout for
  * a lifetime entitlement (unlock happens server-side via the
- * verified Paylink flow). The card footers react to the live entitlement state so the
+ * verified NalPay flow). The card footers react to the live entitlement state so the
  * user's current tier is always reflected.
  * Rendered globally via ShopProvider so it can be opened from anywhere
  * (footer button, entitlement gatekeeper, etc.).
@@ -117,6 +121,14 @@ export function ShopModal({
       toast.error("يلزم شراء اللعبة الأساسية قبل شراء دور منفرد.");
       return;
     }
+    if (
+      QINAA_CATALOG[itemId as keyof typeof QINAA_CATALOG]?.amount < 1_000
+    ) {
+      toast.error(
+        "الحد الأدنى للدفع عبر NalPay هو 10 ر.س. شراء الدور المنفرد متوقف مؤقتًا.",
+      );
+      return;
+    }
 
     const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
     const suggestedName = [
@@ -148,13 +160,18 @@ export function ShopModal({
       return;
     }
 
+    // NalPay payment links do not accept a return URL. Open the hosted page in
+    // a separate tab while this direct user gesture still allows it; returning
+    // to the game triggers server-side verification. Fall back to same-tab.
+    const checkoutWindow = window.open("about:blank", "_blank");
     setLoadingItemId(checkoutItemId);
     try {
       const { resp, data } = await apiPostAuthenticated<{
         checkoutUrl?: string;
+        paymentId?: string;
         error?: string;
       }>(
-        "/api/payment/paylink-invoice",
+        "/api/payment/nalpay-link",
         {
           itemId: checkoutItemId,
           clientName: normalizedName,
@@ -163,6 +180,7 @@ export function ShopModal({
       );
 
       if (!resp || !resp.ok) {
+        checkoutWindow?.close();
         const authFailed =
           !resp ||
           resp.status === 401 ||
@@ -172,7 +190,7 @@ export function ShopModal({
           setCheckoutItemId(null);
           setShowAuth(true);
         }
-        console.error("Paylink checkout failed:", resp?.status, data);
+        console.error("NalPay checkout failed:", resp?.status, data);
         toast.error(
           checkoutErrorMessage(authFailed ? "invalid_auth_token" : data.error),
         );
@@ -180,13 +198,35 @@ export function ShopModal({
       }
 
       const checkoutUrl = data.checkoutUrl;
-      if (typeof checkoutUrl !== "string" || !checkoutUrl) {
-        console.error("Paylink checkout response missing checkoutUrl:", data);
+      const paymentId = data.paymentId;
+      if (
+        typeof checkoutUrl !== "string" ||
+        !checkoutUrl ||
+        typeof paymentId !== "string" ||
+        !paymentId
+      ) {
+        checkoutWindow?.close();
+        console.error("NalPay checkout response is incomplete:", data);
         throw new Error("missing checkout url");
       }
 
-      window.location.assign(checkoutUrl);
+      sessionStorage.setItem(
+        "qinaa.pendingNalpayPayment",
+        JSON.stringify({
+          paymentId,
+          itemId: checkoutItemId,
+          createdAt: Date.now(),
+        }),
+      );
+
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.opener = null;
+        checkoutWindow.location.replace(checkoutUrl);
+      } else {
+        window.location.assign(checkoutUrl);
+      }
     } catch (err) {
+      checkoutWindow?.close();
       console.error("Checkout error:", err);
       const error = err instanceof Error ? err.message : undefined;
       toast.error(checkoutErrorMessage(error));
@@ -495,6 +535,8 @@ export function ShopModal({
               const owned =
                 hasAll || (entitlements?.owned_items?.includes(id) ?? false);
               const requiresBase = !!user && !hasBaseAccess;
+              const belowGatewayMinimum =
+                QINAA_CATALOG[id as keyof typeof QINAA_CATALOG].amount < 1_000;
               const name = getRoleName(roleKey);
               return (
                 <div key={id} dir="rtl" className="flex flex-col gap-3">
@@ -514,7 +556,12 @@ export function ShopModal({
                     <button
                       type="button"
                       onClick={() => handleBuy(id)}
-                      disabled={busy || entitlementsLoading || requiresBase}
+                      disabled={
+                        busy ||
+                        entitlementsLoading ||
+                        requiresBase ||
+                        belowGatewayMinimum
+                      }
                       className="w-full py-2 rounded-lg text-sm font-black text-amber-400 transition-all duration-150 hover:bg-amber-400 hover:text-neutral-950 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                       style={{
                         backgroundColor: "rgba(245,158,11,0.08)",
@@ -523,6 +570,8 @@ export function ShopModal({
                     >
                       {requiresBase
                         ? "اشترِ اللعبة الأساسية أولاً"
+                        : belowGatewayMinimum
+                          ? "متوقف مؤقتًا • حد NalPay الأدنى 10 ر.س"
                         : loadingItemId === id
                           ? "جارٍ التحويل…"
                           : `شراء ${name} • ${formatSarAmount(QINAA_CATALOG[id as keyof typeof QINAA_CATALOG].amount)} ر.س`}

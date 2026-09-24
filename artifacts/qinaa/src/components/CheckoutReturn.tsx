@@ -1,23 +1,28 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiPostAuthenticated } from "../lib/api";
 import { entitlementsIncludePurchase, useAuth } from "../lib/auth";
 
-/**
- * Captured at module load so Paylink's callback values survive URL cleanup.
- */
+/** Captured at module load so legacy Paylink callback values survive cleanup. */
 const INITIAL_PATH =
   typeof window !== "undefined" ? window.location.pathname : "";
 const INITIAL_SEARCH =
   typeof window !== "undefined" ? window.location.search : "";
+const NALPAY_PENDING_KEY = "qinaa.pendingNalpayPayment";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-type PaylinkVerifyResponse = {
+type VerifyResponse = {
   unlocked?: boolean;
-  status?: "paid" | "pending" | "canceled" | string;
+  status?: string;
   itemId?: string;
   error?: string;
+};
+
+type PendingNalpayPayment = {
+  paymentId: string;
+  itemId: string;
+  createdAt: number;
 };
 
 const PURCHASE_LABELS: Record<string, string> = {
@@ -29,6 +34,32 @@ const PURCHASE_LABELS: Record<string, string> = {
   role_twins: "دور التوأم",
   role_sniper: "دور القناص",
 };
+
+function readPendingNalpayPayment(): PendingNalpayPayment | null {
+  try {
+    const raw = sessionStorage.getItem(NALPAY_PENDING_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<PendingNalpayPayment>;
+    if (
+      typeof value.paymentId !== "string" ||
+      typeof value.itemId !== "string" ||
+      typeof value.createdAt !== "number"
+    ) {
+      sessionStorage.removeItem(NALPAY_PENDING_KEY);
+      return null;
+    }
+    // NalPay links expire after 30 minutes; retain a wider window so a delayed
+    // webhook/return can still refresh the entitlement without stale storage.
+    if (Date.now() - value.createdAt > 24 * 60 * 60 * 1000) {
+      sessionStorage.removeItem(NALPAY_PENDING_KEY);
+      return null;
+    }
+    return value as PendingNalpayPayment;
+  } catch {
+    sessionStorage.removeItem(NALPAY_PENDING_KEY);
+    return null;
+  }
+}
 
 function getParamIgnoreCase(
   params: URLSearchParams,
@@ -49,11 +80,9 @@ function cleanPaymentParams(isSuccessPath: boolean): void {
     "ordernumber",
     "transactionno",
   ]);
-
   for (const name of Array.from(params.keys())) {
     if (paymentKeys.has(name.toLowerCase())) params.delete(name);
   }
-
   const path = isSuccessPath
     ? window.location.pathname.replace(/\/?payment-success\/?$/, "") || "/"
     : window.location.pathname;
@@ -65,17 +94,60 @@ function cleanPaymentParams(isSuccessPath: boolean): void {
   );
 }
 
+async function showConfirmedPurchase(
+  verification: VerifyResponse,
+  refreshAfterPurchase: ReturnType<typeof useAuth>["refreshAfterPurchase"],
+): Promise<void> {
+  const itemId =
+    typeof verification.itemId === "string" ? verification.itemId : null;
+  let latest = await refreshAfterPurchase();
+  if (itemId) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (entitlementsIncludePurchase(latest, itemId)) break;
+      await sleep(750);
+      latest = await refreshAfterPurchase();
+    }
+  }
+  const entitlementVisible = itemId
+    ? entitlementsIncludePurchase(latest, itemId)
+    : false;
+  toast.success("تم الدفع بنجاح", {
+    description: entitlementVisible
+      ? `تم تفعيل ${PURCHASE_LABELS[itemId!] ?? "مشترياتك"}.`
+      : "تم تأكيد الدفع، ويجري تحديث مشتريات حسابك.",
+    duration: 6500,
+  });
+}
+
 /**
- * Handles the verified return from Paylink's hosted invoice page. A callback
- * URL by itself is never considered proof of payment: the server re-fetches
- * the invoice from Paylink before granting the exact purchased item.
+ * Verifies both the current NalPay hosted-link flow and legacy Paylink returns.
+ * Neither a browser return nor local storage is proof of payment: the API
+ * retrieves the gateway object before granting an entitlement.
  */
 export function CheckoutReturn() {
   const { loading, user, refreshAfterPurchase } = useAuth();
-  const processed = useRef(false);
+  const processing = useRef(false);
+  const legacyProcessed = useRef(false);
+  const lastNalpayAttemptAt = useRef(0);
+  const [checkRequest, setCheckRequest] = useState(0);
 
   useEffect(() => {
-    if (loading || processed.current) return;
+    const requestCheck = () => setCheckRequest((value) => value + 1);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") requestCheck();
+    };
+    window.addEventListener("pageshow", requestCheck);
+    window.addEventListener("focus", requestCheck);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pageshow", requestCheck);
+      window.removeEventListener("focus", requestCheck);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading || processing.current) return;
 
     const params = new URLSearchParams(INITIAL_SEARCH);
     const gateway = getParamIgnoreCase(params, "gateway")?.toLowerCase();
@@ -87,98 +159,111 @@ export function CheckoutReturn() {
     const isPaylinkSuccess =
       isSuccessPath &&
       (gateway === "paylink" || (!!orderNumber && !!transactionNo));
+    const hasLegacyReturn =
+      !legacyProcessed.current && (isPaylinkSuccess || isPaylinkCancel);
+    const pendingNalpay = readPendingNalpayPayment();
 
-    if (!isPaylinkSuccess && !isPaylinkCancel) return;
-    processed.current = true;
-    cleanPaymentParams(isSuccessPath);
-
-    if (isPaylinkCancel) {
-      toast("أُلغيت عملية الدفع ولم يُخصم شيء.");
+    if (!hasLegacyReturn && !pendingNalpay) return;
+    if (
+      !hasLegacyReturn &&
+      Date.now() - lastNalpayAttemptAt.current < 3_000
+    ) {
       return;
     }
-
-    if (!user) {
-      toast.error("سجّل الدخول بالحساب الذي بدأ عملية الشراء للتحقق من الدفع.");
-      return;
-    }
-
-    if (!orderNumber || !transactionNo) {
-      toast.error("تعذّر التحقق من العملية لعدم اكتمال بيانات الدفع.");
-      return;
-    }
+    processing.current = true;
 
     void (async () => {
-      let verification: PaylinkVerifyResponse | null = null;
-
-      // Paylink can redirect a fraction before its payment state is final.
-      // Re-verification is server-authoritative and safe to repeat.
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        const { resp, data } = await apiPostAuthenticated<PaylinkVerifyResponse>(
-          "/api/payment/paylink-verify",
-          { orderNumber, transactionNo },
-        );
-
-        if (!resp || !resp.ok) {
-          console.error("Paylink verification failed:", resp?.status, data);
+      if (hasLegacyReturn) {
+        legacyProcessed.current = true;
+        cleanPaymentParams(isSuccessPath);
+        if (isPaylinkCancel) {
+          toast("أُلغيت عملية الدفع ولم يُخصم شيء.");
+          return;
+        }
+        if (!user) {
           toast.error(
-            !resp || resp.status === 401
-              ? "انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."
-              : "تعذّر التحقق من عملية الدفع. لم يتم تفعيل أي عنصر.",
+            "سجّل الدخول بالحساب الذي بدأ عملية الشراء للتحقق من الدفع.",
           );
           return;
         }
-
-        verification = data;
-        if (data.status?.toLowerCase() !== "pending") break;
-        if (attempt < 3) await sleep(1500);
-      }
-
-      const status = verification?.status?.toLowerCase();
-
-      if (status === "canceled" || status === "cancelled") {
-        toast("أُلغيت عملية الدفع ولم يتم تفعيل أي عنصر.");
-        return;
-      }
-
-      if (status === "pending") {
-        toast("تم استلام العملية وهي قيد التأكيد.", {
-          description: "سيظهر العنصر في حسابك بعد تأكيد الدفع.",
-          duration: 7000,
-        });
-        return;
-      }
-
-      if (status !== "paid" || verification?.unlocked !== true) {
-        toast.error("لم تكتمل عملية الدفع، ولم يتم تفعيل أي عنصر.");
-        return;
-      }
-
-      const itemId =
-        typeof verification.itemId === "string" ? verification.itemId : null;
-      let latest = await refreshAfterPurchase();
-
-      if (itemId) {
-        for (let attempt = 0; attempt < 5; attempt += 1) {
-          if (entitlementsIncludePurchase(latest, itemId)) break;
-          await sleep(750);
-          latest = await refreshAfterPurchase();
+        if (!orderNumber || !transactionNo) {
+          toast.error("تعذّر التحقق من العملية لعدم اكتمال بيانات الدفع.");
+          return;
         }
+        let verification: VerifyResponse | null = null;
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const { resp, data } = await apiPostAuthenticated<VerifyResponse>(
+            "/api/payment/paylink-verify",
+            { orderNumber, transactionNo },
+          );
+          if (!resp || !resp.ok) {
+            toast.error(
+              !resp || resp.status === 401
+                ? "انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى."
+                : "تعذّر التحقق من عملية الدفع. لم يتم تفعيل أي عنصر.",
+            );
+            return;
+          }
+          verification = data;
+          if (data.status?.toLowerCase() !== "pending") break;
+          if (attempt < 3) await sleep(1500);
+        }
+        if (
+          verification?.status?.toLowerCase() === "paid" &&
+          verification.unlocked === true
+        ) {
+          await showConfirmedPurchase(verification, refreshAfterPurchase);
+        } else if (verification?.status?.toLowerCase() === "pending") {
+          toast("تم استلام العملية وهي قيد التأكيد.");
+        } else {
+          toast.error("لم تكتمل عملية الدفع، ولم يتم تفعيل أي عنصر.");
+        }
+        return;
       }
 
-      const entitlementVisible = itemId
-        ? entitlementsIncludePurchase(latest, itemId)
-        : false;
-      toast.success("تم الدفع بنجاح", {
-        description: entitlementVisible
-          ? `تم تفعيل ${PURCHASE_LABELS[itemId!] ?? "مشترياتك"}.`
-          : "تم تأكيد الدفع، ويجري تحديث مشتريات حسابك.",
-        duration: 6500,
+      if (!pendingNalpay) return;
+      lastNalpayAttemptAt.current = Date.now();
+      if (!user) {
+        toast.error(
+          "سجّل الدخول بالحساب الذي بدأ عملية الشراء للتحقق من الدفع.",
+        );
+        return;
+      }
+      const { resp, data } = await apiPostAuthenticated<VerifyResponse>(
+        "/api/payment/nalpay-verify",
+        { paymentId: pendingNalpay.paymentId },
+      );
+      if (!resp || !resp.ok) {
+        console.error("NalPay verification failed:", resp?.status, data);
+        if (!resp || resp.status === 401) {
+          toast.error("انتهت جلسة الدخول. سجّل الدخول ثم حاول مرة أخرى.");
+        } else {
+          toast("تعذّر التحقق الآن؛ سنحاول مجددًا عند عودتك للتطبيق.");
+        }
+        return;
+      }
+      const status = data.status?.toLowerCase();
+      if (status === "paid" && data.unlocked === true) {
+        sessionStorage.removeItem(NALPAY_PENDING_KEY);
+        await showConfirmedPurchase(data, refreshAfterPurchase);
+      } else if (["canceled", "expired", "failed", "refunded"].includes(status ?? "")) {
+        sessionStorage.removeItem(NALPAY_PENDING_KEY);
+        toast.error("لم تكتمل عملية الدفع، ولم يتم تفعيل أي عنصر.");
+      } else {
+        toast("عملية الدفع ما زالت بانتظار التأكيد.", {
+          description: "أكمل الدفع في صفحة NalPay ثم عد إلى التطبيق.",
+          duration: 5000,
+        });
+      }
+    })()
+      .catch((error) => {
+        console.error("Payment return handling failed:", error);
+        toast.error("تعذّر التحقق من عملية الدفع. حاول تحديث الصفحة لاحقًا.");
+      })
+      .finally(() => {
+        processing.current = false;
       });
-    })().catch((error) => {
-      console.error("Paylink return handling failed:", error);
-      toast.error("تعذّر التحقق من عملية الدفع. حاول تحديث الصفحة لاحقًا.");
-    });
-  }, [loading, user, refreshAfterPurchase]);
+  }, [checkRequest, loading, user, refreshAfterPurchase]);
 
   return null;
 }

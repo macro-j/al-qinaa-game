@@ -14,11 +14,13 @@ export type Database = {
           environment: string;
           gateway: string;
           gateway_order_id: string | null;
+          gateway_payment_id: string | null;
           id: string;
           idempotency_key: string | null;
           item_id: string | null;
           merchant_order_number: string | null;
           payment_method: string | null;
+          refunded_at: string | null;
           status: string;
           updated_at: string;
           user_id: string;
@@ -32,11 +34,13 @@ export type Database = {
           environment: string;
           gateway: string;
           gateway_order_id?: string | null;
+          gateway_payment_id?: string | null;
           id?: string;
           idempotency_key?: string | null;
           item_id?: string | null;
           merchant_order_number?: string | null;
           payment_method?: string | null;
+          refunded_at?: string | null;
           status: string;
           updated_at?: string;
           user_id: string;
@@ -50,11 +54,13 @@ export type Database = {
           environment?: string;
           gateway?: string;
           gateway_order_id?: string | null;
+          gateway_payment_id?: string | null;
           id?: string;
           idempotency_key?: string | null;
           item_id?: string | null;
           merchant_order_number?: string | null;
           payment_method?: string | null;
+          refunded_at?: string | null;
           status?: string;
           updated_at?: string;
           user_id?: string;
@@ -132,6 +138,34 @@ export type Database = {
         };
         Returns: Array<{
           already_completed: boolean;
+          item_id: string;
+          user_id: string;
+        }>;
+      };
+      complete_verified_nalpay_payment: {
+        Args: {
+          expected_amount: number;
+          expected_currency: string;
+          expected_event_id: string | null;
+          expected_link_id: string;
+          expected_payment_id: string;
+          target_payment: string;
+        };
+        Returns: Array<{
+          already_completed: boolean;
+          item_id: string;
+          user_id: string;
+        }>;
+      };
+      refund_verified_nalpay_payment: {
+        Args: {
+          expected_event_id: string | null;
+          expected_link_id: string;
+          expected_payment_id: string;
+          target_payment: string;
+        };
+        Returns: Array<{
+          already_refunded: boolean;
           item_id: string;
           user_id: string;
         }>;

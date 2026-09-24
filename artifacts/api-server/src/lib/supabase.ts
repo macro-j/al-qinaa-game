@@ -160,8 +160,10 @@ export async function markPaymentInvoiceCreated(input: {
 
 export async function markPaymentStatus(input: {
   paymentId: string;
+  gateway?: "paylink" | "nalpay";
   status: "creating" | "pending" | "canceled" | "failed";
   transactionNo?: string;
+  gatewayPaymentId?: string;
   paymentMethod?: string | null;
   verified?: boolean;
 }): Promise<void> {
@@ -172,15 +174,141 @@ export async function markPaymentStatus(input: {
       status: input.status,
       updated_at: now,
       ...(input.transactionNo ? { gateway_order_id: input.transactionNo } : {}),
+      ...(input.gatewayPaymentId
+        ? { gateway_payment_id: input.gatewayPaymentId }
+        : {}),
       ...(input.paymentMethod !== undefined
         ? { payment_method: input.paymentMethod }
         : {}),
       ...(input.verified ? { verified_at: now } : {}),
     })
     .eq("id", input.paymentId)
-    .eq("gateway", "paylink")
+    .eq("gateway", input.gateway ?? "paylink")
     .neq("status", "completed");
   if (error) throw new Error(`payment status update failed: ${error.message}`);
+}
+
+export async function markNalpayLinkCreated(input: {
+  paymentId: string;
+  linkId: string;
+}): Promise<void> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .update({
+      gateway_order_id: input.linkId,
+      status: "pending",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.paymentId)
+    .eq("gateway", "nalpay")
+    .select("id");
+  if (error || !data?.length) {
+    throw new Error(`payment update failed: ${error?.message ?? "not found"}`);
+  }
+}
+
+export async function findNalpayPaymentById(
+  paymentId: string,
+): Promise<PaymentRow | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .select("*")
+    .eq("gateway", "nalpay")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (error) throw new Error(`payment lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function findActiveNalpayPayment(
+  userId: string,
+  itemId: string,
+  environment: "test" | "live",
+): Promise<PaymentRow | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .select("*")
+    .eq("gateway", "nalpay")
+    .eq("environment", environment)
+    .eq("user_id", userId)
+    .eq("item_id", itemId)
+    .in("status", ["creating", "pending"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`payment lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function findPaymentByNalpayLinkId(
+  linkId: string,
+): Promise<PaymentRow | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("payments")
+    .select("*")
+    .eq("gateway", "nalpay")
+    .eq("gateway_order_id", linkId)
+    .maybeSingle();
+  if (error) throw new Error(`payment lookup failed: ${error.message}`);
+  return data;
+}
+
+export async function completeVerifiedNalpayPayment(input: {
+  paymentId: string;
+  linkId: string;
+  gatewayPaymentId: string;
+  amount: number;
+  currency: string;
+  eventId?: string | null;
+}): Promise<{ itemId: string; userId: string; alreadyCompleted: boolean }> {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "complete_verified_nalpay_payment",
+    {
+      target_payment: input.paymentId,
+      expected_link_id: input.linkId,
+      expected_payment_id: input.gatewayPaymentId,
+      expected_amount: input.amount,
+      expected_currency: input.currency,
+      expected_event_id: input.eventId ?? null,
+    },
+  );
+  if (error) throw new Error(`payment fulfillment failed: ${error.message}`);
+  const result = data?.[0];
+  if (!result?.item_id || !result.user_id) {
+    throw new Error("payment fulfillment returned no result");
+  }
+  return {
+    itemId: result.item_id,
+    userId: result.user_id,
+    alreadyCompleted: !!result.already_completed,
+  };
+}
+
+export async function refundVerifiedNalpayPayment(input: {
+  paymentId: string;
+  linkId: string;
+  gatewayPaymentId: string;
+  eventId?: string | null;
+}): Promise<{ itemId: string; userId: string; alreadyRefunded: boolean }> {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "refund_verified_nalpay_payment",
+    {
+      target_payment: input.paymentId,
+      expected_link_id: input.linkId,
+      expected_payment_id: input.gatewayPaymentId,
+      expected_event_id: input.eventId ?? null,
+    },
+  );
+  if (error) throw new Error(`payment refund failed: ${error.message}`);
+  const result = data?.[0];
+  if (!result?.item_id || !result.user_id) {
+    throw new Error("payment refund returned no result");
+  }
+  return {
+    itemId: result.item_id,
+    userId: result.user_id,
+    alreadyRefunded: !!result.already_refunded,
+  };
 }
 
 export async function findPaymentByOrderNumber(
