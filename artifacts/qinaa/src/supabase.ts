@@ -114,6 +114,7 @@ export type Database = {
         Row: {
           consumed_game_ids: string[]
           created_at: string
+          game_credits: number
           games_played: number | null
           has_all_access: boolean | null
           has_base_game: boolean | null
@@ -124,6 +125,7 @@ export type Database = {
         Insert: {
           consumed_game_ids?: string[]
           created_at?: string
+          game_credits?: number
           games_played?: number | null
           has_all_access?: boolean | null
           has_base_game?: boolean | null
@@ -134,6 +136,7 @@ export type Database = {
         Update: {
           consumed_game_ids?: string[]
           created_at?: string
+          game_credits?: number
           games_played?: number | null
           has_all_access?: boolean | null
           has_base_game?: boolean | null
@@ -148,6 +151,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_game_credit: {
+        Args: { target_game_id: string }
+        Returns: {
+          game_credits: number
+          games_played: number
+          status: string
+        }[]
+      }
       consume_free_game: {
         Args: { target_game_id: string }
         Returns: {

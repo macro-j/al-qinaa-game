@@ -26,13 +26,16 @@ type PendingNalpayPayment = {
 };
 
 const PURCHASE_LABELS: Record<string, string> = {
-  base_game: "اللعبة الأساسية",
-  all_access: "الباقة الشاملة",
-  role_wizard: "دور الساحر",
-  role_madman: "دور المجنون",
-  role_avenger: "دور المنتقم",
-  role_twins: "دور التوأم",
-  role_sniper: "دور القناص",
+  councils_5: "5 مجالس",
+  councils_15: "15 مجلسًا",
+  councils_40: "40 مجلسًا",
+  roles_bundle: "مجموعة الأقنعة",
+  full_bundle: "الباقة الشاملة",
+  role_wizard: "قناع الساحر",
+  role_madman: "قناع المجنون",
+  role_avenger: "قناع المنتقم",
+  role_twins: "قناع التوأم",
+  role_sniper: "قناع القناص",
 };
 
 function readPendingNalpayPayment(): PendingNalpayPayment | null {

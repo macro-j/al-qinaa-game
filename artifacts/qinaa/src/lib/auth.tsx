@@ -10,12 +10,14 @@ import {
 import type { Session, User } from "@supabase/supabase-js";
 import {
   supabase,
-  FREE_GAME_LIMIT,
+  INITIAL_COUNCIL_CREDITS,
   type Entitlements,
 } from "./supabase";
+import { ROLE_ITEM_IDS } from "@workspace/qinaa-rules";
 import { apiPostAuthenticated } from "./api";
 
 const DEFAULT_ENTITLEMENTS: Entitlements = {
+  game_credits: INITIAL_COUNCIL_CREDITS,
   games_played: 0,
   has_base_game: false,
   has_all_access: false,
@@ -44,7 +46,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error: string | null }>;
   /** Idempotently settles the free-game counter for one completed game. */
-  incrementGamesPlayed: (
+  consumeGameCredit: (
     gameId: string,
   ) => Promise<"settled" | "limit_reached" | "retry">;
   refreshEntitlements: () => Promise<Entitlements | null>;
@@ -66,14 +68,12 @@ export function entitlementsIncludePurchase(
   itemId: string | null,
 ): boolean {
   if (!ent) return false;
-  if (!itemId) {
-    return (
-      ent.has_base_game || ent.has_all_access || ent.owned_items.length > 0
-    );
+  if (!itemId) return ent.game_credits > 0 || ent.owned_items.length > 0;
+  if (itemId.startsWith("councils_")) return ent.game_credits > 0;
+  if (itemId === "roles_bundle" || itemId === "full_bundle") {
+    return ROLE_ITEM_IDS.every((roleId) => ent.owned_items.includes(roleId));
   }
-  if (itemId === "all_access") return ent.has_all_access;
-  if (itemId === "base_game") return ent.has_base_game || ent.has_all_access;
-  return ent.has_all_access || ent.owned_items.includes(itemId);
+  return ent.owned_items.includes(itemId);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -95,11 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const entitlementsRef = useRef<Entitlements | null>(null);
 
   const mapEntitlements = (data: {
+    game_credits?: number | null;
     games_played?: number | null;
     has_base_game?: boolean | null;
     has_all_access?: boolean | null;
     owned_items?: string[] | null;
   }): Entitlements => ({
+    game_credits: Math.max(0, data.game_credits ?? INITIAL_COUNCIL_CREDITS),
     games_played: data.games_played ?? 0,
     has_base_game: !!data.has_base_game,
     has_all_access: !!data.has_all_access,
@@ -125,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase
           .from("user_entitlements")
-          .select("games_played, has_base_game, has_all_access, owned_items")
+          .select("game_credits, games_played, has_base_game, has_all_access, owned_items")
           .eq("id", uid)
           .maybeSingle();
 
@@ -147,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: inserted, error: insertError } = await supabase
           .from("user_entitlements")
           .insert({ id: uid, ...DEFAULT_ENTITLEMENTS })
-          .select("games_played, has_base_game, has_all_access, owned_items")
+          .select("game_credits, games_played, has_base_game, has_all_access, owned_items")
           .single();
 
         if (activeUidRef.current !== uid) return entitlementsRef.current;
@@ -159,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { data: concurrentRow, error: concurrentReadError } =
             await supabase
               .from("user_entitlements")
-              .select("games_played, has_base_game, has_all_access, owned_items")
+              .select("game_credits, games_played, has_base_game, has_all_access, owned_items")
               .eq("id", uid)
               .single();
 
@@ -342,12 +344,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   };
 
-  const incrementGamesPlayed = async (
+  const consumeGameCredit = async (
     gameId: string,
   ): Promise<"settled" | "limit_reached" | "retry"> => {
     if (!user || !gameId) return "retry";
 
-    const { data, error } = await supabase.rpc("consume_free_game", {
+    const { data, error } = await supabase.rpc("consume_game_credit", {
       target_game_id: gameId,
     });
     if (error) {
@@ -358,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const result = Array.isArray(data) ? data[0] : null;
     if (!result || typeof result.status !== "string") {
-      console.error("Supabase Entitlement Error: invalid consume_free_game response");
+      console.error("Supabase Entitlement Error: invalid consume_game_credit response");
       await refreshEntitlements();
       return "retry";
     }
@@ -368,16 +370,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // or when the account became paid while the game was in progress.
     await refreshEntitlements();
     if (result.status === "limit_reached") return "limit_reached";
-    return ["consumed", "already_consumed", "paid"].includes(result.status)
+    return ["consumed", "already_consumed"].includes(result.status)
       ? "settled"
       : "retry";
   };
 
-  const canStartGame = entitlements
-    ? entitlements.has_base_game ||
-      entitlements.has_all_access ||
-      entitlements.games_played < FREE_GAME_LIMIT
-    : false;
+  const canStartGame = (entitlements?.game_credits ?? 0) > 0;
 
   const value: AuthContextValue = {
     user,
@@ -391,7 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithEmail,
     signOut,
     deleteAccount,
-    incrementGamesPlayed,
+    consumeGameCredit,
     refreshEntitlements,
     refreshAfterPurchase,
   };

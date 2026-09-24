@@ -1,6 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { getPaylinkCatalogItem } from "../lib/paylinkCatalog";
+import { resolveQinaaOffer } from "@workspace/qinaa-rules";
 import {
   createNalpayCustomer,
   createNalpayPaymentLink,
@@ -15,7 +16,6 @@ import {
 import {
   completeVerifiedNalpayPayment,
   createPayment,
-  entitlementsOwnItem,
   findActiveNalpayPayment,
   findNalpayPaymentById,
   findPaymentByNalpayLinkId,
@@ -168,11 +168,8 @@ router.post("/payment/nalpay-link", async (req, res) => {
   if (!user) return;
 
   const itemId = typeof req.body?.itemId === "string" ? req.body.itemId : "";
-  const item = getPaylinkCatalogItem(itemId);
-  if (!item) return json(res, 400, { error: "unknown_item" });
-  if (item.amount < NALPAY_MINIMUM_AMOUNT) {
-    return json(res, 409, { error: "item_below_gateway_minimum" });
-  }
+  const catalogItem = getPaylinkCatalogItem(itemId);
+  if (!catalogItem) return json(res, 400, { error: "unknown_item" });
   const clientName = normalizeName(req.body?.clientName);
   if (!clientName) return json(res, 400, { error: "invalid_client_name" });
   const clientMobile = normalizeSaudiMobile(req.body?.clientMobile);
@@ -187,15 +184,17 @@ router.post("/payment/nalpay-link", async (req, res) => {
     if (!account.capabilities.can_charge) {
       return json(res, 503, { error: "payment_gateway_inactive" });
     }
-    if (entitlementsOwnItem(entitlements, item.id)) {
-      return json(res, 409, { error: "already_owned" });
+    const item = resolveQinaaOffer(catalogItem.id, entitlements.owned_items);
+    if (!item) {
+      return json(res, 409, {
+        error:
+          catalogItem.kind === "full_bundle"
+            ? "bundle_not_available"
+            : "already_owned",
+      });
     }
-    if (
-      item.requiresBaseGame &&
-      !entitlements.has_base_game &&
-      !entitlements.has_all_access
-    ) {
-      return json(res, 409, { error: "base_game_required" });
+    if (item.amount < NALPAY_MINIMUM_AMOUNT) {
+      return json(res, 409, { error: "item_below_gateway_minimum" });
     }
 
     const activePayment = await findActiveNalpayPayment(
@@ -244,6 +243,8 @@ router.post("/payment/nalpay-link", async (req, res) => {
         item_id: item.id,
         amount: item.amount,
         currency: item.currency,
+        credits_granted: item.creditsGranted,
+        roles_granted: item.rolesGranted,
         gateway: "nalpay",
         gateway_order_id: null,
         gateway_payment_id: null,

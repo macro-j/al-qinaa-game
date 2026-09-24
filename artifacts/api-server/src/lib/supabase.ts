@@ -13,6 +13,8 @@ type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
 type PaymentInsert = Database["public"]["Tables"]["payments"]["Insert"];
 
 export type UserEntitlementsSummary = {
+  game_credits: number;
+  /** Deprecated flags retained only while the retired Paylink route exists. */
   has_base_game: boolean;
   has_all_access: boolean;
   owned_items: string[];
@@ -94,12 +96,13 @@ export async function getUserEntitlements(
 ): Promise<UserEntitlementsSummary> {
   const { data, error } = await getSupabaseAdmin()
     .from("user_entitlements")
-    .select("has_base_game, has_all_access, owned_items")
+    .select("game_credits, has_base_game, has_all_access, owned_items")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) throw new Error(`entitlements lookup failed: ${error.message}`);
   return {
+    game_credits: data?.game_credits ?? 0,
     has_base_game: !!data?.has_base_game,
     has_all_access: !!data?.has_all_access,
     owned_items: Array.isArray(data?.owned_items) ? data.owned_items : [],
@@ -110,13 +113,7 @@ export function entitlementsOwnItem(
   entitlements: UserEntitlementsSummary,
   itemId: string,
 ): boolean {
-  if (itemId === "all_access") return entitlements.has_all_access;
-  if (itemId === "base_game") {
-    return entitlements.has_base_game || entitlements.has_all_access;
-  }
-  return (
-    entitlements.has_all_access || entitlements.owned_items.includes(itemId)
-  );
+  return entitlements.owned_items.includes(itemId);
 }
 
 async function ensureProfile(userId: string): Promise<void> {

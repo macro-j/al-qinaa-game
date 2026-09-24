@@ -218,100 +218,10 @@ router.post("/payment/paylink-invoice", async (req, res) => {
   const user = await authenticatedUser(req, res);
   if (!user) return;
 
-  const itemId = typeof req.body?.itemId === "string" ? req.body.itemId : "";
-  const item = getPaylinkCatalogItem(itemId);
-  if (!item) return json(res, 400, { error: "unknown_item" });
-
-  const clientName = normalizeName(req.body?.clientName);
-  if (!clientName) return json(res, 400, { error: "invalid_client_name" });
-  const clientMobile = normalizeSaudiMobile(req.body?.clientMobile);
-  if (!clientMobile) {
-    return json(res, 400, { error: "invalid_client_mobile" });
-  }
-
-  let paymentId: string | null = null;
-  try {
-    const entitlements = await getUserEntitlements(user.id);
-    if (entitlementsOwnItem(entitlements, item.id)) {
-      return json(res, 409, { error: "already_owned" });
-    }
-    if (
-      item.requiresBaseGame &&
-      !entitlements.has_base_game &&
-      !entitlements.has_all_access
-    ) {
-      return json(res, 409, { error: "base_game_required" });
-    }
-
-    paymentId = randomUUID();
-    const orderNumber = `QN${paymentId.replaceAll("-", "")}`;
-    await createPayment({
-      id: paymentId,
-      user_id: user.id,
-      item_id: item.id,
-      amount: item.amount,
-      currency: item.currency,
-      gateway: "paylink",
-      gateway_order_id: null,
-      merchant_order_number: orderNumber,
-      idempotency_key: paymentId,
-      environment: getPaylinkEnvironment(),
-      status: "creating",
-    });
-
-    const appBase = publicAppUrl();
-    const created = await createPaylinkInvoice({
-      orderNumber,
-      item,
-      clientName,
-      clientEmail: user.email,
-      clientMobile,
-      callbackUrl: `${appBase}/payment-success`,
-      cancelUrl: `${appBase}/?gateway=paylink&checkout=cancel`,
-    });
-    await markPaymentInvoiceCreated({
-      paymentId,
-      transactionNo: created.transactionNo,
-    });
-
-    req.log.info(
-      { paymentId, itemId: item.id, environment: getPaylinkEnvironment() },
-      "Paylink invoice created",
-    );
-    return json(res, 200, {
-      checkoutUrl: created.checkoutUrl,
-      orderNumber,
-    });
-  } catch (error) {
-    if (paymentId) {
-      await markPaymentStatus({ paymentId, status: "failed" }).catch(() => {});
-    }
-    req.log.error(
-      {
-        paymentId,
-        message: error instanceof Error ? error.message : "unknown_error",
-        status: error instanceof PaylinkApiError ? error.status : undefined,
-        operation:
-          error instanceof PaylinkApiError ? error.operation : undefined,
-        gatewayError:
-          error instanceof PaylinkApiError
-            ? safePaylinkErrorDetails(error.details)
-            : undefined,
-      },
-      "Failed to create Paylink invoice",
-    );
-    const notConfigured =
-      error instanceof Error &&
-      /PAYLINK_(?:API_ID|SECRET_KEY)|PUBLIC_APP_URL/.test(error.message);
-    const inactiveMerchant = isInactivePaylinkMerchant(error);
-    return json(res, notConfigured || inactiveMerchant ? 503 : 502, {
-      error: notConfigured
-        ? "payment_not_configured"
-        : inactiveMerchant
-          ? "payment_gateway_inactive"
-          : "payment_start_failed",
-    });
-  }
+  // New purchases use NalPay exclusively. Keep verify/webhook support below
+  // for historical operations, but never create a Paylink invoice for the new
+  // council-credit catalog whose fulfillment semantics are different.
+  return json(res, 410, { error: "gateway_retired" });
 });
 
 router.post("/payment/paylink-verify", async (req, res) => {

@@ -3,8 +3,7 @@ import { X, LogOut, Loader2, ChevronLeft } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { useAuth } from "../lib/auth";
 import type { Entitlements } from "../lib/supabase";
-import { FREE_GAME_LIMIT } from "../lib/supabase";
-import { RtlEmoji } from "./RtlEmoji";
+import { ROLE_ITEM_IDS } from "@workspace/qinaa-rules";
 
 function formatJoinDate(iso: string | undefined): string {
   if (!iso) return "—";
@@ -16,11 +15,9 @@ function formatJoinDate(iso: string | undefined): string {
 function PackageBadge({
   entitlements,
   entitlementsLoading,
-  freeRemaining,
 }: {
   entitlements: Entitlements | null;
   entitlementsLoading: boolean;
-  freeRemaining: number;
 }) {
   if (entitlementsLoading || !entitlements) {
     return (
@@ -30,44 +27,15 @@ function PackageBadge({
     );
   }
 
-  if (entitlements.has_all_access) {
-    return (
-      <RtlEmoji
-        text="الباقة الشاملة"
-        emoji="👑"
-        className="inline-flex w-fit text-xs font-black px-2.5 py-1 rounded-md"
-        style={{
-          backgroundColor: "#1A1206",
-          color: "#FBBF24",
-          border: "1px solid rgba(245,158,11,0.4)",
-        }}
-      />
-    );
-  }
-
-  if (entitlements.has_base_game) {
-    return (
-      <span
-        className="inline-flex w-fit items-center text-xs font-black px-2.5 py-1 rounded-md"
-        style={{
-          backgroundColor: "#161616",
-          color: "#DDDDDD",
-          border: "1px solid #333333",
-        }}>
-        اللعبة الأساسية
-      </span>
-    );
-  }
-
   return (
     <span
       className="inline-flex w-fit items-center text-xs font-black px-2.5 py-1 rounded-md"
       style={{
-        backgroundColor: "#120808",
-        color: "#EF9A9A",
-        border: "1px solid rgba(211,47,47,0.3)",
+        backgroundColor: "#071713",
+        color: "#6EE7B7",
+        border: "1px solid rgba(16,185,129,0.3)",
       }}>
-      التجربة المجانية (المتبقي: {freeRemaining})
+      رصيد المجالس: {entitlements.game_credits}
     </span>
   );
 }
@@ -82,7 +50,7 @@ export function ProfileModal({
   user: User;
 }) {
   const { entitlements, entitlementsLoading, signOut, deleteAccount } = useAuth();
-  const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
+  const ownedRoleCount = ROLE_ITEM_IDS.filter((id) => entitlements?.owned_items.includes(id)).length;
 
   const [view, setView] = useState<"profile" | "confirmDelete">("profile");
   const [deleting, setDeleting] = useState(false);
@@ -170,13 +138,21 @@ export function ProfileModal({
 
               <div className="flex flex-col gap-2">
                 <span className="text-[11px] font-semibold" style={{ color: "#666666" }}>
-                  الباقة
+                  المجالس
                 </span>
                 <PackageBadge
                   entitlements={entitlements}
                   entitlementsLoading={entitlementsLoading}
-                  freeRemaining={freeRemaining}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold" style={{ color: "#666666" }}>
+                  الأقنعة المملوكة
+                </span>
+                <span className="text-sm font-bold" style={{ color: "#E0E0E0" }}>
+                  {ownedRoleCount} من {ROLE_ITEM_IDS.length}
+                </span>
               </div>
             </div>
 

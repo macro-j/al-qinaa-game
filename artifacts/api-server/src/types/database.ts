@@ -11,6 +11,7 @@ export type Database = {
           completed_at: string | null;
           created_at: string;
           currency: string | null;
+          credits_granted: number;
           environment: string;
           gateway: string;
           gateway_order_id: string | null;
@@ -20,6 +21,7 @@ export type Database = {
           item_id: string | null;
           merchant_order_number: string | null;
           payment_method: string | null;
+          roles_granted: string[];
           refunded_at: string | null;
           status: string;
           updated_at: string;
@@ -31,6 +33,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           currency?: string | null;
+          credits_granted?: number;
           environment: string;
           gateway: string;
           gateway_order_id?: string | null;
@@ -40,6 +43,7 @@ export type Database = {
           item_id?: string | null;
           merchant_order_number?: string | null;
           payment_method?: string | null;
+          roles_granted?: string[];
           refunded_at?: string | null;
           status: string;
           updated_at?: string;
@@ -51,6 +55,7 @@ export type Database = {
           completed_at?: string | null;
           created_at?: string;
           currency?: string | null;
+          credits_granted?: number;
           environment?: string;
           gateway?: string;
           gateway_order_id?: string | null;
@@ -60,6 +65,7 @@ export type Database = {
           item_id?: string | null;
           merchant_order_number?: string | null;
           payment_method?: string | null;
+          roles_granted?: string[];
           refunded_at?: string | null;
           status?: string;
           updated_at?: string;
@@ -96,6 +102,7 @@ export type Database = {
         Row: {
           created_at: string;
           games_played: number;
+          game_credits: number;
           has_all_access: boolean;
           has_base_game: boolean;
           id: string;
@@ -105,6 +112,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           games_played?: number;
+          game_credits?: number;
           has_all_access?: boolean;
           has_base_game?: boolean;
           id: string;
@@ -114,6 +122,7 @@ export type Database = {
         Update: {
           created_at?: string;
           games_played?: number;
+          game_credits?: number;
           has_all_access?: boolean;
           has_base_game?: boolean;
           id?: string;
@@ -155,6 +164,14 @@ export type Database = {
           already_completed: boolean;
           item_id: string;
           user_id: string;
+        }>;
+      };
+      consume_game_credit: {
+        Args: { target_game_id: string };
+        Returns: Array<{
+          game_credits: number;
+          games_played: number;
+          status: string;
         }>;
       };
       refund_verified_nalpay_payment: {

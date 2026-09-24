@@ -53,7 +53,6 @@ import { ProfileModal } from "./components/ProfileModal";
 import { GuideModal } from "./components/GuideModal";
 import { AboutModal } from "./components/AboutModal";
 import { PrivacyModal, TermsModal } from "./components/LegalModals";
-import { FREE_GAME_LIMIT } from "./lib/supabase";
 import { ROLE_META, getRoleName } from "./lib/roles";
 import {
   generateSmartDistribution,
@@ -489,7 +488,7 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
 
   const { openShop } = useShop();
   const { user, entitlements } = useAuth();
-  const freeRemaining = Math.max(0, FREE_GAME_LIMIT - (entitlements?.games_played ?? 0));
+  const councilCredits = entitlements?.game_credits ?? 0;
 
   // 🛑 التعديل الذكي الثاني: إضافة وحذف كلمة auth من الرابط تلقائياً 🛑
   useEffect(() => {
@@ -639,26 +638,11 @@ function GameModeSelector({ onSelect }: { onSelect: (mode: "online" | "narrator"
                 </span>
               </span>
               {entitlements ? (
-                entitlements.has_all_access ? (
-                  <RtlEmoji
-                    text="الباقة الشاملة"
-                    emoji="👑"
-                    className="inline-flex w-fit text-[11px] font-black px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: "#1A1206", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.4)" }}
-                  />
-                ) : entitlements.has_base_game ? (
-                  <span
-                    className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: "#161616", color: "#DDDDDD", border: "1px solid #333333" }}>
-                    اللعبة الأساسية
-                  </span>
-                ) : (
-                  <span
-                    className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
-                    style={{ backgroundColor: "#120808", color: "#EF9A9A", border: "1px solid rgba(211,47,47,0.3)" }}>
-                    التجربة المجانية (المتبقي: {freeRemaining})
-                  </span>
-                )
+                <span
+                  className="inline-flex w-fit items-center text-[11px] font-black px-2 py-0.5 rounded-md"
+                  style={{ backgroundColor: "#071713", color: "#6EE7B7", border: "1px solid rgba(16,185,129,0.3)" }}>
+                  رصيد المجالس: {councilCredits}
+                </span>
               ) : (
                 <span className="text-[11px]" style={{ color: "#555555" }}>جارٍ التحقق من الحساب…</span>
               )}
@@ -1195,7 +1179,7 @@ function saveSetupPrefs(prefs: SetupPrefs): void {
 // ─── Narrator Mode — component ────────────────────────────────────────────────
 
 function NarratorMode({ onBack }: { onBack: () => void }) {
-  const { user, incrementGamesPlayed, entitlements, refreshEntitlements } = useAuth();
+  const { user, consumeGameCredit, entitlements, refreshEntitlements } = useAuth();
   const { openShop } = useShop();
   const distributionSyncedForRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1459,10 +1443,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
   const toggleMod = (id: string) => {
     setActiveMods(prev => {
       if (prev[id]) return { ...prev, [id]: false }; // always allow turning off
-      // Premium gate — a locked role (not owned, no all-access) can never be enabled.
+      // Premium gate — a locked role can never be enabled.
       const itemId = MOD_TO_ITEM[id];
-      if (itemId && !entitlements?.has_all_access
-        && !(entitlements?.owned_items?.includes(itemId) ?? false)) {
+      if (itemId && !(entitlements?.owned_items?.includes(itemId) ?? false)) {
         return prev;
       }
       // minPlayers guard — hard block regardless of UI state
@@ -1489,8 +1472,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
       const next = { ...prev };
       for (const [id, on] of Object.entries(prev)) {
         const itemId = MOD_TO_ITEM[id];
-        if (on && itemId && !entitlements.has_all_access
-          && !entitlements.owned_items.includes(itemId)) {
+        if (on && itemId && !entitlements.owned_items.includes(itemId)) {
           next[id] = false;
           changed = true;
         }
@@ -1861,13 +1843,10 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         return;
       }
 
-      const canStartNow =
-        latestEntitlements.has_base_game ||
-        latestEntitlements.has_all_access ||
-        latestEntitlements.games_played < FREE_GAME_LIMIT;
+      const canStartNow = latestEntitlements.game_credits > 0;
       if (!canStartNow) {
         openShop();
-        toast.error("انتهت تجربتاك المجانيتان. اختر الباقة المناسبة لمتابعة اللعب.");
+        toast.error("انتهى رصيد مجالسك. اشحن رصيدًا لمتابعة اللعب.");
         return;
       }
 
@@ -1879,10 +1858,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         ? Object.fromEntries(
             Object.entries(activeMods).map(([modId, enabled]) => {
               const itemId = MOD_TO_ITEM[modId];
-              const isOwned =
-                !itemId ||
-                latestEntitlements.has_all_access ||
-                latestEntitlements.owned_items.includes(itemId);
+              const isOwned = !itemId || latestEntitlements.owned_items.includes(itemId);
               return [modId, enabled && isOwned];
             }),
           )
@@ -1959,7 +1935,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
         // Repeating this call is safe: the database keys consumption by the
         // current game id, so a lost response can never charge twice.
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const consumption = await incrementGamesPlayed(gameIdToCount);
+          const consumption = await consumeGameCredit(gameIdToCount);
           if (consumption === "limit_reached") {
             // A second tab/device consumed the final trial after this game was
             // opened. Do not silently grant an extra full game: stop safely at
@@ -1976,7 +1952,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
             setNightTransition("none");
             setPhase("setup");
             openShop();
-            toast.error("اكتملت التجربتان في جلسة أخرى. اختر باقتك لمتابعة اللعب.");
+            toast.error("اُستهلك آخر مجلس في جلسة أخرى. اشحن رصيدًا لمتابعة اللعب.");
             return;
           }
           if (consumption === "settled") {
@@ -4976,10 +4952,9 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         const belowMinPlayers = players.length < mod.minPlayers;
                         const canAfford = isOn || (usedSlots + cost <= availableSlots && availableSlots > 0);
                         const isDisabled = belowMinPlayers || !canAfford;
-                        // Premium gate: locked unless the host owns All-Access or this specific role.
+                        // Premium gate: locked unless the host owns this role.
                         const itemId = MOD_TO_ITEM[mod.id];
                         const isPremiumLocked = !!itemId
-                          && !entitlements?.has_all_access
                           && !(entitlements?.owned_items?.includes(itemId) ?? false);
                         return (
                           <div key={mod.id}

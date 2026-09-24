@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { FREE_GAME_LIMIT } from "@workspace/qinaa-rules";
+import { INITIAL_COUNCIL_CREDITS } from "@workspace/qinaa-rules";
 import type { Database } from "../supabase";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").trim();
@@ -27,14 +27,16 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 });
 
 export type Entitlements = {
+  game_credits: number;
   games_played: number;
+  /** Deprecated database flags; ignored by the council-credit model. */
   has_base_game: boolean;
   has_all_access: boolean;
   /** A-la-carte items the user owns (e.g. role_wizard, role_twins, …). */
   owned_items: string[];
 };
 
-export { FREE_GAME_LIMIT };
+export { INITIAL_COUNCIL_CREDITS };
 
 let refreshInFlight: Promise<string | null> | null = null;
 

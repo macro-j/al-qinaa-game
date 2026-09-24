@@ -2,6 +2,8 @@
 -- قناع (Qinaa) — Supabase schema for auth-backed entitlements
 -- Run this in the Supabase SQL Editor (Dashboard → SQL Editor → New query).
 -- Safe to re-run: every statement is idempotent.
+-- Then apply `council_credits.sql`; it contains the current consumable-credit
+-- model and overrides the legacy free-game/payment fulfillment functions.
 -- ============================================================================
 
 -- 1) Entitlements table -------------------------------------------------------
