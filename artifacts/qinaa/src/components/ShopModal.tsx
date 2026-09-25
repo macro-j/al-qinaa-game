@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   COUNCIL_PACK_ITEM_IDS,
   QINAA_CATALOG,
@@ -13,7 +13,7 @@ import { useAuth } from "../lib/auth";
 import { getRoleName } from "../lib/roles";
 import { RoleRevealCard } from "./RoleRevealCard";
 import { AuthModal } from "./AuthModal";
-import { apiPostAuthenticated } from "../lib/api";
+import { apiPostAuthenticated, warmApiServer } from "../lib/api";
 
 const ROLE_CARDS: { id: (typeof ROLE_ITEM_IDS)[number]; roleKey: string }[] = [
   { id: "role_wizard", roleKey: "magician" },
@@ -122,6 +122,10 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
   const busy = loadingItemId !== null;
   const rolesOffer = resolveQinaaOffer("roles_bundle", ownedItems);
   const fullOffer = resolveQinaaOffer("full_bundle", ownedItems);
+
+  useEffect(() => {
+    if (open) warmApiServer();
+  }, [open]);
 
   const handleBuy = (itemId: PurchaseItemId) => {
     if (busy) return;
@@ -366,7 +370,9 @@ export function ShopModal({ open, onClose }: { open: boolean; onClose: () => voi
               رقم الجوال السعودي
               <input dir="ltr" type="tel" inputMode="tel" autoComplete="tel" value={clientMobile} onChange={(event) => setClientMobile(event.target.value)} disabled={busy} maxLength={20} placeholder="05xxxxxxxx" className="w-full rounded-xl px-3.5 py-3 text-left text-white outline-none focus:border-amber-500" style={{ backgroundColor: "#080808", border: "1px solid #303030" }} />
             </label>
-            <p className="text-[11px] leading-5 text-neutral-500">ستنتقل مباشرة إلى صفحة NalPay الآمنة. بعد إتمام الدفع اضغط رجوع للعودة إلى القناع وتحديث مشترياتك.</p>
+            <p className="text-[11px] leading-5 text-neutral-500">
+              ستغادر القناع مؤقتًا إلى صفحة الدفع الآمنة المستضافة من NalPay بهوية المتجر. بعد الدفع ارجع إلى القناع لتحديث مشترياتك تلقائيًا.
+            </p>
             <div className="grid grid-cols-2 gap-3">
               <button type="button" disabled={busy} onClick={() => setCheckoutItemId(null)} className="rounded-xl py-3 text-sm font-bold text-neutral-300" style={{ backgroundColor: "#1A1A1A", border: "1px solid #303030" }}>إلغاء</button>
               <button type="submit" disabled={busy} className="rounded-xl py-3 text-sm font-black text-neutral-950 disabled:opacity-60" style={{ backgroundColor: "#F59E0B" }}>{busy ? "جارٍ فتح الدفع…" : "المتابعة للدفع"}</button>

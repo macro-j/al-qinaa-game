@@ -56,6 +56,24 @@ export function apiUrl(path: string): string {
 }
 
 /**
+ * Wake the public API before the customer reaches a server-backed action.
+ *
+ * The production API currently runs on an idling Render instance. This
+ * request is deliberately best-effort and never blocks rendering: opening
+ * the game or its store starts the wake-up early, so checkout does not have
+ * to be the request that pays the cold-start cost.
+ */
+export function warmApiServer(): void {
+  void fetch(apiUrl("/api/healthz"), {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  }).catch(() => {
+    // A later authenticated request still reports its own actionable error.
+  });
+}
+
+/**
  * Read a fetch body via `response.text()` only — never calls `response.json()`.
  * Returns `{}` for empty bodies and on parse failures (never throws).
  */

@@ -4,7 +4,12 @@ import App from "./App";
 import { AuthProvider } from "./lib/auth";
 import { ShopProvider } from "./lib/shop";
 import { CheckoutReturn } from "./components/CheckoutReturn";
+import { warmApiServer } from "./lib/api";
 import "./index.css";
+
+// Start waking the API as soon as the static app loads. This remains
+// non-blocking, so the first paint is never delayed by the backend.
+warmApiServer();
 
 createRoot(document.getElementById("root")!).render(
   <AuthProvider>
