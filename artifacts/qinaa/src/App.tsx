@@ -3317,20 +3317,17 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                 selected: string | null,
                 onPick: (name: string) => void,
                 accent: string,
-                blockedTarget: string | null = null,
               ) => (
                 <div className={PLAYER_SELECTION_WRAP}>
                   {list.map((p, index) => {
                     const isSelected = selected === p.name;
-                    const isBlocked  = blockedTarget === p.name;
                     const rowBg     = isSelected ? "#1A0000" : "#141414";
                     const rowBorder = isSelected ? accent   : "#222222";
                     return (
                       <button
                         key={p.name}
-                        disabled={isBlocked}
                         onClick={() => onPick(p.name)}
-                        className={`${PLAYER_SELECTION_CARD} disabled:opacity-35 disabled:cursor-not-allowed`}
+                        className={PLAYER_SELECTION_CARD}
                         style={{ backgroundColor: rowBg, border: `1px solid ${rowBorder}` }}>
                         <span className={PLAYER_SELECTION_INDEX}
                           style={{
@@ -3346,7 +3343,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         </span>
                         <span className="text-[10px] font-bold tracking-wide"
                           style={{ color: isSelected ? accent : "#444444" }}>
-                          {isBlocked ? "ممنوع ليلتين متتاليتين" : isSelected ? "تم الاختيار" : "اختر"}
+                          {isSelected ? "تم الاختيار" : "اختر"}
                         </span>
                       </button>
                     );
@@ -3389,7 +3386,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                         <span className="text-xs font-bold" style={{ color: "#666" }}>· {boySilenceTarget}</span>
                       )}
                     </div>
-                    {renderTargetList(silenceList, boySilenceTarget, setBoySilenceTarget, "#FFB347", lastSilenceTarget)}
+                    {renderTargetList(silenceList, boySilenceTarget, setBoySilenceTarget, "#FFB347")}
                   </div>
                 </div>
               );
@@ -3436,9 +3433,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   const isMafiaRole     = p.role === "الولد" || p.role === "الإكة" || p.role === "sniper";
                   const isMadmanRole    = p.role === "madman";
                   const wasInvestigated = isSeerStep && seerHistory.includes(p.name);
-                  const repeatsLastTarget =
-                    (nightStep === "الإكة" && p.name === lastSilenceTarget)
-                    || (nightStep === "البنت" && p.name === lastProtectTarget);
 
                   // ── Friendly-fire lock: Boy can never silence-click the Ace ──
                   const isAllyLocked = nightStep === "الولد" && p.role === "الإكة";
@@ -3459,7 +3453,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                   // Lock all other rows once seer has picked
                   const seerLocked     = isSeerStep && investigatedTarget !== null && !isInvestigated;
 
-                  const isDisabled = isAllyLocked || seerLocked || repeatsLastTarget;
+                  const isDisabled = isAllyLocked || seerLocked;
                   // Seer reveal: heavily tint the card based on allegiance so
                   // the Narrator sees the result at a glance without reading text.
                   // Seer reveal: vivid solid fill + glow so the result is
@@ -3533,9 +3527,6 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       {wasInvestigated && !showSeerBadge && (
                         <span className="text-[10px] font-bold" style={{ color: "#FFB300" }}>سبق السؤال عنه</span>
                       )}
-                      {repeatsLastTarget && (
-                        <span className="text-[10px] font-bold" style={{ color: "#777" }}>ممنوع ليلتين متتاليتين</span>
-                      )}
                       {showSeerBadge && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
                           style={{
@@ -3554,7 +3545,7 @@ function NarratorMode({ onBack }: { onBack: () => void }) {
                       )}
 
                       {/* Action label — replaces the old standalone "اختر" button */}
-                      {!isAllyLocked && !repeatsLastTarget && (
+                      {!isAllyLocked && (
                         <span className="text-[10px] font-bold tracking-wide"
                           style={{ color: showSeerBadge ? "#FFFFFF" : (isSelected ? "#D32F2F" : "#444444") }}>
                           {isSelected ? "تم الاختيار" : "اختر"}
